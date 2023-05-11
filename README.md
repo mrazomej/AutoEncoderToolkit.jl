@@ -1,2 +1,3 @@
-# AutoEncode.jl
-Julia package with several functions to train and analyze Autoencoder-based neural networks
+# AutoEncode
+
+[![Build Status](https://github.com/mrazomej/AutoEncode.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mrazomej/AutoEncode.jl/actions/workflows/CI.yml?query=branch%3Amain)
