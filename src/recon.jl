@@ -1,25 +1,25 @@
 @doc raw"""
-    eval(ae, input)
+    recon(ae, input)
 
 Function to evaluate an input on an `AE` autoencoder
 """
-function eval(ae::AE, input::AbstractVector{<:AbstractFloat})
+function recon(ae::AE, input::AbstractVector{<:AbstractFloat})
     return Flux.Chain(ae.encoder..., ae.decoder...)(input)
 end # function
 
 @doc raw"""
-    eval(irmae, input)
+    recon(irmae, input)
 
 Function to evaluate an input on an `IRMAE` autoencoder
 """
-function eval(irmae::IRMAE, input::AbstractVector{<:AbstractFloat})
+function recon(irmae::IRMAE, input::AbstractVector{<:AbstractFloat})
     return Flux.Chain(
         irmae.encoder..., irmae.linear..., irmae.decoder...
     )(input)
 end # function
 
 @doc raw"""
-`eval(vae, input; latent)`
+`recon(vae, input; latent)`
 
 This function performs three steps:
 1. passes an input `x` through the `encoder`, 
@@ -43,7 +43,7 @@ the input when mapped to the latent space.
 autoencoder. Note: This last point depends on a random sampling step, thus it
 will change every time.
 """
-function eval(
+function recon(
     vae::VAE,
     input::AbstractVector{Float32};
     latent::Bool=false
