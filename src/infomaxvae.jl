@@ -212,7 +212,7 @@ This function performs three steps:
 # Arguments
 - `infomaxvae::InfoMaxVAE`: InfoMax Variational autoencoder struct with all
   components.
-- `input::AbstractVector{Float32}`: Input to the neural network.
+- `input::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional Arguments
 - `latent::Bool=false`: Boolean indicating if the latent variables should be
@@ -229,7 +229,7 @@ will change every time.
 """
 function recon(
     vae::InfoMaxVAE,
-    input::AbstractVector{Float32};
+    input::AbstractVecOrMat{Float32};
     latent::Bool=false
 )
     # 1. Map input to mean and log standard deviation of latent variables

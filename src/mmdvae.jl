@@ -166,7 +166,7 @@ respectively, i.e.,
     P(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
 
 # Arguments
-- `x::AbstractVector{Float32}`: Input to the neural network.
+- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 
 ## Optional arguments
@@ -190,7 +190,7 @@ respectively, i.e.,
 compared with reconstructed output `x̂`.
 """
 function loss(
-    x::AbstractVector{Float32},
+    x::AbstractVecOrMat{Float32},
     vae::VAE;
     σ::Float32=1.0f0,
     λ::Float32=1.0f0,

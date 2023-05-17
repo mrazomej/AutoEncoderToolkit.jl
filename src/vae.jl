@@ -164,7 +164,7 @@ This function performs three steps:
 
 # Arguments
 - `vae::VAE`: Variational autoencoder struct with all components.
-- `input::AbstractVector{Float32}`: Input to the neural network.
+- `input::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional Arguments
 - `latent::Bool=false`: Boolean indicating if the latent variables should be
@@ -181,7 +181,7 @@ will change every time.
 """
 function recon(
     vae::VAE,
-    input::AbstractVector{Float32};
+    input::AbstractVecOrMat{Float32};
     latent::Bool=false
 )
     # 1. Map input to mean and log standard deviation of latent variables
@@ -220,7 +220,7 @@ respectively, i.e.,
     P(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
 
 # Arguments
-- `x::AbstractVector{Float32}`: Input to the neural network.
+- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 
 ## Optional arguments
@@ -236,7 +236,7 @@ respectively, i.e.,
 compared with reconstructed output `x̂`.
 """
 function loss(
-    x::AbstractVector{Float32},
+    x::AbstractVecOrMat{Float32},
     vae::VAE;
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
@@ -291,8 +291,8 @@ which to compare the input values that is not necessarily the same as the input
 value.
 
 # Arguments
-- `x::AbstractVector{Float32}`: Input to the neural network.
-- `x_true::AbstractVector{Float32}`: True input against which to compare
+- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
+- `x_true::AbstractVecOrMat{Float32}`: True input against which to compare
   autoencoder reconstruction.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 
@@ -309,8 +309,8 @@ value.
 compared with reconstructed output `x̂`.
 """
 function loss(
-    x::AbstractVector{Float32},
-    x_true::AbstractVector{Float32},
+    x::AbstractVecOrMat{Float32},
+    x_true::AbstractVecOrMat{Float32},
     vae::VAE;
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
