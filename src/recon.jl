@@ -31,8 +31,8 @@ This function performs three steps:
 - `input::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional Arguments
-- `latent::Bool=false`: Boolean indicating if the latent variables should be
-returned as part of the output or not.
+- `latent::Bool=true`: Boolean indicating if the parameters of the latent
+  representation (mean `µ`, log standard deviation `logσ`) should be returned.
 
 # Returns
 - `µ::Vector{Float32}`: Array containing the mean value of the input when mapped
@@ -55,12 +55,12 @@ function recon(
     # 2. Sample random latent variable point estimate given the mean and
     #    standard deviation
     z = µ .+ Random.rand(
-        Distributions.Normal{Float32}(0.0f0, 1.0f0), length(µ)
+        Distributions.Normal{Float32}(0.0f0, 1.0f0), size(µ)...
     ) .* exp.(logσ)
 
     # 3. Run sampled latent variables through decoder and return values
     if latent
-        return z, vae.decoder(z)
+        return µ, logσ, vae.decoder(z)
     else
         return vae.decoder(z)
     end # if
@@ -104,12 +104,12 @@ function recon(
     # 2. Sample random latent variable point estimate given the mean and
     #    standard deviation
     z = µ .+ Random.rand(
-        Distributions.Normal{Float32}(0.0f0, 1.0f0), length(µ)
+        Distributions.Normal{Float32}(0.0f0, 1.0f0), size(µ)...
     ) .* exp.(logσ)
 
     # 3. Run sampled latent variables through decoder and return values
     if latent
-        return z, vae.decoder(z)
+        return µ, logσ, vae.decoder(z)
     else
         return vae.decoder(z)
     end # if

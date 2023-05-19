@@ -1,5 +1,6 @@
 # Import ML libraries
 import Flux
+import Zygote
 
 # Import basic math
 import Random
@@ -167,8 +168,8 @@ This function performs three steps:
 - `input::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional Arguments
-- `latent::Bool=false`: Boolean indicating if the latent variables should be
-returned as part of the output or not.
+- `latent::Bool=true`: Boolean indicating if the parameters of the latent
+  representation (mean `µ`, log standard deviation `logσ`) should be returned.
 
 # Returns
 - `µ::Vector{Float32}`: Array containing the mean value of the input when mapped
@@ -191,12 +192,12 @@ function recon(
     # 2. Sample random latent variable point estimate given the mean and
     #    standard deviation
     z = µ .+ Random.rand(
-        Distributions.Normal{Float32}(0.0f0, 1.0f0), length(µ)
+        Distributions.Normal{Float32}(0.0f0, 1.0f0), size(µ)...
     ) .* exp.(logσ)
 
     # 3. Run sampled latent variables through decoder and return values
     if latent
-        return z, vae.decoder(z)
+        return µ, logσ, vae.decoder(z)
     else
         return vae.decoder(z)
     end # if
@@ -220,57 +221,41 @@ respectively, i.e.,
     P(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
 
 # Arguments
-- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
+- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional arguments
 - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
-- `reconstruct::Function`: Function that reconstructs the input x̂ by passing it
-  through the autoencoder.
-- `n_samples::Int`: Number of samples to take from the latent space when
-  computing ⟨logP(x|z)⟩.
 
 # Returns
 - `loss::Float32`: Single value defining the loss function for entry `x` when
 compared with reconstructed output `x̂`.
 """
 function loss(
-    x::AbstractVecOrMat{Float32},
-    vae::VAE;
+    vae::VAE,
+    x::AbstractVecOrMat{Float32};
     σ::Float32=1.0f0,
-    β::Float32=1.0f0,
-    reconstruct::Function=recon,
-    n_samples::Int=1
+    β::Float32=1.0f0
 )
-    # Initialize arrays to save µ and logσ
-    µ = similar(Flux.params(vae.µ)[2])
-    logσ = similar(µ)
+    # Run input through reconstruct function
+    µ, logσ, x̂ = recon(vae, x; latent=true)
 
-    # Initialize value to save log probability
-    logP_x_z = 0.0f0
-
-    # Loop through latent space samples
-    for i = 1:n_samples
-        # Run input through reconstruct function
-        µ, logσ, x̂ = reconstruct(x, vae)
-
-        # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-        logP_x_z += -length(x) * (log(σ) + log(2π) / 2) -
-                    1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
-    end # for
+    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
+    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+               1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution P(z)
     kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return -logP_x_z / n_samples + β * kl_qₓ_p
+    return -logP_x_z + β * kl_qₓ_p
 
 end #function
 
 @doc raw"""
-    `loss(x, x_true, vae; σ, β, reconstruct, n_samples)`
+    `loss(vae, x, x_true; σ, β, reconstruct, n_samples)`
 
 Loss function for the variational autoencoder. The loss function is defined as
 
@@ -299,47 +284,31 @@ value.
 ## Optional arguments
 - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
-- `reconstruct::Function`: Function that reconstructs the input x̂ by passing it
-  through the autoencoder.
-- `n_samples::Int`: Number of samples to take from the latent space when
-  computing ⟨logP(x|z)⟩.
 
 # Returns
 - `loss::Float32`: Single value defining the loss function for entry `x` when
 compared with reconstructed output `x̂`.
 """
 function loss(
+    vae::VAE,
     x::AbstractVecOrMat{Float32},
-    x_true::AbstractVecOrMat{Float32},
-    vae::VAE;
+    x_true::AbstractVecOrMat{Float32};
     σ::Float32=1.0f0,
-    β::Float32=1.0f0,
-    reconstruct::Function=recon,
-    n_samples::Int=1
+    β::Float32=1.0f0
 )
-    # Initialize arrays to save µ and logσ
-    µ = similar(Flux.params(vae.µ)[2])
-    logσ = similar(µ)
+    # Run input through reconstruct function
+    µ, logσ, x̂ = recon(vae, x; latent=true)
 
-    # Initialize value to save log probability
-    logP_x_z = 0.0f0
-
-    # Loop through latent space samples
-    for i = 1:n_samples
-        # Run input through reconstruct function
-        µ, logσ, x̂ = reconstruct(x, vae)
-
-        # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-        logP_x_z += -length(x) * (log(σ) + log(2π) / 2) -
-                    1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
-    end # for
+    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
+    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+               1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution P(z)
     kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return -logP_x_z / n_samples + β * kl_qₓ_p
+    return -logP_x_z + β * kl_qₓ_p
 
 end #function
 
@@ -369,7 +338,7 @@ function kl_div(x::AbstractVector{Float32}, vae::VAE)
 end # function
 
 @doc raw"""
-    `train!(loss, vae, data, opt; kwargs...)`
+    `train!(loss, vae, x, opt; kwargs...)`
 
 Customized training function to update parameters of variational autoencoder
 given a loss function.
@@ -379,7 +348,7 @@ given a loss function.
   The gradient of this function (∇loss) will be automatically computed using the
   `Zygote.jl` library.
 - `vae::VAE`: Struct containint the elements of a variational autoencoder.
-- `data::AbstractMatrix{Float32}`: Matrix containing the data on which to
+- `x::AbstractMatrix{Float32}`: Matrix containing the data on which to
   evaluate the loss function. NOTE: Every column should represent a single
   input.
 - `opt::Flux.Optimise.AbstractOptimiser`: Optimizing algorithm to be used to
@@ -391,54 +360,32 @@ given a loss function.
     function. For `loss`, for example, we have
     - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
-    - `reconstruct::Function`: Function that reconstructs the input x̂ by
-    passing it through the autoencoder.
-    - `n_samples::Int`: Number of samples to take from the latent space when
-    computing ⟨logP(x|z)⟩.
 """
 function train!(
     loss::Function,
     vae::VAE,
-    data::AbstractMatrix{Float32},
-    opt::Flux.Optimise.AbstractOptimiser;
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(
-        :σ => 1.0f0, :β => 1.0f0, :n_samples => 1, :reconstruct => eval
-    )
+    x::AbstractVecOrMat{Float32},
+    opt::Flux.Optimise.AbstractOptimiser=Flux.Adam();
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
     # Extract parameters
     params = Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder)
-
-    # Perform computation for first datum.
-    # NOTE: This is to properly initialize the object on which the gradient will
-    # be evaluated. There's probably better ways to do this, but this works.
 
     # Evaluate the loss function and compute the gradient. Zygote.pullback
     # gives two outputs: the result of the original function and a pullback,
     # which is the gradient of the function.
     loss_, back_ = Zygote.pullback(params) do
-        loss(data[:, 1], vae; loss_kwargs...)
+        loss(vae, x; loss_kwargs...)
     end # do
     # Having computed the pullback, we compute the loss function gradient
     ∇loss_ = back_(one(loss_))
 
-    # Loop through the rest of the datasets data
-    for (i, d) in enumerate(eachcol(data[:, 2:end]))
-        # Evaluate the loss function and compute the gradient. Zygote.pullback
-        # gives two outputs: the result of the original function and a pullback,
-        # which is the gradient of the function.
-        loss_, back_ = Zygote.pullback(params) do
-            loss(d, vae; loss_kwargs...)
-        end # do
-        # Having computed the pullback, we compute the loss function gradient
-        ∇loss_ .+= back_(one(loss_))
-    end # for
-
     # Update the network parameters averaging gradient from all datasets
-    Flux.Optimise.update!(opt, params, ∇loss_ ./ size(data, 2))
+    Flux.Optimise.update!(opt, params, ∇loss_ ./ size(x, 2))
 end # function
 
 @doc raw"""
-    `train!(loss, vae, data, opt; kwargs...)`
+    `train!(loss, vae, x, opt; kwargs...)`
 
 Customized training function to update parameters of variational autoencoder
 given a loss function. For this method, the data consists of a `Array{Float32,
@@ -450,93 +397,39 @@ given a loss function. For this method, the data consists of a `Array{Float32,
   The gradient of this function (∇loss) will be automatically computed using the
   `Zygote.jl` library.
 - `vae::VAE`: Struct containint the elements of a variational autoencoder.
-- `data::AbstractArray{Float32, 3}`: Array containing the data on which to
+- `x::AbstractArray{Float32, 3}`: Array containing the data on which to
   evaluate the loss function. NOTE: Every column should represent a single
   input. The third dimension represents the "true value" to compare against.
 - `opt::Flux.Optimise.AbstractOptimiser`: Optimizing algorithm to be used to
   update the autoencoder parameters. This should be fed already with the
   corresponding parametres. For example, one could feed: ⋅ Flux.AMSGrad(η)
 
-## Optional arguments
-- `kwargs::NamedTuple`: Tuple containing arguments for the loss function. For
-    `vae_loss`, for example, we have
-    - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
-    - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
-    - `reconstruct::Function`: Function that reconstructs the input x̂ by
-    passing it through the autoencoder.
-    - `n_samples::Int`: Number of samples to take from the latent space when
-    computing ⟨logP(x|z)⟩.
-"""
+  ## Optional arguments
+  - `loss_kwargs::Union{NamedTuple,Dict}`: Tuple containing arguments for the loss
+      function. For `loss`, for example, we have
+      - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+      - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+  """
 function train!(
     loss::Function,
     vae::VAE,
-    data::Array{Float32,3},
-    opt::Flux.Optimise.AbstractOptimiser;
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0, :n_samples => 1)
+    x::AbstractVecOrMat{Float32},
+    x_true::AbstractVecOrMat{Float32},
+    opt::Flux.Optimise.AbstractOptimiser=Flux.Adam();
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
     # Extract parameters
     params = Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder)
-
-    # Split data and real value
-    data_noise = data[:, :, 1]
-    data_true = data[:, :, 2]
-    # Perform computation for first datum.
-    # NOTE: This is to properly initialize the object on which the gradient will
-    # be evaluated. There's probably better ways to do this, but this works.
 
     # Evaluate the loss function and compute the gradient. Zygote.pullback
     # gives two outputs: the result of the original function and a pullback,
     # which is the gradient of the function.
     loss_, back_ = Zygote.pullback(params) do
-        loss(data_noise[:, 1], data_true[:, 1], vae; loss_kwargs...)
+        loss(vae, x, x_true; loss_kwargs...)
     end # do
     # Having computed the pullback, we compute the loss function gradient
     ∇loss_ = back_(one(loss_))
 
-    # Loop through the rest of the datasets data
-    for i = 2:size(data_noise, 2)
-        # Evaluate the loss function and compute the gradient. Zygote.pullback
-        # gives two outputs: the result of the original function and a pullback,
-        # which is the gradient of the function.
-        loss_, back_ = Zygote.pullback(params) do
-            loss(data_noise[:, i], data_true[:, i], vae; loss_kwargs...)
-        end # do
-        # Having computed the pullback, we compute the loss function gradient
-        ∇loss_ .+= back_(one(loss_))
-    end # for
-
     # Update the network parameters averaging gradient from all datasets
-    Flux.Optimise.update!(opt, params, ∇loss_ ./ size(data, 2))
-end # function
-
-
-@doc raw"""
-    `mse_boots(vae, data, n_samples)`
-
-Function to compute a bootstrap sample of the mean squared error for a
-variational autoencoder.
-
-# Arguments
-- `vae::VAE`: Struct containing the elements of a variational autoencoder.
-- `data::AbstractMatrix{Float32}`: Matrix containing the data on which to
-  evaluate the loss function. NOTE: Every column should represent a single
-  input.
-- `n_samples::Int`: Number of bootstrap samples to generate.
-
-# Returns
-- `MSE_boots:Array{Float32}`: Mean squared error bootstrap samples.
-"""
-function mse_boots(vae::VAE, data::AbstractMatrix{Float32}, n_samples::Int)
-    # Initialize array to save bootstrap samples
-    boots_samples = Array{Float32}(undef, n_samples)
-
-    # Loop through samples
-    for i = 1:n_samples
-        # Compute mean squared error for sample i
-        boots_samples[i] = StatsBase.mean([
-            Flux.mse(d, vae_reconstruct(d, vae)[end]) for d in eachcol(data)
-        ])
-    end # for
-
-    return boots_samples
+    Flux.Optimise.update!(opt, params, ∇loss_ ./ size(x, 2))
 end # function
