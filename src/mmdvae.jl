@@ -11,7 +11,7 @@ import Distances
 
 # Import Types
 
-using ..VAEs: VAE, recon
+using ..VAEs: VAE
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Maximum-Mean Discrepancy Variational Autoencoders
@@ -174,8 +174,6 @@ respectively, i.e.,
 - `λ::Float32=1`: 
 - `α::Float32=1`: Related to the annealing inverse temperature for the
   KL-divergence term.
-- `reconstruct::Function`: Function that reconstructs the input x̂ by passing it
-  through the autoencoder.
 - `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
   Default is the Gaussian Kernel.
 - `n_samples::Int`: Number of samples to take from the latent space when
@@ -195,7 +193,6 @@ function loss(
     σ::Float32=1.0f0,
     λ::Float32=1.0f0,
     α::Float32=0.0f0,
-    reconstruct::Function=recon,
     kernel::Function=gaussian_kernel,
     n_samples::Int=1,
     n_latent_samples::Int=50,
@@ -213,7 +210,7 @@ function loss(
     # Loop through latent space samples
     for i = 1:n_samples
         # Run input through reconstruct function
-        µ, logσ, x̂ = reconstruct(x, vae)
+        µ, logσ, x̂ = vae(x)
 
         # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
         logP_x_z += -length(x) * (log(σ) + log(2π) / 2) -

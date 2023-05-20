@@ -7,6 +7,9 @@ import Random
 import StatsBase
 import Distributions
 
+# Import GPU library
+import CUDA
+
 ##
 
 # Import Abstract Types
@@ -64,15 +67,13 @@ Function to initialize a variational autoencoder neural network with `Flux.jl`.
 - `encoder::Vector{Int}`: Array containing the dimensions of the hidden layers
   of the encoder network (one layer per entry).
 - `encoder_activation::Vector`: Array containing the activation function for the
-  encoder hidden layers. If `nothing` is given, no activation function is
-  assigned to the layer. NOTE: length(encoder) must match
+  encoder hidden layers. NOTE: length(encoder) must match
   length(encoder_activation).
 - `decoder::Vector{Int}`: Array containing the dimensions of the hidden layers
   of the decoder network (one layer per entry).
 - `decoder_activation::Vector`: Array containing the activation function for the
-  decoder hidden layers. If `nothing` is given, no activation function is
-  assigned to the layer. NOTE: length(encoder) must match
-  length(encoder_activation).
+  decoder hidden layers. NOTE: length(decoder) must match
+  length(decoder_activation).
 
 ## Optional arguments
 - `init::Function=Flux.glorot_uniform`: Function to initialize network
@@ -156,7 +157,7 @@ function vae_init(
 end # function
 
 @doc raw"""
-`recon(vae, input; latent)`
+`VAE(input; latent)`
 
 This function performs three steps:
 1. passes an input `x` through the `encoder`, 
@@ -164,7 +165,6 @@ This function performs three steps:
 3. reconstructs the input from the latent variables using the `decoder`.
 
 # Arguments
-- `vae::VAE`: Variational autoencoder struct with all components.
 - `input::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional Arguments
@@ -180,8 +180,7 @@ the input when mapped to the latent space.
 autoencoder. Note: This last point depends on a random sampling step, thus it
 will change every time.
 """
-function recon(
-    vae::VAE,
+function (vae::VAE)(
     input::AbstractVecOrMat{Float32};
     latent::Bool=false
 )
@@ -203,8 +202,11 @@ function recon(
     end # if
 end # function
 
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor VAE
+
 @doc raw"""
-    `loss(x, vae; σ, β, reconstruct, n_samples)`
+    `loss(vae, x; σ, β, reconstruct, n_samples)`
 
 Loss function for the variational autoencoder. The loss function is defined as
 
@@ -239,7 +241,7 @@ function loss(
     β::Float32=1.0f0
 )
     # Run input through reconstruct function
-    µ, logσ, x̂ = recon(vae, x; latent=true)
+    µ, logσ, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
     logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
@@ -255,7 +257,7 @@ function loss(
 end #function
 
 @doc raw"""
-    `loss(vae, x, x_true; σ, β, reconstruct, n_samples)`
+    `loss(vae, x, x_true; σ, β)`
 
 Loss function for the variational autoencoder. The loss function is defined as
 
@@ -297,7 +299,7 @@ function loss(
     β::Float32=1.0f0
 )
     # Run input through reconstruct function
-    µ, logσ, x̂ = recon(vae, x; latent=true)
+    µ, logσ, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
     logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
@@ -338,22 +340,22 @@ function kl_div(x::AbstractVector{Float32}, vae::VAE)
 end # function
 
 @doc raw"""
-    `train!(loss, vae, x, opt; kwargs...)`
+    `train!(vae, x, opt; kwargs...)`
 
 Customized training function to update parameters of variational autoencoder
 given a loss function.
 
 # Arguments
-- `loss::Function`: The loss function that defines the variational autoencoder.
-  The gradient of this function (∇loss) will be automatically computed using the
-  `Zygote.jl` library.
 - `vae::VAE`: Struct containint the elements of a variational autoencoder.
-- `x::AbstractMatrix{Float32}`: Matrix containing the data on which to
-  evaluate the loss function. NOTE: Every column should represent a single
-  input.
-- `opt::Flux.Optimise.AbstractOptimiser`: Optimizing algorithm to be used to
-  update the autoencoder parameters. This should be fed already with the
-  corresponding parametres. For example, one could feed: ⋅ Flux.AMSGrad(η)
+- `x::AbstractMatrix{Float32}`: Matrix containing the data on which to evaluate
+  the loss function. NOTE: Every column should represent a single input.
+- `opt::NamedTuple`: State of optimizer that will be used to update parameters.
+  NOTE: This is in agreement with `Flux.jl ≥ 0.13` where implicit `Zygote`
+  gradients are not allowed. This `opt` object can be initialized using 
+  `Flux.Train.setup`. For example, one can run
+  ```
+  opt_state = Flux.Train.setup(Flux.Optimisers.Adam(1E-1), vae)
+  ```
 
 ## Optional arguments
 - `loss_kwargs::Union{NamedTuple,Dict}`: Tuple containing arguments for the loss
@@ -362,74 +364,67 @@ given a loss function.
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 """
 function train!(
-    loss::Function,
     vae::VAE,
     x::AbstractVecOrMat{Float32},
-    opt::Flux.Optimise.AbstractOptimiser=Flux.Adam();
+    opt::NamedTuple;
     loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
-    # Extract parameters
-    params = Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder)
-
-    # Evaluate the loss function and compute the gradient. Zygote.pullback
-    # gives two outputs: the result of the original function and a pullback,
-    # which is the gradient of the function.
-    loss_, back_ = Zygote.pullback(params) do
+    # Compute gradient
+    ∇loss_ = Flux.gradient(vae) do vae
         loss(vae, x; loss_kwargs...)
     end # do
-    # Having computed the pullback, we compute the loss function gradient
-    ∇loss_ = back_(one(loss_))
 
     # Update the network parameters averaging gradient from all datasets
-    Flux.Optimise.update!(opt, params, ∇loss_ ./ size(x, 2))
+    Flux.Optimisers.update!(
+        opt,
+        vae,
+        ∇loss_[1]
+    )
 end # function
 
 @doc raw"""
-    `train!(loss, vae, x, opt; kwargs...)`
+    `train!(vae, x, opt; kwargs...)`
 
 Customized training function to update parameters of variational autoencoder
-given a loss function. For this method, the data consists of a `Array{Float32,
-3}` object, where the third dimension contains both the noisy data and the
-"real" value against which to compare the reconstruction.
+given a loss function.
 
 # Arguments
-- `loss::Function`: The loss function that defines the variational autoencoder.
-  The gradient of this function (∇loss) will be automatically computed using the
-  `Zygote.jl` library.
 - `vae::VAE`: Struct containint the elements of a variational autoencoder.
-- `x::AbstractArray{Float32, 3}`: Array containing the data on which to
-  evaluate the loss function. NOTE: Every column should represent a single
-  input. The third dimension represents the "true value" to compare against.
-- `opt::Flux.Optimise.AbstractOptimiser`: Optimizing algorithm to be used to
-  update the autoencoder parameters. This should be fed already with the
-  corresponding parametres. For example, one could feed: ⋅ Flux.AMSGrad(η)
+- `x::AbstractVecOrMat{Float32}`: Array containing the data to be ran through
+  the VAE. NOTE: Every column should represent a single input.
+- `x_true;:AbstractVecOrMat{Float32}`: Array containing the data used to compare
+  the reconstruction for the loss function. This can be used to train denoising
+  VAE, for exmaple.
+- `opt::NamedTuple`: State of optimizer that will be used to update parameters.
+  NOTE: This is in agreement with `Flux.jl ≥ 0.13` where implicit `Zygote`
+  gradients are not allowed. This `opt` object can be initialized using
+  `Flux.Train.setup`. For example, one can run
+  ```
+  opt_state = Flux.Train.setup(Flux.Optimisers.Adam(1E-1), vae)
+  ```
 
-  ## Optional arguments
-  - `loss_kwargs::Union{NamedTuple,Dict}`: Tuple containing arguments for the loss
-      function. For `loss`, for example, we have
-      - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
-      - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
-  """
+## Optional arguments
+- `loss_kwargs::Union{NamedTuple,Dict}`: Tuple containing arguments for the loss
+    function. For `loss`, for example, we have
+    - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+    - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+"""
 function train!(
-    loss::Function,
     vae::VAE,
     x::AbstractVecOrMat{Float32},
     x_true::AbstractVecOrMat{Float32},
-    opt::Flux.Optimise.AbstractOptimiser=Flux.Adam();
+    opt::NamedTuple;
     loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
-    # Extract parameters
-    params = Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder)
-
-    # Evaluate the loss function and compute the gradient. Zygote.pullback
-    # gives two outputs: the result of the original function and a pullback,
-    # which is the gradient of the function.
-    loss_, back_ = Zygote.pullback(params) do
+    # Compute gradient
+    ∇loss_ = Flux.gradient(vae) do vae
         loss(vae, x, x_true; loss_kwargs...)
     end # do
-    # Having computed the pullback, we compute the loss function gradient
-    ∇loss_ = back_(one(loss_))
 
     # Update the network parameters averaging gradient from all datasets
-    Flux.Optimise.update!(opt, params, ∇loss_ ./ size(x, 2))
+    Flux.Optimisers.update!(
+        opt,
+        vae,
+        ∇loss_[1]
+    )
 end # function
