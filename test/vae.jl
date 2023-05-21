@@ -135,4 +135,5 @@ params_end = deepcopy(Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder))
 
 @test all(params_init .!= params_end)
 
+println("Passed tests for VAEs module!\n")
 ##

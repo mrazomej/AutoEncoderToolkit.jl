@@ -176,9 +176,12 @@ This function performs three steps:
 to the latent space.
 - `logσ::Vector{Float32}`: Array containing the log of the standard deviation of
 the input when mapped to the latent space.
+- `z::Vector{Float32}`: Random sample of latent space code for the input. NOTE:
+  This will change every time the function is called on the same input because
+  of the random number sampling.
 - `x̂::Vector{Float32}`: The reconstructed input `x` after passing through the
-autoencoder. Note: This last point depends on a random sampling step, thus it
-will change every time.
+  autoencoder. NOTE: This will change every time the function is called on the
+  same input because of the random number sampling.
 """
 function (vae::VAE)(
     input::AbstractVecOrMat{Float32};
@@ -201,7 +204,7 @@ function (vae::VAE)(
 
     # 4. Run sampled latent variables through decoder and return values
     if latent
-        return µ, logσ, vae.decoder(z)
+        return µ, logσ, z, vae.decoder(z)
     else
         return vae.decoder(z)
     end # if
@@ -211,7 +214,7 @@ end # function
 Flux.@functor VAE
 
 @doc raw"""
-    `loss(vae, x; σ, β, reconstruct, n_samples)`
+    `loss(vae, x; σ, β)`
 
 Loss function for the variational autoencoder. The loss function is defined as
 
@@ -246,7 +249,7 @@ function loss(
     β::Float32=1.0f0
 )
     # Run input through reconstruct function
-    µ, logσ, x̂ = vae(x; latent=true)
+    µ, logσ, _, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
     logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
@@ -304,7 +307,7 @@ function loss(
     β::Float32=1.0f0
 )
     # Run input through reconstruct function
-    µ, logσ, x̂ = vae(x; latent=true)
+    µ, logσ, _, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
     logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
