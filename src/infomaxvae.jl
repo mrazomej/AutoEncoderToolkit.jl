@@ -1,8 +1,7 @@
 # Import ML libraries
 import Flux
 import Zygote
-
-# Import function to ignore where to take derivatives
+# Import function to ignore derivatives
 import ChainRulesCore: @ignore_derivatives
 
 # Import basic math
@@ -217,7 +216,7 @@ function infomaxvae_init(
 end # function
 
 @doc raw"""
-    `loss(vae, mlp, x; σ, β, α)`
+    `loss(vae, mlp, x, x_shuffle; σ, β, α)`
 
 Loss function for the infoMax variational autoencoder. The loss function is
 defined as
@@ -239,6 +238,9 @@ networks.
 - `mlp::Flux.Chain`: `Flux.jl` chain defining the multi-layered perceptron used
   to compute the variational mutual information.
 - `x::AbstractVector{Float32}`: Input to the neural network.
+- `x_shuffle::Vector`: Shuffled input to the neural network needed to compute
+  the mutual information term. This term is used to obtain an encoding
+  `z_shuffle` that represents a random sample from the marginal P(z).
 
 ## Optional arguments
 - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
@@ -253,13 +255,16 @@ networks.
 function loss(
     vae::VAE,
     mlp::Flux.Chain,
-    x::AbstractVecOrMat{Float32};
+    x::AbstractVecOrMat{Float32},
+    x_shuffle::AbstractVecOrMat{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
     α::Float32=1.0f0
 )
     # Run input through reconstruct function
     µ, logσ, z, x̂ = vae(x; latent=true)
+    # Run shuffle input through reconstruct function
+    _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
 
     # Initialize value to save variational form of mutual information
     info_x_z = 0.0f0
@@ -269,13 +274,13 @@ function loss(
                1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
-    I_xz = @ignore_derivatives mlp([x; z])
+    I_xz = mlp([x; z])
 
     # Run input and PERMUTED latent variables through mutual info MLP
-    I_xz_perm = @ignore_derivatives mlp([x; z[:, Random.shuffle(1:end)]])
+    I_xz_perm = mlp([x; z_shuffle])
 
     # Compute variational mutual information
-    info_x_z = @ignore_derivatives sum(@. I_xz - exp(I_xz_perm - 1))
+    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
 
 
     # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
@@ -288,7 +293,7 @@ function loss(
 end #function
 
 @doc raw"""
-    `loss(vae, mlp, x, x_true; σ, β, α)`
+    `loss(vae, mlp, x, x_true, x_shuffle; σ, β, α)`
 
 Loss function for the infoMax variational autoencoder. The loss function is
 defined as
@@ -312,6 +317,9 @@ networks.
 - `x::AbstractVector{Float32}`: Input to the neural network.
 - `x_true::Vector`: True input against which to compare autoencoder
   reconstruction.
+- `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
+  needed to compute the mutual information term. This term is used to obtain an
+  encoding `z_shuffle` that represents a random sample from the marginal P(z).
 
 ## Optional arguments
 - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
@@ -327,26 +335,29 @@ function loss(
     vae::VAE,
     mlp::Flux.Chain,
     x::AbstractVecOrMat{Float32},
-    x_true::AbstractVecOrMat{Float32};
+    x_true::AbstractVecOrMat{Float32},
+    x_shuffle::AbstractVecOrMat{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
     α::Float32=1.0f0
 )
     # Run input through reconstruct function
     µ, logσ, z, x̂ = vae(x; latent=true)
+    # Run shuffle input through reconstruct function
+    _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
     logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
                1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
-    I_xz = @ignore_derivatives mlp([x; z])
+    I_xz = mlp([x; z])
 
     # Run input and PERMUTED latent variables through mutual info MLP
-    I_xz_perm = @ignore_derivatives mlp([x; z[:, Random.shuffle(1:end)]])
+    I_xz_perm = mlp([x; z_shuffle])
 
     # Compute variational mutual information
-    info_x_z = @ignore_derivatives sum(@. I_xz - exp(I_xz_perm - 1))
+    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
 
     # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
     # and latent prior distribution P(x)
@@ -358,7 +369,7 @@ function loss(
 end #function
 
 @doc raw"""
-    `mlp_loss(vae, mlp, x)`
+    `mlp_loss(vae, mlp, x, x_shuffle)`
 
 Function used to train the multi-layered perceptron (mlp) used in the infoMaxVAE
 algorithm to estimate the mutual information between the input x and the latent
@@ -380,6 +391,9 @@ networks.
 - `mlp::Flux.Chain`: `Flux.jl` chain defining the multi-layered perceptron used
   to compute the variational mutual information.
 - `x::AbstractVector{Float32}`: Input to the neural network.
+- `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
+  needed to compute the mutual information term. This term is used to obtain an
+  encoding `z_shuffle` that represents a random sample from the marginal P(z).
 
 # Returns
 - `Ixz_MLP::Float32`: Variational mutual information between input x and latent
@@ -390,13 +404,12 @@ function mlp_loss(
     vae::VAE,
     mlp::Flux.Chain,
     x::AbstractVecOrMat{Float32},
-    # x_shuffle::AbstractVecOrMat{Float32}
+    x_shuffle::AbstractVecOrMat{Float32},
 )
     # Run input through reconstruct function
-    _, _, z, _ = @ignore_derivatives vae(x; latent=true)
-    _, _, z_shuffle, _ = @ignore_derivatives vae(
-        x[:, Random.shuffle(1:end)]; latent=true
-    )
+    µ, logσ, z, x̂ = @ignore_derivatives vae(x; latent=true)
+    # Run shuffle input through reconstruct function
+    _, _, z_shuffle, _ = @ignore_derivatives vae(x_shuffle; latent=true)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -427,7 +440,9 @@ variable `z` for a given inforMaxVAE architecture.
 """
 function mutual_info_mlp(infomaxvae::InfoMaxVAE, x::AbstractVecOrMat{Float32})
     # Compute mutual information
-    return -mlp_loss(infomaxvae.vae, infomaxvae.mlp, x) / size(x, 2)
+    return -mlp_loss(
+        infomaxvae.vae, infomaxvae.mlp, x, x[:, Random.shuffle(1:end)]
+    ) / size(x, 2)
 end # function
 
 @doc raw"""
@@ -474,16 +489,19 @@ function train!(
     loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0, :α => 1.0f0)
 )
 
+    # Permute data for computation of mutual information
+    x_shuffle = @view x[:, Random.shuffle(1:end)]
+
     # == VAE == #
     # Compute gradient
     ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
-        loss(vae, infomaxvae.mlp, x; loss_kwargs...)
+        loss(vae, infomaxvae.mlp, x, x_shuffle; loss_kwargs...)
     end # do
 
     # == MLP == #
     # Compute gradient
     ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-        mlp_loss(infomaxvae.vae, mlp, x)
+        mlp_loss(infomaxvae.vae, mlp, x, x_shuffle)
     end # do
 
     # Update the VAE network parameters averaging gradient from all datasets
@@ -523,6 +541,9 @@ the mutual information between input and latent variables.
 - `x_true;:AbstractVecOrMat{Float32}`: Array containing the data used to compare
   the reconstruction for the loss function. This can be used to train denoising
   VAE, for exmaple.
+- `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
+  needed to compute the mutual information term. This term is used to obtain an
+  encoding `z_shuffle` that represents a random sample from the marginal P(z).
 - `vae_opt::Flux.Optimise.AbstractOptimiser`: Optimizing algorithm to be used to
   update the variational autoencoder parameters. This should be fed already with
   the corresponding parameters. For example, one could feed: 
@@ -549,16 +570,19 @@ function train!(
     loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0, :α => 1.0f0)
 )
 
+    # Permute data for computation of mutual information
+    x_shuffle = @view x[:, Random.shuffle(1:end)]
+
     # == VAE == #
     # Compute gradient
     ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
-        loss(vae, infomaxvae.mlp, x, x_true; loss_kwargs...)
+        loss(vae, infomaxvae.mlp, x, x_true, x_shuffle; loss_kwargs...)
     end # do
 
     # == MLP == #
     # Compute gradient
     ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-        mlp_loss(infomaxvae.vae, mlp, x)
+        mlp_loss(infomaxvae.vae, mlp, x, x_shuffle)
     end # do
 
     # Update the VAE network parameters averaging gradient from all datasets

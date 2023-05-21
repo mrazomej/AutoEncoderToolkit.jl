@@ -93,7 +93,7 @@ mlp_output_activation = Flux.identity
 
 ##
 
-println("Testing InfoMaxVAE initialization and training...")
+println("Testing VAE initialization and training...")
 
 # Initialize autoencoder
 infomaxvae = InfoMaxVAEs.infomaxvae_init(
@@ -111,7 +111,7 @@ infomaxvae = InfoMaxVAEs.infomaxvae_init(
 )
 
 # Test if it returns the right type
-@test isa(infomaxvae, AutoEncode.InfoMaxVAEs.InfoMaxVAE)
+@test isa(infomaxvae, InfoMaxVAEs.InfoMaxVAE)
 
 ##
 
@@ -120,18 +120,28 @@ infomaxvae = InfoMaxVAEs.infomaxvae_init(
 
 ##
 
+# Generate list of permutated data
+data_shuffle = data[:, Random.shuffle(1:end)]
+
 #  Test loss functions
 @test isa(
-    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data,), AbstractFloat
-)
-
-@test isa(
-    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data, data),
+    InfoMaxVAEs.loss(
+        infomaxvae.vae, infomaxvae.mlp, data, data_shuffle
+    ),
     AbstractFloat
 )
 
 @test isa(
-    InfoMaxVAEs.mlp_loss(infomaxvae.vae, infomaxvae.mlp, data),
+    InfoMaxVAEs.loss(
+        infomaxvae.vae, infomaxvae.mlp, data, data, data_shuffle
+    ),
+    AbstractFloat
+)
+
+@test isa(
+    InfoMaxVAEs.mlp_loss(
+        infomaxvae.vae, infomaxvae.mlp, data, data_shuffle
+    ),
     AbstractFloat
 )
 
