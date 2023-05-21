@@ -136,6 +136,24 @@ function ae_init(
     return AE(Flux.Chain(Encoder...), Flux.Chain(Decoder...))
 end # function
 
+@doc raw"""
+    `AE(input; latent)`
+
+Function to pass input data through autoencoder to reconstruct the input
+
+# Arguments
+- `input::AbstractVecOrMat{Float32}`: Input to the neural network.
+"""
+function (ae::AE)(input::AbstractVecOrMat{Float32})
+    # Encode input
+    z = ae.encoder(input)
+    # Decode latent code
+    return ae.decoder(z)
+end # function
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor AE
+
 ##
 
 @doc raw"""
