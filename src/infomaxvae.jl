@@ -1,8 +1,6 @@
 # Import ML libraries
 import Flux
 import Zygote
-# Import function to ignore derivatives
-import ChainRulesCore: @ignore_derivatives
 
 # Import basic math
 import Random
@@ -51,10 +49,6 @@ the latent variables distributions and
 """
 mutable struct InfoMaxVAE <: AbstractVariationalAutoEncoder
     vae::VAE
-    # encoder::Flux.Chain
-    # µ::Flux.Dense
-    # logσ::Flux.Dense
-    # decoder::Flux.Chain
     mlp::Flux.Chain
 end
 
@@ -214,6 +208,9 @@ function infomaxvae_init(
         Flux.Chain(MLP...)
     )
 end # function
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor InfoMaxVAE
 
 @doc raw"""
     `loss(vae, mlp, x, x_shuffle; σ, β, α)`
@@ -407,9 +404,9 @@ function mlp_loss(
     x_shuffle::AbstractVecOrMat{Float32},
 )
     # Run input through reconstruct function
-    µ, logσ, z, x̂ = @ignore_derivatives vae(x; latent=true)
+    _, _, z, _ = vae(x; latent=true)
     # Run shuffle input through reconstruct function
-    _, _, z_shuffle, _ = @ignore_derivatives vae(x_shuffle; latent=true)
+    _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -417,12 +414,8 @@ function mlp_loss(
     # Run input and PERMUTED latent variables through mutual info MLP
     I_xz_perm = mlp([x; z_shuffle])
 
-    # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
-
-    # Compute loss function
-    return -info_x_z
-
+    # Compute (negative) variational mutual information as loss function
+    return -sum(@. I_xz - exp(I_xz_perm - 1))
 end #function
 
 @doc raw"""
@@ -498,18 +491,18 @@ function train!(
         loss(vae, infomaxvae.mlp, x, x_shuffle; loss_kwargs...)
     end # do
 
-    # == MLP == #
-    # Compute gradient
-    ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-        mlp_loss(infomaxvae.vae, mlp, x, x_shuffle)
-    end # do
-
     # Update the VAE network parameters averaging gradient from all datasets
     Flux.Optimisers.update!(
         vae_opt,
         infomaxvae.vae,
         ∇vae_loss_[1]
     )
+
+    # == MLP == #
+    # Compute gradient
+    ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
+        mlp_loss(infomaxvae.vae, mlp, x, x_shuffle)
+    end # do
 
     # Update the MLP network parameters averaging gradient from all datasets
     Flux.Optimisers.update!(
