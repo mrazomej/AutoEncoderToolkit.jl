@@ -1,9 +1,10 @@
 ##
-println("Testing VAEs module:\n")
+println("Testing InforMaxVAEs module:\n")
 ##
 
-# Import AutoEncode.jl module to be tested
-import AutoEncode.VAEs
+import Revise
+# Import AutoEncode.jl package
+import AutoEncode.InfoMaxVAEs
 # Import Flux library
 import Flux
 
@@ -29,7 +30,7 @@ n_hidden = 3
 # Define number of neurons in non-linear hidden layers
 n_neuron = 20
 # Define dimensionality of latent space
-latent_dim = 1
+latent_dim = 2
 # Define parameter scheduler
 epoch_change = [1, 10^4, 10^5, 5 * 10^5, 10^6]
 learning_rates = [10^-4, 10^-5, 10^-6, 10^-5.5, 10^-6];
@@ -64,7 +65,7 @@ data = Matrix(hcat(x_rand, y_rand, z_rand)')
 dt = StatsBase.fit(StatsBase.ZScoreTransform, data, dims=2)
 
 # Center data to have mean zero and standard deviation one
-data = StatsBase.transform(dt, data);
+data = StatsBase.transform(dt, data)
 
 ##
 
@@ -83,12 +84,19 @@ encoder_activation = repeat([Flux.swish], n_hidden)
 decoder = repeat([n_neuron], n_hidden)
 decoder_activation = repeat([Flux.swish], n_hidden)
 
+# Define MLP layer and activation function
+mlp = repeat([n_neuron], n_hidden)
+mlp_activation = repeat([Flux.swish], n_hidden)
+
+# Define MLP output activation function
+mlp_output_activation = Flux.identity
+
 ##
 
 println("Testing VAE initialization and training...")
 
 # Initialize autoencoder
-vae = VAEs.vae_init(
+infomaxvae = InfoMaxVAEs.infomaxvae_init(
     n_input,
     latent_dim,
     latent_activation,
@@ -96,44 +104,101 @@ vae = VAEs.vae_init(
     encoder,
     encoder_activation,
     decoder,
-    decoder_activation
+    decoder_activation,
+    mlp,
+    mlp_activation,
+    mlp_output_activation
 )
 
 # Test if it returns the right type
-@test isa(vae, VAEs.VAE)
+@test isa(infomaxvae, AutoEncode.InfoMaxVAEs.InfoMaxVAE)
 
 ##
 
 # Test that reconstruction works
-@test isa(vae(data; latent=false), AbstractVecOrMat)
+@test isa(infomaxvae.vae(data; latent=false), AbstractVecOrMat)
 
 ##
+
+# Generate list of random indexes for data shuffling needed to compute mutual
+# information
+shuffle_idx = Random.shuffle(1:size(data, 2))
 
 #  Test loss functions
-@test isa(VAEs.loss(vae, data), AbstractFloat)
-@test isa(VAEs.loss(vae, data, data), AbstractFloat)
+@test isa(
+    InfoMaxVAEs.loss(
+        infomaxvae.vae, infomaxvae.mlp, data, data[:, shuffle_idx]
+    ),
+    AbstractFloat
+)
+
+@test isa(
+    InfoMaxVAEs.loss(
+        infomaxvae.vae, infomaxvae.mlp, data, data, data[:, shuffle_idx]
+    ),
+    AbstractFloat
+)
+
+@test isa(
+    InfoMaxVAEs.mlp_loss(
+        infomaxvae.vae, infomaxvae.mlp, data, data[:, shuffle_idx]
+    ),
+    AbstractFloat
+)
 
 ##
 
-# Explicit setup of optimizer
-opt_state = Flux.Train.setup(
-    Flux.Optimisers.Adam(1E-1),
-    vae
-)
+@test isa(InfoMaxVAEs.mutual_info_mlp(infomaxvae, data), AbstractFloat)
+
+##
 
 # Extract parameters
-params_init = deepcopy(Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder))
+params_init = deepcopy(
+    collect(
+        Flux.params(
+            infomaxvae.vae.encoder,
+            infomaxvae.vae.µ,
+            infomaxvae.vae.logσ,
+            infomaxvae.vae.decoder,
+            infomaxvae.mlp
+        )
+    )
+)
+
+# Explicit setup of optimizer
+vae_opt = Flux.Train.setup(
+    Flux.Optimisers.Adam(1E-1),
+    infomaxvae.vae
+)
+
+mlp_opt = Flux.Train.setup(
+    Flux.Optimisers.Adam(1E-1),
+    infomaxvae.mlp
+)
 
 # Loop through a couple of epochs
 for epoch = 1:10
     # Test training function
-    VAEs.train!(vae, data, opt_state)
+    InfoMaxVAEs.train!(
+        infomaxvae, data, data[:, shuffle_idx], vae_opt, mlp_opt
+    )
 end # for
 
 # Extract modified parameters
-params_end = deepcopy(Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder))
+params_end = deepcopy(
+    collect(
+        Flux.params(
+            infomaxvae.vae.encoder,
+            infomaxvae.vae.µ,
+            infomaxvae.vae.logσ,
+            infomaxvae.vae.decoder,
+            infomaxvae.mlp
+        )
+    )
+)
+
 
 @test all(params_init .!= params_end)
 
-println("Passed tests for VAEs module!\n")
+println("Passed tests for InfoMaxVAEs module!\n")
 ##
