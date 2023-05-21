@@ -184,17 +184,22 @@ function (vae::VAE)(
     input::AbstractVecOrMat{Float32};
     latent::Bool=false
 )
-    # 1. Map input to mean and log standard deviation of latent variables
-    µ = Flux.Chain(vae.encoder..., vae.µ)(input)
-    logσ = Flux.Chain(vae.encoder..., vae.logσ)(input)
 
-    # 2. Sample random latent variable point estimate given the mean and
+    # 1. Map input through encoder layer
+    encode_input = vae.encoder(input)
+
+    # 2. map encoder layer output to mean and log standard deviation of latent
+    #    variables
+    µ = vae.µ(encode_input)
+    logσ = vae.logσ(encode_input)
+
+    # 3. Sample random latent variable point estimate given the mean and
     #    standard deviation
     z = µ .+ Random.rand(
         Distributions.Normal{Float32}(0.0f0, 1.0f0), size(µ)...
     ) .* exp.(logσ)
 
-    # 3. Run sampled latent variables through decoder and return values
+    # 4. Run sampled latent variables through decoder and return values
     if latent
         return µ, logσ, vae.decoder(z)
     else

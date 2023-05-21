@@ -29,7 +29,7 @@ n_hidden = 3
 # Define number of neurons in non-linear hidden layers
 n_neuron = 20
 # Define dimensionality of latent space
-latent_dim = 2
+latent_dim = 1
 # Define parameter scheduler
 epoch_change = [1, 10^4, 10^5, 5 * 10^5, 10^6]
 learning_rates = [10^-4, 10^-5, 10^-6, 10^-5.5, 10^-6];
@@ -64,7 +64,7 @@ data = Matrix(hcat(x_rand, y_rand, z_rand)')
 dt = StatsBase.fit(StatsBase.ZScoreTransform, data, dims=2)
 
 # Center data to have mean zero and standard deviation one
-data_std = StatsBase.transform(dt, data);
+data = StatsBase.transform(dt, data);
 
 ##
 
@@ -105,29 +105,34 @@ vae = AutoEncode.VAEs.vae_init(
 ##
 
 # Test that reconstruction works
-@test isa(AutoEncode.VAEs.recon(vae, data_std; latent=false), AbstractVecOrMat)
+@test isa(vae(data; latent=false), AbstractVecOrMat)
 
 ##
 
 #  Test loss functions
-@test isa(AutoEncode.VAEs.loss(vae, data_std), AbstractFloat)
-@test isa(AutoEncode.VAEs.loss(vae, data_std, data_std), AbstractFloat)
+@test isa(AutoEncode.VAEs.loss(vae, data), AbstractFloat)
+@test isa(AutoEncode.VAEs.loss(vae, data, data), AbstractFloat)
 
 ##
 
+# Explicit setup of optimizer
+opt_state = Flux.Train.setup(
+    Flux.Optimisers.Adam(1E-1),
+    vae
+)
+
 # Extract parameters
-params_init = Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder)
+params_init = deepcopy(Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder))
 
 # Loop through a couple of epochs
 for epoch = 1:10
     # Test training function
-    AutoEncode.VAEs.train!(AutoEncode.VAEs.loss, vae, data_std, Flux.Adam(10^-1))
+    AutoEncode.VAEs.train!(vae, data, opt_state)
 end # for
 
 # Extract modified parameters
-params_end = Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder)
+params_end = deepcopy(Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder))
 
-# @test 
-all(params_init .!= params_end)
+@test all(params_init .!= params_end)
 
 ##
