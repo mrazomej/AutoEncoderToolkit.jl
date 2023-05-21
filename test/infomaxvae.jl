@@ -93,7 +93,7 @@ mlp_output_activation = Flux.identity
 
 ##
 
-println("Testing VAE initialization and training...")
+println("Testing InfoMaxVAE initialization and training...")
 
 # Initialize autoencoder
 infomaxvae = InfoMaxVAEs.infomaxvae_init(
@@ -120,29 +120,18 @@ infomaxvae = InfoMaxVAEs.infomaxvae_init(
 
 ##
 
-# Generate list of random indexes for data shuffling needed to compute mutual
-# information
-shuffle_idx = Random.shuffle(1:size(data, 2))
-
 #  Test loss functions
 @test isa(
-    InfoMaxVAEs.loss(
-        infomaxvae.vae, infomaxvae.mlp, data, data[:, shuffle_idx]
-    ),
+    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data,), AbstractFloat
+)
+
+@test isa(
+    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data, data),
     AbstractFloat
 )
 
 @test isa(
-    InfoMaxVAEs.loss(
-        infomaxvae.vae, infomaxvae.mlp, data, data, data[:, shuffle_idx]
-    ),
-    AbstractFloat
-)
-
-@test isa(
-    InfoMaxVAEs.mlp_loss(
-        infomaxvae.vae, infomaxvae.mlp, data, data[:, shuffle_idx]
-    ),
+    InfoMaxVAEs.mlp_loss(infomaxvae.vae, infomaxvae.mlp, data),
     AbstractFloat
 )
 
@@ -179,9 +168,7 @@ mlp_opt = Flux.Train.setup(
 # Loop through a couple of epochs
 for epoch = 1:10
     # Test training function
-    InfoMaxVAEs.train!(
-        infomaxvae, data, data[:, shuffle_idx], vae_opt, mlp_opt
-    )
+    InfoMaxVAEs.train!(infomaxvae, data, vae_opt, mlp_opt)
 end # for
 
 # Extract modified parameters
