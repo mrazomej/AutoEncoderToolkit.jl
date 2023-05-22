@@ -8,6 +8,9 @@ using Test
     # Test VAE module
     include("vae.jl")
 
+    # Test MMD-VAE module
+    include("mmdvae.jl")
+
     # Test InfoMaxVAE module
     include("infomaxvae.jl")
 
