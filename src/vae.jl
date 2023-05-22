@@ -355,7 +355,7 @@ given a loss function.
 
 # Arguments
 - `vae::VAE`: Struct containint the elements of a variational autoencoder.
-- `x::AbstractMatrix{Float32}`: Matrix containing the data on which to evaluate
+- `x::AbstractVecOrMat{Float32}`: Matrix containing the data on which to evaluate
   the loss function. NOTE: Every column should represent a single input.
 - `opt::NamedTuple`: State of optimizer that will be used to update parameters.
   NOTE: This is in agreement with `Flux.jl ≥ 0.13` where implicit `Zygote`
