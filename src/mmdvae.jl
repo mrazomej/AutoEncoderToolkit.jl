@@ -173,12 +173,10 @@ respectively, i.e.,
   between qᵩ(z) and P(z) should be during training.
 - `α::Float32=1`: Hyperparameter that emphasizes how relevant the Mutual
   Information term should be during optimization.
-- `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
-  Default is the Gaussian Kernel.
-- `n_samples::Int`: Number of samples to take from the latent space when
-  computing ⟨logP(x|z)⟩.
 - `n_latent_samples::Int`: Number of samples to take from the latent space prior
   P(z) when computing the MMD divergence.
+- `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
+  Default is the Gaussian Kernel.
 - `kernel_kwargs::NamedTuple`: Tuple containing arguments for the Kernel
   function.
 
@@ -192,9 +190,12 @@ function loss(
     σ::Float32=1.0f0,
     λ::Float32=1.0f0,
     α::Float32=0.0f0,
-    kernel::Function=gaussian_kernel,
     n_latent_samples::Int=50,
-    kernel_kwargs...
+    kernel::Function=gaussian_kernel,
+    kernel_kwargs::Union{NamedTuple,Dict}=Dict(
+        :ρ => 1.0f0,
+        :dims => 2
+    )
 )
     # Run input through reconstruct function
     µ, logσ, _, x̂ = vae(x, latent=true)
@@ -256,7 +257,17 @@ function train!(
     vae::VAE,
     x::AbstractVecOrMat{Float32},
     opt::NamedTuple;
-    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(
+        :σ => 1.0f0,
+        :λ => 1.0f0,
+        :α => 0.0f0,
+        :kernel => gaussian_kernel,
+        :n_latent_samples => 50,
+        :kernel_kwargs => Dict(
+            :ρ => 1.0f0,
+            :dims => 2
+        )
+    )
 )
     # Compute gradient
     ∇loss_ = Flux.gradient(vae) do vae

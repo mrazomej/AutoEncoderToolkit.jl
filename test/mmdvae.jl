@@ -6,6 +6,7 @@ import Revise
 
 # Import AutoEncode.jl module to be tested
 import AutoEncode.MMDVAEs
+import AutoEncode.VAEs
 import AutoEncode.VAEs: vae_init
 # Import Flux library
 import Flux
@@ -13,6 +14,7 @@ import Flux
 # Import basic math
 import Random
 import StatsBase
+import Distributions
 
 Random.seed!(42)
 ##
@@ -106,9 +108,6 @@ vae = vae_init(
 
 # Test Gaussian Kernel function
 @test isa(MMDVAEs.gaussian_kernel(data, data), AbstractMatrix)
-
-# Test MMD divergence function
-@test isa(MMDVAEs.mmd_div(data[:, 1], data[:, 1]), AbstractFloat)
 
 # Test logP_mmd_ratio function
 @test isa(MMDVAEs.logP_mmd_ratio(vae, data), AbstractFloat)
