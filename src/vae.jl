@@ -213,6 +213,10 @@ end # function
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor VAE
 
+## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# VAE loss functions
+## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 @doc raw"""
     `loss(vae, x; σ, β)`
 
@@ -346,6 +350,93 @@ function kl_div(x::AbstractVector{Float32}, vae::VAE)
 
     return sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 end # function
+
+@doc raw"""
+    `loss_terms(vae, x; σ, β)`
+
+Loss function for the variational autoencoder. NOTE: This function performs the
+same computations as the `loss` function, but simply returns each term
+individually.
+
+# Arguments
+- `vae::VAE`: Struct containint the elements of the variational autoencoder.
+- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
+
+## Optional arguments
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+
+# Returns
+- `loss::Float32`: Single value defining the loss function for entry `x` when
+compared with reconstructed output `x̂`.
+"""
+function loss_terms(
+    vae::VAE,
+    x::AbstractVecOrMat{Float32};
+    σ::Float32=1.0f0,
+    β::Float32=1.0f0
+)
+    # Run input through reconstruct function
+    µ, logσ, _, x̂ = vae(x; latent=true)
+
+    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
+    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+               1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
+    # and latent prior distribution P(z)
+    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+
+    # Compute loss function
+    return [logP_x_z, β * kl_qₓ_p]
+end #function
+
+@doc raw"""
+    `loss_terms(vae, x, x_true; σ, β)`
+
+Loss function for the variational autoencoder. NOTE: This function performs the
+same computations as the `loss` function, but simply returns each term
+individually.
+
+# Arguments
+- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
+- `x_true::AbstractVecOrMat{Float32}`: True input against which to compare
+  autoencoder reconstruction.
+- `vae::VAE`: Struct containint the elements of the variational autoencoder.
+
+## Optional arguments
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+
+# Returns
+- `loss::Float32`: Single value defining the loss function for entry `x` when
+compared with reconstructed output `x̂`.
+"""
+function loss_terms(
+    vae::VAE,
+    x::AbstractVecOrMat{Float32},
+    x_true::AbstractVecOrMat{Float32};
+    σ::Float32=1.0f0,
+    β::Float32=1.0f0
+)
+    # Run input through reconstruct function
+    µ, logσ, _, x̂ = vae(x; latent=true)
+
+    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
+    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+               1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
+    # and latent prior distribution P(z)
+    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+
+    # Compute loss function
+    return [logP_x_z, β * kl_qₓ_p]
+end #function
+
+## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# VAE training functions
+## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 @doc raw"""
     `train!(vae, x, opt; kwargs...)`
