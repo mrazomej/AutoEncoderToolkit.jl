@@ -270,8 +270,7 @@ function loss(
     info_x_z = 0.0f0
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -347,8 +346,7 @@ function loss(
     _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -490,8 +488,7 @@ function loss_terms(
     info_x_z = 0.0f0
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -560,8 +557,7 @@ function loss_terms(
     _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])

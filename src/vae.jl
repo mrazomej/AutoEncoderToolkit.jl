@@ -256,8 +256,7 @@ function loss(
     µ, logσ, _, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution P(z)
@@ -314,8 +313,7 @@ function loss(
     µ, logσ, _, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution P(z)
@@ -380,8 +378,7 @@ function loss_terms(
     µ, logσ, _, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution P(z)
@@ -423,8 +420,7 @@ function loss_terms(
     µ, logσ, _, x̂ = vae(x; latent=true)
 
     # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
-               1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution P(z)
