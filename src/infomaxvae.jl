@@ -212,6 +212,9 @@ end # function
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor InfoMaxVAE
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# InfoMaxVAE loss function
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 @doc raw"""
     `loss(vae, mlp, x, x_shuffle; σ, β, α)`
 
@@ -437,6 +440,150 @@ function mutual_info_mlp(infomaxvae::InfoMaxVAE, x::AbstractVecOrMat{Float32})
         infomaxvae.vae, infomaxvae.mlp, x, x[:, Random.shuffle(1:end)]
     ) / size(x, 2)
 end # function
+
+@doc raw"""
+    `loss_terms(vae, mlp, x, x_shuffle; σ, β, α)`
+
+Function to print the three values of the InfoMax variational autoencoder to
+diagnose the training. NOTE: This function performs the same computations as the
+`loss` function, but simply returns each term individually.
+
+# Arguments
+
+NOTE: The input to the loss function splits the `InfoMaxVAE` into the `vae` and
+`mlp` parts. This is not to compute gradients redundantly when training both
+networks.
+
+- `vae::VAE`: Struct containing the elements of the variational autoencoder.
+- `mlp::Flux.Chain`: `Flux.jl` chain defining the multi-layered perceptron used
+  to compute the variational mutual information.
+- `x::AbstractVector{Float32}`: Input to the neural network.
+- `x_shuffle::Vector`: Shuffled input to the neural network needed to compute
+  the mutual information term. This term is used to obtain an encoding
+  `z_shuffle` that represents a random sample from the marginal P(z).
+
+## Optional arguments
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+- `α::Float32=1`: Annealing inverse temperature for the mutual information term.
+
+# Returns
+- `loss_infoMax::Float32`: Single value defining the loss function for entry `x`
+  when compared with reconstructed output `x̂`. This is used by the training
+  algorithms to improve the reconstruction.
+"""
+function loss_terms(
+    vae::VAE,
+    mlp::Flux.Chain,
+    x::AbstractVecOrMat{Float32},
+    x_shuffle::AbstractVecOrMat{Float32};
+    σ::Float32=1.0f0,
+    β::Float32=1.0f0,
+    α::Float32=1.0f0
+)
+    # Run input through reconstruct function
+    µ, logσ, z, x̂ = vae(x; latent=true)
+    # Run shuffle input through reconstruct function
+    _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
+
+    # Initialize value to save variational form of mutual information
+    info_x_z = 0.0f0
+
+    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
+    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+               1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+
+    # Run input and latent variables through mutual information MLP
+    I_xz = mlp([x; z])
+
+    # Run input and PERMUTED latent variables through mutual info MLP
+    I_xz_perm = mlp([x; z_shuffle])
+
+    # Compute variational mutual information
+    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
+
+
+    # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
+    # and latent prior distribution P(x)
+    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+
+    # Compute loss function
+    return [logP_x_z, β * kl_qₓ_p, α * info_x_z]
+end #function
+
+@doc raw"""
+    `loss_terms(vae, mlp, x, x_true, x_shuffle; σ, β, α)`
+
+Function to print the three values of the InfoMax variational autoencoder to
+diagnose the training. NOTE: This function performs the same computations as the
+`loss` function, but simply returns each term individually.
+
+# Arguments
+
+NOTE: The input to the loss function splits the `InfoMaxVAE` into the `vae` and
+`mlp` parts. This is not to compute gradients redundantly when training both
+networks.
+
+- `vae::VAE`: Struct containing the elements of the variational autoencoder.
+- `mlp::Flux.Chain`: `Flux.jl` chain defining the multi-layered perceptron used
+  to compute the variational mutual information.
+- `x::AbstractVector{Float32}`: Input to the neural network.
+- `x_true::Vector`: True input against which to compare autoencoder
+  reconstruction.
+- `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
+  needed to compute the mutual information term. This term is used to obtain an
+  encoding `z_shuffle` that represents a random sample from the marginal P(z).
+
+## Optional arguments
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+- `α::Float32=1`: Annealing inverse temperature for the mutual information term.
+
+# Returns
+- `loss_infoMax::Float32`: Single value defining the loss function for entry `x`
+  when compared with reconstructed output `x̂`. This is used by the training
+  algorithms to improve the reconstruction.
+"""
+function loss_terms(
+    vae::VAE,
+    mlp::Flux.Chain,
+    x::AbstractVecOrMat{Float32},
+    x_true::AbstractVecOrMat{Float32},
+    x_shuffle::AbstractVecOrMat{Float32};
+    σ::Float32=1.0f0,
+    β::Float32=1.0f0,
+    α::Float32=1.0f0
+)
+    # Run input through reconstruct function
+    µ, logσ, z, x̂ = vae(x; latent=true)
+    # Run shuffle input through reconstruct function
+    _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
+
+    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
+    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+               1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+
+    # Run input and latent variables through mutual information MLP
+    I_xz = mlp([x; z])
+
+    # Run input and PERMUTED latent variables through mutual info MLP
+    I_xz_perm = mlp([x; z_shuffle])
+
+    # Compute variational mutual information
+    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
+
+    # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
+    # and latent prior distribution P(x)
+    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+
+    # Compute loss function
+    return [logP_x_z, β * kl_qₓ_p, α * info_x_z]
+
+end #function
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# InfoMaxVAE training functions
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
 @doc raw"""
     `train!(vae, x, vae_opt, mlp_opt; loss_kwargs...)`
