@@ -21,20 +21,24 @@ using ..AutoEncode: AbstractAutoEncoder, AbstractVariationalAutoEncoder
 #    http://arxiv.org/abs/1312.6114 (2014).
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-@doc raw"""
-    `VAE`
+"""
+`struct VAE`
 
-Structure containing the components of a variational autoencoder (VAE).
+Variational autoencoder (VAE) model defined for `Flux.jl`
 
 # Fields
-- `encoder::Flux.Chain`: neural network that takes the input and passes it
-   through hidden layers.
-- `µ::Flux.Dense`: Single layers that map from the encoder to the mean (`µ`) of
-the latent variables distributions and 
-- `logσ::Flux.Dense`: Single layers that map from the encoder to the log of the
-   standard deviation (`logσ`) of the latent variables distributions.
-- `decoder::Flux.Chain`: Neural network that takes the latent variables and
-   tries to reconstruct the original input.
+- `encoder`: Neural network that encodes the input into the latent space.
+- `μ`: Layer that predicts the mean of the latent space. 
+- `logσ`: Layer that predicts the log standard deviation of the latent space.
+- `decoder`: Neural network that decodes the latent representation back to the
+  original input space.
+
+A VAE consists of an encoder and decoder network with a bottleneck latent space
+in between. The encoder compresses the input into a multivariate normal
+distribution parameterized by `μ` and `logσ`. The decoder tries to reconstruct
+the original input from a sampled point in the latent space. VAEs are trained
+using the reparameterization trick and the evidence lower bound (ELBO)
+objective.
 """
 mutable struct VAE <: AbstractVariationalAutoEncoder
     encoder::Flux.Chain
@@ -43,44 +47,38 @@ mutable struct VAE <: AbstractVariationalAutoEncoder
     decoder::Flux.Chain
 end
 
-@doc raw"""
-    `vae_init(
-        n_input, 
-        n_latent, 
-        latent_activation,
-        output_activation,
-        encoder, 
-        encoder_activation,
-        decoder, 
-        decoder_activation;
-        init
-    )`
+"""
+    vae_init(n_input, n_latent, latent_activation, output_activation, 
+             encoder, encoder_activation, decoder, decoder_activation;
+             init=Flux.glorot_uniform)
 
-Function to initialize a variational autoencoder neural network with `Flux.jl`.
+Initialize a `VAE` model architecture `struct` using Flux.jl.
 
 # Arguments
-- `n_input::Int`: Dimension of input space.
-- `n_latent::Int`: Dimension of latent space
-- `latent_activation::Function`: Activation function coming in of the latent
-  space layer.
-- `output_activation::Function`: Activation function on the output layer
-- `encoder::Vector{Int}`: Array containing the dimensions of the hidden layers
-  of the encoder network (one layer per entry).
-- `encoder_activation::Vector`: Array containing the activation function for the
-  encoder hidden layers. NOTE: length(encoder) must match
-  length(encoder_activation).
-- `decoder::Vector{Int}`: Array containing the dimensions of the hidden layers
-  of the decoder network (one layer per entry).
-- `decoder_activation::Vector`: Array containing the activation function for the
-  decoder hidden layers. NOTE: length(decoder) must match
-  length(decoder_activation).
+- `n_input::Int`: Dimensionality of the input data. 
+- `n_latent::Int`: Dimensionality of the latent space.
+- `latent_activation::Function`: Activation function for the latent space
+  layers.
+- `output_activation::Function`: Activation function for the output layer.
+- `encoder::Vector{<:Int}`: Vector of layer sizes for the encoder network.
+- `encoder_activation::Vector{<:Function}`: Activation functions for each
+  encoder layer.
+- `decoder::Vector{<:Int}`: Vector of layer sizes for the decoder network. 
+- `decoder_activation::Vector{<:Function}`: Activation functions for each
+  decoder layer.
 
-## Optional arguments
-- `init::Function=Flux.glorot_uniform`: Function to initialize network
-parameters.
+# Keyword Arguments
+- `init=Flux.glorot_uniform`: Initialization function for network parameters.
 
 # Returns
-- a `struct` of type `VAE`
+- `vae`: A VAE model with encoder, latent variables and decoder.
+
+# Examples
+```julia
+vae = vae_init(
+    28^2, 10, tanh, sigmoid, [128, 64], [relu, relu], [64, 128], [relu, relu]
+)
+```
 """
 function vae_init(
     n_input::Int,
@@ -159,10 +157,14 @@ end # function
 @doc raw"""
 `VAE(input; latent)`
 
-This function performs three steps:
-1. passes an input `x` through the `encoder`, 
-2. samples the latent variable by using the reparametrization trick,
-3. reconstructs the input from the latent variables using the `decoder`.
+Pass input through the VAE and return reconstructed output. 
+
+This follows 3 steps:
+
+1. Encode input via the encoder network.
+2. Sample the latent code with the reparameterization trick. 
+3. Decode the sampled latent code with the decoder network.
+
 
 # Arguments
 - `input::AbstractVecOrMat{Float32}`: Input to the neural network.
@@ -182,6 +184,13 @@ the input when mapped to the latent space.
 - `x̂::Vector{Float32}`: The reconstructed input `x` after passing through the
   autoencoder. NOTE: This will change every time the function is called on the
   same input because of the random number sampling.
+
+# Examples
+```julia
+x = rand(28^2)
+x̂ = VAE(x) # reconstruct x 
+μ, logσ, z, x̂ = VAE(x, latent=true) # return latent params
+```
 """
 function (vae::VAE)(
     input::AbstractVecOrMat{Float32};
@@ -222,24 +231,24 @@ Flux.@functor VAE
 
 Loss function for the variational autoencoder. The loss function is defined as
 
-loss = argmin -⟨log P(x|z)⟩ + β Dₖₗ(qᵩ(z | x) || P(z)),
+loss = argmin -⟨log π(x|z)⟩ + β Dₖₗ(qᵩ(z | x) || π(z)),
 
 where the minimization is taken over the functions f̲, g̲, and h̲̲. f̲(z) encodes the
-function that defines the mean ⟨x|z⟩ of the decoder P(x|z), i.e.,
+function that defines the mean ⟨x|z⟩ of the decoder π(x|z), i.e.,
 
-    P(x|z) = Normal(f̲(x), σI).
+    π(x|z) = Normal(f̲(x), σI).
 
 g̲ and h̲̲ define the mean and covariance of the approximate decoder qᵩ(z|x),
 respectively, i.e.,
 
-    P(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
+    π(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
 
 # Arguments
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 - `x::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 
 # Returns
@@ -255,15 +264,15 @@ function loss(
     # Run input through reconstruct function
     µ, logσ, _, x̂ = vae(x; latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
-    # and latent prior distribution P(z)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # and latent prior distribution π(z)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return -logP_x_z + β * kl_qₓ_p
+    return -logπ_x_z + β * kl_qᵩ_π
 
 end #function
 
@@ -272,17 +281,17 @@ end #function
 
 Loss function for the variational autoencoder. The loss function is defined as
 
-loss = argmin -⟨log P(x|z)⟩ + β Dₖₗ(qᵩ(z | x) || P(z)),
+loss = argmin -⟨log π(x|z)⟩ + β Dₖₗ(qᵩ(z | x) || π(z)),
 
 where the minimization is taken over the functions f̲, g̲, and h̲̲. f̲(z)
-encodes the function that defines the mean ⟨x|z⟩ of the decoder P(x|z), i.e.,
+encodes the function that defines the mean ⟨x|z⟩ of the decoder π(x|z), i.e.,
 
-    P(x|z) = Normal(f̲(x), σI).
+    π(x|z) = Normal(f̲(x), σI).
 
 g̲ and h̲̲ define the mean and covariance of the approximate decoder qᵩ(z|x),
 respectively, i.e.,
 
-    P(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
+    π(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
 
 NOTE: This method accepts an extra argument `x_true` as the ground truth against
 which to compare the input values that is not necessarily the same as the input
@@ -295,7 +304,7 @@ value.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 
 # Returns
@@ -312,26 +321,26 @@ function loss(
     # Run input through reconstruct function
     µ, logσ, _, x̂ = vae(x; latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
-    # and latent prior distribution P(z)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # and latent prior distribution π(z)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return -logP_x_z + β * kl_qₓ_p
+    return -logπ_x_z + β * kl_qᵩ_π
 
 end #function
 
 @doc raw"""
     `kl_div(x, vae)`
 
-Function to compute the KL divergence between the approximate encoder qₓ(z) and
-the latent variable prior distribution P(z). Since we assume
-        P(z) = Normal(0̲, 1̲),
+Function to compute the KL divergence between the approximate encoder qᵩ(z) and
+the latent variable prior distribution π(z). Since we assume
+        π(z) = Normal(0̲, 1̲),
 and
-        qₓ(z) = Normal(f̲(x̲), σI̲̲),
+        qᵩ(z) = Normal(f̲(x̲), σI̲̲),
 the KL divergence has a closed form
 
 # Arguments
@@ -339,7 +348,7 @@ the KL divergence has a closed form
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.        
 
 # Returns
-Dₖₗ(qₓ(z)||P(z))
+Dₖₗ(qᵩ(z)||π(z))
 """
 function kl_div(x::AbstractVector{Float32}, vae::VAE)
     # Map input to mean and log standard deviation of latent variables
@@ -361,7 +370,7 @@ individually.
 - `x::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 
 # Returns
@@ -377,15 +386,15 @@ function loss_terms(
     # Run input through reconstruct function
     µ, logσ, _, x̂ = vae(x; latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
-    # and latent prior distribution P(z)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # and latent prior distribution π(z)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return [logP_x_z, β * kl_qₓ_p]
+    return [logπ_x_z, β * kl_qᵩ_π]
 end #function
 
 @doc raw"""
@@ -402,7 +411,7 @@ individually.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 
 # Returns
@@ -419,15 +428,15 @@ function loss_terms(
     # Run input through reconstruct function
     µ, logσ, _, x̂ = vae(x; latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
-    # and latent prior distribution P(z)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # and latent prior distribution π(z)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return [logP_x_z, β * kl_qₓ_p]
+    return [logπ_x_z, β * kl_qᵩ_π]
 end #function
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -442,11 +451,12 @@ given a loss function.
 
 # Arguments
 - `vae::VAE`: Struct containint the elements of a variational autoencoder.
-- `x::AbstractVecOrMat{Float32}`: Matrix containing the data on which to evaluate
-  the loss function. NOTE: Every column should represent a single input.
+- `x::AbstractVecOrMat{Float32}`: Matrix containing the data on which to
+  evaluate the loss function. NOTE: Every column should represent a single
+  input.
 - `opt::NamedTuple`: State of optimizer that will be used to update parameters.
   NOTE: This is in agreement with `Flux.jl ≥ 0.13` where implicit `Zygote`
-  gradients are not allowed. This `opt` object can be initialized using 
+  gradients are not allowed. This `opt` object can be initialized using
   `Flux.Train.setup`. For example, one can run
   ```
   opt_state = Flux.Train.setup(Flux.Optimisers.Adam(1E-1), vae)
@@ -455,8 +465,23 @@ given a loss function.
 ## Optional arguments
 - `loss_kwargs::Union{NamedTuple,Dict}`: Tuple containing arguments for the loss
     function. For `loss`, for example, we have
-    - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+    - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+
+# Description
+1. Compute the gradient of the loss w.r.t the VAE parameters
+2. Update the VAE parameters using the optimizer
+
+The loss function depends on the data `x` and hyperparameters `σ` and `β`. This
+allows full customization during training.
+
+# Examples
+```julia 
+opt = Flux.setup(Optax.adam(1e-3), vae)
+for x in dataloader
+    train!(vae, x, opt) 
+end
+```
 """
 function train!(
     vae::VAE,
@@ -501,8 +526,26 @@ given a loss function.
 ## Optional arguments
 - `loss_kwargs::Union{NamedTuple,Dict}`: Tuple containing arguments for the loss
     function. For `loss`, for example, we have
-    - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+    - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+
+# Description
+1. Compute the gradient of the loss w.r.t the VAE parameters
+2. Update the VAE parameters using the optimizer
+
+The loss function depends on the data `x` and `x_true` and hyperparameters `σ`
+and `β`. This allows full customization during training. The main difference
+with the method that only takes `x` as input is that the comparison at the
+output layer does not need to necessarily match that of the input. Useful for
+data augmentation training schemes.
+
+# Examples
+```julia 
+opt = Flux.setup(Optax.adam(1e-3), vae)
+for x in dataloader
+    train!(vae, x, opt) 
+end
+```
 """
 function train!(
     vae::VAE,
