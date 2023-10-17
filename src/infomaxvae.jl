@@ -100,7 +100,12 @@ Function to initialize an Info-Max autoencoder with `Flux.jl`.
 parameters.
 
 # Returns
-- a `struct` of type `InfoMaxVAE`
+- `vae::InfoMaxVAE`: An InfoMax autoencoder model.
+
+```julia
+vae = infomaxvae_init(28^2, 20, tanh, sigmoid, [128, 64], relu, [64, 128], relu, 
+                      [20, 20], relu, tanh)
+```
 """
 function infomaxvae_init(
     n_input::Int,
@@ -221,7 +226,7 @@ Flux.@functor InfoMaxVAE
 Loss function for the infoMax variational autoencoder. The loss function is
 defined as
 
-loss_infoMax = argmin -⟨log P(x|z)⟩ + β Dₖₗ(qₓ(z) || P(z)) - 
+loss_infoMax = argmin -⟨log π(x|z)⟩ + β Dₖₗ(qᵩ(z) || π(z)) - 
                α [⟨g(x, z)⟩ - ⟨exp(g(x, z) - 1)⟩].
 
 infoMaxVAE simultaneously optimize two neural networks: the traditional
@@ -240,10 +245,10 @@ networks.
 - `x::AbstractVector{Float32}`: Input to the neural network.
 - `x_shuffle::Vector`: Shuffled input to the neural network needed to compute
   the mutual information term. This term is used to obtain an encoding
-  `z_shuffle` that represents a random sample from the marginal P(z).
+  `z_shuffle` that represents a random sample from the marginal π(z).
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 - `α::Float32=1`: Annealing inverse temperature for the mutual information term.
 
@@ -269,8 +274,8 @@ function loss(
     # Initialize value to save variational form of mutual information
     info_x_z = 0.0f0
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -282,27 +287,19 @@ function loss(
     info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
 
 
-    # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
-    # and latent prior distribution P(x)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z)
+    # and latent prior distribution π(x)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return -logP_x_z + β * kl_qₓ_p - α * info_x_z
+    return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z
 
 end #function
 
 @doc raw"""
     `loss(vae, mlp, x, x_true, x_shuffle; σ, β, α)`
 
-Loss function for the infoMax variational autoencoder. The loss function is
-defined as
-
-loss_infoMax = argmin -⟨log P(x|z)⟩ + β Dₖₗ(qₓ(z) || P(z)) - 
-               α [⟨g(x, z)⟩ - ⟨exp(g(x, z) - 1)⟩].
-
-infoMaxVAE simultaneously optimize two neural networks: the traditional
-variational autoencoder (vae) and a multi-layered perceptron (mlp) to compute
-the mutual information between input and latent variables. 
+Loss function for the infoMax variational autoencoder. 
 
 # Arguments
 
@@ -318,10 +315,10 @@ networks.
   reconstruction.
 - `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
   needed to compute the mutual information term. This term is used to obtain an
-  encoding `z_shuffle` that represents a random sample from the marginal P(z).
+  encoding `z_shuffle` that represents a random sample from the marginal π(z).
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 - `α::Float32=1`: Annealing inverse temperature for the mutual information term.
 
@@ -329,6 +326,24 @@ networks.
 - `loss_infoMax::Float32`: Single value defining the loss function for entry `x`
   when compared with reconstructed output `x̂`. This is used by the training
   algorithms to improve the reconstruction.
+
+# Description
+The loss function is defined as
+
+loss_infoMax = argmin -⟨log π(x|z)⟩ + β Dₖₗ(qᵩ(z) || π(z)) - 
+               α [⟨g(x, z)⟩ - ⟨exp(g(x, z) - 1)⟩].
+
+infoMaxVAE simultaneously optimize two neural networks: the traditional
+variational autoencoder (vae) and a multi-layered perceptron (mlp) to compute
+the mutual information between input and latent variables. 
+
+By tuning β and α, the tradeoff between reconstruction, KL regularization,
+and mutual information maximization can be balanced. 
+
+# Examples
+```julia
+loss = infomax_loss(vae, mlp, x, x_shuffle, β=1.0, α=50.0)
+```
 """
 function loss(
     vae::VAE,
@@ -345,8 +360,8 @@ function loss(
     # Run shuffle input through reconstruct function
     _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -357,12 +372,12 @@ function loss(
     # Compute variational mutual information
     info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
 
-    # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
-    # and latent prior distribution P(x)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z)
+    # and latent prior distribution π(x)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return -logP_x_z + β * kl_qₓ_p - α * info_x_z
+    return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z
 
 end #function
 
@@ -391,12 +406,26 @@ networks.
 - `x::AbstractVector{Float32}`: Input to the neural network.
 - `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
   needed to compute the mutual information term. This term is used to obtain an
-  encoding `z_shuffle` that represents a random sample from the marginal P(z).
+  encoding `z_shuffle` that represents a random sample from the marginal π(z).
 
 # Returns
 - `Ixz_MLP::Float32`: Variational mutual information between input x and latent
   space encoding z.
 
+# Description
+The loss function is defined as:
+
+loss = -[⟨I(x, z)⟩ - ⟨exp(I(x, z̃) - 1)⟩]
+
+Where I(x, z) is the mutual information estimated by the MLP network.
+
+This is trained separately from the main InfoMaxVAE model to learn a good 
+mutual information estimator.
+
+# Examples
+```julia
+loss = mlp_loss(vae, mlp, x, x_shuffle)
+```
 """
 function mlp_loss(
     vae::VAE,
@@ -458,10 +487,10 @@ networks.
 - `x::AbstractVector{Float32}`: Input to the neural network.
 - `x_shuffle::Vector`: Shuffled input to the neural network needed to compute
   the mutual information term. This term is used to obtain an encoding
-  `z_shuffle` that represents a random sample from the marginal P(z).
+  `z_shuffle` that represents a random sample from the marginal π(z).
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 - `α::Float32=1`: Annealing inverse temperature for the mutual information term.
 
@@ -487,8 +516,8 @@ function loss_terms(
     # Initialize value to save variational form of mutual information
     info_x_z = 0.0f0
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -500,12 +529,12 @@ function loss_terms(
     info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
 
 
-    # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
-    # and latent prior distribution P(x)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z)
+    # and latent prior distribution π(x)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return [logP_x_z, β * kl_qₓ_p, α * info_x_z]
+    return [logπ_x_z, β * kl_qᵩ_π, α * info_x_z]
 end #function
 
 @doc raw"""
@@ -529,10 +558,10 @@ networks.
   reconstruction.
 - `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
   needed to compute the mutual information term. This term is used to obtain an
-  encoding `z_shuffle` that represents a random sample from the marginal P(z).
+  encoding `z_shuffle` that represents a random sample from the marginal π(z).
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
 - `α::Float32=1`: Annealing inverse temperature for the mutual information term.
 
@@ -556,8 +585,8 @@ function loss_terms(
     # Run shuffle input through reconstruct function
     _, _, z_shuffle, _ = vae(x_shuffle; latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -1 / (2 * σ^2) * sum((x_true .- x̂) .^ 2)
 
     # Run input and latent variables through mutual information MLP
     I_xz = mlp([x; z])
@@ -568,12 +597,12 @@ function loss_terms(
     # Compute variational mutual information
     info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
 
-    # Compute Kullback-Leibler divergence between approximated decoder qₓ(z)
-    # and latent prior distribution P(x)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z)
+    # and latent prior distribution π(x)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return [logP_x_z, β * kl_qₓ_p, α * info_x_z]
+    return [logπ_x_z, β * kl_qᵩ_π, α * info_x_z]
 
 end #function
 
@@ -587,7 +616,7 @@ end #function
 Customized training function to update parameters of infoMax variational
 autoencoder given a loss function of the form
 
-loss_infoMax = argmin -⟨log P(x|z)⟩ + β Dₖₗ(qₓ(z) || P(z)) - 
+loss_infoMax = argmin -⟨log π(x|z)⟩ + β Dₖₗ(qᵩ(z) || π(z)) - 
                α [⟨g(x, z)⟩ - ⟨exp(g(x, z) - 1)⟩].
 
 infoMaxVAE simultaneously optimize two neural networks: the traditional
@@ -612,10 +641,29 @@ the mutual information between input and latent variables.
 ## Optional arguments
 - `loss_kwargs::NamedTuple`: Tuple containing arguments for the loss function.
     For `InfoMaxVAEs.loss`, for example, we have
-    - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+    - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
     - `α::Float32=1`: Annealing inverse temperature for the mutual information
       term.
+
+# Description
+Performs one step of gradient descent on the InfoMaxVAE loss function, which
+trains the VAE and MLP portions jointly.
+
+The VAE parameters are updated to minimize the InfoMaxVAE loss. The MLP
+parameters are updated to maximize the estimated mutual information.
+
+Allows customization of loss hyperparameters during training.
+
+# Examples
+```julia
+opt_vae = Flux.ADAM(1e-3)
+opt_mlp = Flux.ADAM(1e-3)
+
+for x in dataloader
+train!(infomaxvae, x, x_true, opt_vae, opt_mlp, α=100.0)
+end
+```
 """
 function train!(
     infomaxvae::InfoMaxVAE,
@@ -661,7 +709,7 @@ end # function
 Customized training function to update parameters of infoMax variational
 autoencoder given a loss function of the form
 
-loss_infoMax = argmin -⟨log P(x|z)⟩ + β Dₖₗ(qₓ(z) || P(z)) - 
+loss_infoMax = argmin -⟨log π(x|z)⟩ + β Dₖₗ(qᵩ(z) || π(z)) - 
                α [⟨g(x, z)⟩ - ⟨exp(g(x, z) - 1)⟩].
 
 infoMaxVAE simultaneously optimize two neural networks: the traditional
@@ -679,23 +727,44 @@ the mutual information between input and latent variables.
   VAE, for exmaple.
 - `x_shuffle::AbstractVector{Float32}`: Shuffled input to the neural network
   needed to compute the mutual information term. This term is used to obtain an
-  encoding `z_shuffle` that represents a random sample from the marginal P(z).
+  encoding `z_shuffle` that represents a random sample from the marginal π(z).
 - `vae_opt::Flux.Optimise.AbstractOptimiser`: Optimizing algorithm to be used to
   update the variational autoencoder parameters. This should be fed already with
-  the corresponding parameters. For example, one could feed: 
-  ⋅ Flux.AMSGrad(η)
+  the corresponding parameters. For example, one could feed: ⋅ Flux.AMSGrad(η)
 - `mlp_opt::Flux.Optimise.AbstractOptimiser`: Optimizing algorithm to be used to
   update the multi-layered perceptron parameters. This should be fed already
-  with the corresponding parameters. For example, one could feed: 
-  ⋅ Flux.AMSGrad(η)
+  with the corresponding parameters. For example, one could feed: ⋅
+  Flux.AMSGrad(η)
 
 ## Optional arguments
 - `loss_kwargs::NamedTuple`: Tuple containing arguments for the loss function.
     For `InfoMaxVAEs.loss`, for example, we have
-    - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+    - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
     - `α::Float32=1`: Annealing inverse temperature for the mutual information
       term.
+
+# Description
+Performs one step of gradient descent on the InfoMaxVAE loss function, which
+trains the VAE and MLP portions jointly.
+
+The VAE parameters are updated to minimize the InfoMaxVAE loss. The MLP
+parameters are updated to maximize the estimated mutual information.
+
+Allows customization of loss hyperparameters during training. The main
+difference with the method that only takes `x` as input is that the comparison
+at the output layer does not need to necessarily match that of the input. Useful
+for data augmentation training schemes.
+
+# Examples
+```julia
+opt_vae = Flux.ADAM(1e-3)
+opt_mlp = Flux.ADAM(1e-3)
+
+for x in dataloader
+  train!(infomaxvae, x, opt_vae, opt_mlp, α=100.0)
+end
+```
 """
 function train!(
     infomaxvae::InfoMaxVAE,
