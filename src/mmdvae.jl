@@ -22,19 +22,36 @@ using ..VAEs: VAE
 @doc raw"""
     `gaussian_kernel(x, y)`
 Function to compute the Gaussian Kernel between two vectors `x` and `y`, defined
-as
-    k(x, y) = exp(-||x - y ||² / ρ²)
+as k(x, y) = exp(-||x - y ||² / ρ²)
 
 # Arguments
-- `x::AbstractVecOrMat{Float32}`: First array in kernel
-- `y::AbstractVecOrMat{Float32}`: Second array in kernel
+- `x::AbstractVecOrMat{Float32}`: First input array for the kernel.
+- `y::AbstractVecOrMat{Float32}`: Second input array for the kernel.  
 
-## Optional Arguments
-- `ρ::Float32=1.0f0`: Kernel amplitude hyperparameter.
-- `dims::Int=2`: 
+# Keyword Arguments
+- `ρ::Float32=1.0f0`: Kernel amplitude hyperparameter. Larger ρ gives a smoother
+  kernel.
+- `dims::Int=2`: Number of dimensions to compute pairwise distances over.
 
 # Returns
+- `k::AbstractMatrix{Float32}`: Kernel matrix where 
+
+```math
 k(x, y) = exp(-||x - y ||² / ρ²)
+```
+
+# Theory
+The Gaussian kernel measures the similarity between two points `x` and `y`. It
+is widely used in many machine learning algorithms. This implementation computes
+the squared Euclidean distance between all pairs of rows in `x` and `y`, scales
+the distance by ρ² and takes the exponential.
+
+# Examples
+```julia
+x = rand(10, 2) 
+y = rand(20, 2)
+K = gaussian_kernel(x, y) # 10x20 kernel matrix
+```
 """
 function gaussian_kernel(
     x::AbstractVecOrMat{Float32},
@@ -51,23 +68,38 @@ function gaussian_kernel(
 end # function
 
 @doc raw"""
-    `mmd_div(x, y)`
-Function to compute the MMD divergence between two vectors `x` and `y`, defined
-as D(x, y) = k(x, x) - 2 k(x, y) + k(y, y), where k(⋅, ⋅) is any positive
-    definite kernel.
+mmd_div(x, y; kernel=gaussian_kernel, kernel_kwargs...)
 
-# Arguments
-- `x::AbstractVecOrMat{Float32}`: First array in kernel
-- `y::AbstractVecOrMat{Float32}`: Second array in kernel
+Compute maximum mean discrepancy (MMD) divergence between `x` and `y`.
 
-## Optional argument
-- `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
-  Default is the Gaussian Kernel.
-- `kernel_kwargs::NamedTuple`: Tuple containing arguments for the Kernel
-  function.
+# Arguments  
+- `x::AbstractVecOrMat{Float32}`: First input array.
+- `y::AbstractVecOrMat{Float32}`: Second input array.
+
+# Keyword Arguments
+- `kernel=gaussian_kernel`: Kernel function to use. Default is Gaussian kernel.
+- `kernel_kwargs`: Arguments for the kernel function.
 
 # Returns
-- `MMD-Divergence::Float32`
+- `mmd::Float32`: MMD divergence value. 
+
+# Theory
+MMD measures the difference between two distributions based on embeddings in a
+reproducing kernel Hilbert space (RKHS). It is widely used for two-sample tests.
+
+This implements MMD as:
+
+MMD(x, y) = mean(k(x, x)) - 2 * mean(k(x, y)) + mean(k(y, y))
+
+where k is a positive definite kernel (eg. Gaussian).
+
+# Examples
+```julia
+x = randn(100, 2)
+y = randn(100, 2) .+ [2.0, 2.0] 
+
+mmd = mmd_div(x, y) # MMD between x and y
+```
 """
 function mmd_div(
     x::AbstractVecOrMat{Float32},
@@ -83,8 +115,9 @@ end # function
 
 @doc raw"""
     `logP_mmd_ratio(vae, x; σ, n_latent_samples)`
-Function to compute the ratio between the log probability ⟨log P(x|z)⟩ and the
-MMD divergence MMD-D(qᵩ(z|x)||P(z)).
+
+Function to compute the ratio between the log probability ⟨log π(x|z)⟩ and the
+MMD divergence MMD-D(qᵩ(z|x)||π(z)).
 
 NOTE: This function is useful to define the value of the hyperparameter λ for
 the MMD-VAE (InfoVAE) training.
@@ -94,9 +127,9 @@ the MMD-VAE (InfoVAE) training.
 - `x::AbstractVecOrMat{Float32}`: Data to train the infoVAE.
 
 ## Optional Arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `n_latent_samples::Int`: Number of samples to take from the latent space prior
-  P(z) when computing the MMD divergence.
+  π(z) when computing the MMD divergence.
 - `reconstruct::Function`: Function that reconstructs the input x̂ by passing it
   through the autoencoder.
 - `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
@@ -105,7 +138,24 @@ the MMD-VAE (InfoVAE) training.
   function.
 
 # Returns
-abs(⟨log P(x|z)⟩ / MMD-D(qᵩ(z|x)||P(z)))
+abs(⟨log π(x|z)⟩ / MMD-D(qᵩ(z|x)||π(z)))
+
+# Description
+This function calculates:
+
+1. Reconstruction log-likelihood ⟨log π(x|z)⟩ of x under the VAE decoder.
+2. MMD divergence between the encoder distribution q(z|x) and prior π(z). 
+
+The absolute ratio of these two quantities is returned.
+
+This ratio is useful for setting the Lagrangian multiplier λ in training
+MMD-VAEs aka InfoVAEs.
+
+# Examples
+```julia
+ratio = logP_mmd_ratio(vae, imgs)
+λ = ratio / ndim
+```
 """
 function logP_mmd_ratio(
     vae::VAE,
@@ -118,11 +168,11 @@ function logP_mmd_ratio(
     # Run input through reconstruct function
     µ, logσ, _, x̂ = vae(x, latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -length(x) * (log(σ) + log(2π) / 2) -
                1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
-    # Compute MMD divergence between prior dist samples P(z) ~ Normal(0, 1)
+    # Compute MMD divergence between prior dist samples π(z) ~ Normal(0, 1)
     # and sampled latent variables qᵩ(z|x) ~ Normal(µ, exp(2logσ)⋅I)
     mmd_q_p = mmd_div(
         # Sample latent variables from decoder qᵩ(z|x) ~ Normal(µ,
@@ -130,7 +180,7 @@ function logP_mmd_ratio(
         µ .+ (Random.rand(
             Distributions.Normal{Float32}(0.0f0, 1.0f0), size(µ)...
         ).*exp.(logσ))[:, :],
-        # Sample latent variables from prior P(z) ~ Normal(0, 1)
+        # Sample latent variables from prior π(z) ~ Normal(0, 1)
         Random.rand(
             Distributions.Normal{Float32}(0.0f0, 1.0f0),
             size(µ, 1)...,
@@ -141,7 +191,7 @@ function logP_mmd_ratio(
     )
 
     # Return ratio of quantities
-    return abs(logP_x_z / mmd_q_p)
+    return abs(logπ_x_z / mmd_q_p)
 end # function
 
 @doc raw"""
@@ -150,31 +200,31 @@ end # function
 Loss function for the Maximum-Mean Discrepancy variational autoencoder. The loss
 function is defined as
 
-loss = argmin -⟨⟨log P(x|z)⟩⟩ + (1 - α) ⟨Dₖₗ(qᵩ(z | x) || P(z))⟩ + 
-              (λ + α - 1) Dₖₗ(qᵩ(z) || P(z)),
+loss = argmin -⟨⟨log π(x|z)⟩⟩ + (1 - α) ⟨Dₖₗ(qᵩ(z | x) || π(z))⟩ + 
+              (λ + α - 1) Dₖₗ(qᵩ(z) || π(z)),
 
 where the minimization is taken over the functions f̲, g̲, and h̲̲. f̲(z)
-encodes the function that defines the mean ⟨x|z⟩ of the decoder P(x|z), i.e.,
+encodes the function that defines the mean ⟨x|z⟩ of the decoder π(x|z), i.e.,
 
-    P(x|z) = Normal(f̲(x), σI̲̲).
+    π(x|z) = Normal(f̲(x), σI̲̲).
 
 g̲ and h̲̲ define the mean and covariance of the approximate decoder qᵩ(z|x),
 respectively, i.e.,
 
-    P(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
+    π(z|x) ≈ qᵩ(z|x) = Normal(g̲(x), h̲̲(x)).
 
 # Arguments
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 - `x::AbstractVecOrMat{Float32}`: Input to the neural network.
 
 ## Optional arguments
-- `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+- `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
 - `λ::Float32=1`: Hyperparameter that emphasizes how relevant the KL dirvergence
-  between qᵩ(z) and P(z) should be during training.
+  between qᵩ(z) and π(z) should be during training.
 - `α::Float32=1`: Hyperparameter that emphasizes how relevant the Mutual
   Information term should be during optimization.
 - `n_latent_samples::Int`: Number of samples to take from the latent space prior
-  P(z) when computing the MMD divergence.
+  π(z) when computing the MMD divergence.
 - `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
   Default is the Gaussian Kernel.
 - `kernel_kwargs::NamedTuple`: Tuple containing arguments for the Kernel
@@ -200,18 +250,18 @@ function loss(
     # Run input through reconstruct function
     µ, logσ, _, x̂ = vae(x, latent=true)
 
-    # Compute ⟨log P(x|z)⟩ for a Gaussian decoder
-    logP_x_z = -length(x) * (log(σ) + log(2π) / 2) -
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
+    logπ_x_z = -length(x) * (log(σ) + log(2π) / 2) -
                1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
 
-    # Compute MMD divergence between prior dist samples P(z) ~ Normal(0, 1)
+    # Compute MMD divergence between prior dist samples π(z) ~ Normal(0, 1)
     # and sampled latent variables qᵩ(z|x) ~ Normal(µ, exp(2logσ)⋅I)
     mmd_q_p = mmd_div(
         # Sample the decoder qᵩ(z | x) ~ Normal(µ, exp(2logσ)⋅I)
         µ .+ (Random.rand(
             Distributions.Normal{Float32}(0.0f0, 1.0f0), size(µ)...
         ).*exp.(logσ))[:, :],
-        # Sample the prior probability P(z) ~ Normal(0, 1)
+        # Sample the prior probability π(z) ~ Normal(0, 1)
         Random.rand(
             Distributions.Normal{Float32}(0.0f0, 1.0f0),
             size(µ, 1),
@@ -222,11 +272,11 @@ function loss(
     )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
-    # and latent prior distribution P(z)
-    kl_qₓ_p = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # and latent prior distribution π(z)
+    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
     # Compute loss function
-    return -logP_x_z + (1 - α) * kl_qₓ_p + (λ + α - 1) * mmd_q_p
+    return -logπ_x_z + (1 - α) * kl_qᵩ_π + (λ + α - 1) * mmd_q_p
 end # function
 
 @doc raw"""
@@ -250,8 +300,22 @@ given a loss function.
 ## Optional arguments
 - `loss_kwargs::Union{NamedTuple,Dict}`: Tuple containing arguments for the loss
     function. For `loss`, for example, we have
-    - `σ::Float32=1`: Standard deviation of the probabilistic decoder P(x|z).
+    - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+
+# Description
+1. Compute gradient of loss function w.r.t VAE parameters
+2. Update VAE parameters using the optimizer and gradients
+
+Allows full customization of loss function during training.
+
+# Examples
+```julia
+opt = Flux.setup(Optax.adam(1e-3), vae) 
+for x in dataloader
+    train!(vae, x, opt, λ=10.0) 
+end
+```
 """
 function train!(
     vae::VAE,
