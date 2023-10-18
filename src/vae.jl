@@ -334,7 +334,7 @@ function loss(
 end #function
 
 @doc raw"""
-    `kl_div(x, vae)`
+    `kl_div(vae, x)`
 
 Function to compute the KL divergence between the approximate encoder qᵩ(z) and
 the latent variable prior distribution π(z). Since we assume
@@ -344,13 +344,13 @@ and
 the KL divergence has a closed form
 
 # Arguments
-- `x::AbstractVector{Float32}`: Input to the neural network.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.        
+- `x::AbstractVector{Float32}`: Input to the neural network.
 
 # Returns
 Dₖₗ(qᵩ(z)||π(z))
 """
-function kl_div(x::AbstractVector{Float32}, vae::VAE)
+function kl_div(vae::VAE, x::AbstractVector{Float32})
     # Map input to mean and log standard deviation of latent variables
     µ = Flux.Chain(vae.encoder..., vae.µ)(x)
     logσ = Flux.Chain(vae.encoder..., vae.logσ)(x)
