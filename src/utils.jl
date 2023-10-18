@@ -1,3 +1,9 @@
+# Import library to find nearest neighbors
+import NearestNeighbors
+
+# Import library for random sampling
+import StatsBase
+
 @doc raw"""
     `step_scheduler(epoch, epoch_change, learning_rates)`
 
@@ -78,4 +84,72 @@ function cycle_anneal(
     else
         return convert(T, βmax)
     end # if
+end # function
+
+@doc raw"""
+`locality_sampler(dist, n_primary, n_secondary, k_neighbors)`
+
+Algorithm to generate mini-batches based on a distance metric `dist`.
+
+# Arguments
+- `dist_tree::NearestNeighbors.NNTree`: `NearestNeighbors.jl` tree determining
+  the distance between data elements.
+- `n_primary:Int`: Number of primary points to sample.
+- `n_secondary:Int`: Number of secondary points to sample.
+- `k_neighbors:Int`: Number of nearest neighbors from which to take the
+  secondary sample.
+
+# Returns
+- `sample_idx::Vector{Int64}`: List of data index to include in mini-batch.
+
+# Description
+The algorithm proceeds in 3 steps:
+
+1. For each datapoint calculate the `k_neighbors` nearest neighbors under the
+metric d. 
+2. Sample `n_primary` primary sampling units with uniform probability without
+replacement among all `N` units. 
+3. For each of the primary sampling units sample `n_secondary` secondary
+sampling units among the primary sampling units `k_neighbors` nearest neighbors
+with uniform probability without replacement.
+
+# Citation
+> Skafte, N., Jø rgensen, M. & Hauberg, S. ren. Reliable training and estimation
+> of variance networks. in Advances in Neural Information Processing Systems
+> vol. 32 (Curran Associates, Inc., 2019).
+"""
+function locality_sampler(
+    data::Matrix{<:Float32},
+    dist_tree::NearestNeighbors.NNTree,
+    n_primary::Int,
+    n_secondary::Int,
+    k_neighbors::Int
+)
+    # Check that n_secondary ≤ k_neighbors
+    if !(n_secondary ≤ k_neighbors)
+        # Report error
+        error("n_secondary must be ≤ k_neighbors")
+    end # if
+
+    # Sample n_primary primary sampling units with uniform probability without
+    # replacement among all N units
+    idx_primary = StatsBase.sample(1:size(data, 2), n_primary, replace=false)
+
+    # Extract primary sample
+    sample_primary = @view data[:, idx_primary]
+
+    # Compute k_nearest neighbors for each of the points
+    k_idxs, dists = NearestNeighbors.knn(
+        dist_tree, sample_primary, k_neighbors, true
+    )
+
+    # For each of the primary sampling units sample n_secondary secondary
+    # sampling units among the primary sampling units k_neighbors nearest
+    # neighbors with uniform probability without replacement.
+    idx_secondary = vcat([
+        StatsBase.sample(p, n_secondary, replace=false) for p in k_idxs
+    ]...)
+
+    # Return minibatch data
+    return @view data[:, [idx_primary; idx_secondary]]
 end # function
