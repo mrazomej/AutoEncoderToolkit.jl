@@ -233,8 +233,8 @@ Loss function for the variational autoencoder. The loss function is defined as
 
 loss = argmin -⟨log π(x|z)⟩ + β Dₖₗ(qᵩ(z | x) || π(z)),
 
-where the minimization is taken over the functions f̲, g̲, and h̲̲. f̲(z) encodes the
-function that defines the mean ⟨x|z⟩ of the decoder π(x|z), i.e.,
+where the minimization is taken over the functions f̲, g̲, and h̲̲. f̲(z)
+encodes the function that defines the mean ⟨x|z⟩ of the decoder π(x|z), i.e.,
 
     π(x|z) = Normal(f̲(x), σI).
 
@@ -245,7 +245,9 @@ respectively, i.e.,
 
 # Arguments
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
-- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
+- `x::AbstractVector{Float32}`: Input to the neural network. NOTE: This only
+  takes a vector as input. If a batch or the entire data is to be evaluated, use
+  something like `sum(loss.(Ref(vae), eachcol(x)))`.
 
 ## Optional arguments
 - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
@@ -257,7 +259,7 @@ compared with reconstructed output `x̂`.
 """
 function loss(
     vae::VAE,
-    x::AbstractVecOrMat{Float32};
+    x::AbstractVector{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0
 )
@@ -298,9 +300,11 @@ which to compare the input values that is not necessarily the same as the input
 value.
 
 # Arguments
-- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
-- `x_true::AbstractVecOrMat{Float32}`: True input against which to compare
-  autoencoder reconstruction.
+- `x::AbstractVector{Float32}`: Input to the neural network.
+- `x_true::AbstractVector{Float32}`: True input against which to compare
+  autoencoder reconstruction. NOTE: This only takes a vector as input. If a
+  batch or the entire data is to be evaluated, use something like
+  `sum(loss.(Ref(vae), eachcol(x)), eachcol(x_true))`.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 
 ## Optional arguments
@@ -313,8 +317,8 @@ compared with reconstructed output `x̂`.
 """
 function loss(
     vae::VAE,
-    x::AbstractVecOrMat{Float32},
-    x_true::AbstractVecOrMat{Float32};
+    x::AbstractVector{Float32},
+    x_true::AbstractVector{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0
 )
@@ -367,7 +371,7 @@ individually.
 
 # Arguments
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
-- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
+- `x::AbstractVector{Float32}`: Input to the neural network.
 
 ## Optional arguments
 - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
@@ -379,7 +383,7 @@ compared with reconstructed output `x̂`.
 """
 function loss_terms(
     vae::VAE,
-    x::AbstractVecOrMat{Float32};
+    x::AbstractVector{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0
 )
@@ -405,8 +409,8 @@ same computations as the `loss` function, but simply returns each term
 individually.
 
 # Arguments
-- `x::AbstractVecOrMat{Float32}`: Input to the neural network.
-- `x_true::AbstractVecOrMat{Float32}`: True input against which to compare
+- `x::AbstractVector{Float32}`: Input to the neural network.
+- `x_true::AbstractVector{Float32}`: True input against which to compare
   autoencoder reconstruction.
 - `vae::VAE`: Struct containint the elements of the variational autoencoder.
 
@@ -420,8 +424,8 @@ compared with reconstructed output `x̂`.
 """
 function loss_terms(
     vae::VAE,
-    x::AbstractVecOrMat{Float32},
-    x_true::AbstractVecOrMat{Float32};
+    x::AbstractVector{Float32},
+    x_true::AbstractVector{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0
 )
@@ -467,6 +471,10 @@ given a loss function.
     function. For `loss`, for example, we have
     - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+- `average::Bool`: Boolean variable indicating if the gradient should be
+  computed for all elements in `x`, averaged and then update the parameters once
+  (`average=true`) or compute the gradient for each element in `x` and update
+  the parameter every time. Default is true.
 
 # Description
 1. Compute the gradient of the loss w.r.t the VAE parameters
@@ -487,23 +495,53 @@ function train!(
     vae::VAE,
     x::AbstractVecOrMat{Float32},
     opt::NamedTuple;
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,),
+    average::Bool=true
 )
-    # Compute gradient
-    ∇loss_ = Flux.gradient(vae) do vae
-        loss(vae, x; loss_kwargs...)
-    end # do
+    if typeof(x) <: Vector{Float32}
+        # Compute gradient
+        ∇loss_ = Flux.gradient(vae) do vae_model
+            loss(vae_model, x; loss_kwargs...)
+        end # do
 
-    # Update the network parameters averaging gradient from all datasets
-    Flux.Optimisers.update!(
-        opt,
-        vae,
-        ∇loss_[1]
-    )
+        # Update the network parameters averaging gradient from all datasets
+        Flux.Optimisers.update!(
+            opt,
+            vae,
+            ∇loss_[1]
+        )
+        # Check if average should be computed
+    elseif (average) & (typeof(x) <: Matrix{Float32})
+        # Compute gradient
+        ∇loss_ = Flux.gradient(vae) do vae_model
+            sum(loss.(Ref(vae_model), eachcol(x); loss_kwargs...)) ./ size(x, 2)
+        end # do
+
+        # Update the network parameters averaging gradient from all datasets
+        Flux.Optimisers.update!(
+            opt,
+            vae,
+            ∇loss_[1]
+        )
+    else
+        # Loop through the rest of elements
+        for d in eachcol(x)
+            # Update gradient
+            ∇loss_ = Flux.gradient(vae) do vae_model
+                loss(vae_model, d; loss_kwargs...)
+            end # do
+            # Update the network parameters averaging gradient from all datasets
+            Flux.Optimisers.update!(
+                opt,
+                vae,
+                ∇loss_[1]
+            )
+        end # for
+    end # if
 end # function
 
 @doc raw"""
-    `train!(vae, x, opt; kwargs...)`
+    `train!(vae, x, x_true, opt; kwargs...)`
 
 Customized training function to update parameters of variational autoencoder
 given a loss function.
@@ -528,6 +566,10 @@ given a loss function.
     function. For `loss`, for example, we have
     - `σ::Float32=1`: Standard deviation of the probabilistic decoder π(x|z).
     - `β::Float32=1`: Annealing inverse temperature for the KL-divergence term.
+- `average::Bool`: Boolean variable indicating if the gradient should be
+    computed for all elements in `x`, averaged and then update the parameters
+    once (`average=true`) or compute the gradient for each element in `x` and
+    update the parameter every time. Default is `true`.
 
 # Description
 1. Compute the gradient of the loss w.r.t the VAE parameters
@@ -552,17 +594,49 @@ function train!(
     x::AbstractVecOrMat{Float32},
     x_true::AbstractVecOrMat{Float32},
     opt::NamedTuple;
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,),
+    average::Bool=true
 )
-    # Compute gradient
-    ∇loss_ = Flux.gradient(vae) do vae
-        loss(vae, x, x_true; loss_kwargs...)
-    end # do
+    if typeof(x) <: Vector{Float32}
+        # Compute gradient
+        ∇loss_ = Flux.gradient(vae) do vae_model
+            loss(vae_model, x, x_true; loss_kwargs...)
+        end # do
 
-    # Update the network parameters averaging gradient from all datasets
-    Flux.Optimisers.update!(
-        opt,
-        vae,
-        ∇loss_[1]
-    )
+        # Update the network parameters
+        Flux.Optimisers.update!(
+            opt,
+            vae,
+            ∇loss_[1]
+        )
+        # Check if average should be computed
+    elseif (average) & (typeof(x) <: Matrix{Float32})
+        # Compute gradient
+        ∇loss_ = Flux.gradient(vae) do vae_model
+            sum(
+                loss.(Ref(vae_model), eachcol(x), eachcol(x_true); loss_kwargs...)
+            ) ./ size(x, 2)
+        end # do
+
+        # Update the network parameters averaging gradient from all datasets
+        Flux.Optimisers.update!(
+            opt,
+            vae,
+            ∇loss_[1]
+        )
+    else
+        # Loop through the elements
+        for i in axes(x, 2)
+            # Compute gradient
+            ∇loss_ = Flux.gradient(vae) do vae_model
+                loss(vae_model, x[:, i], x_true[:, i]; loss_kwargs...)
+            end # do
+            # Update the network parameters
+            Flux.Optimisers.update!(
+                opt,
+                vae,
+                ∇loss_[1]
+            )
+        end # for
+    end # if
 end # function
