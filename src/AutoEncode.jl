@@ -20,6 +20,18 @@ abstract type AbstractDeterministicAutoEncoder <: AbstractAutoEncoder end
 # Define abstract type that captures stochastic autoencoders
 abstract type AbstractVariationalAutoEncoder <: AbstractAutoEncoder end
 
+# Define main abstract enconder
+abstract type AbstractEncoder end
+
+# Define abstract type that captures sthocastic enconders
+abstract type AbstractVariationalEncoder end
+
+# Define main abstract decoder
+abstract type AbstractDecoder end
+
+# Define abstract type that captures sthocastic decoders
+abstract type AbstractVariationalDecoder end
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Add AEs module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
