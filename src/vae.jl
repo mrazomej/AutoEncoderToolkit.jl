@@ -23,29 +23,6 @@ using ..AutoEncode: AbstractAutoEncoder, AbstractVariationalAutoEncoder,
 #    http://arxiv.org/abs/1312.6114 (2014).
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-@doc raw"""
-`struct VAE`
-
-Variational autoencoder (VAE) model defined for `Flux.jl`
-
-# Fields
-- `Encoder`: Neural network that encodes the input into the latent space.
-- `Decoder`: Neural network that decodes the latent representation back to the
-  original input space.
-
-A VAE consists of an encoder and decoder network with a bottleneck latent space
-in between. The encoder compresses the input into a low-dimensional
-probabilistic representation q(z|x). The decoder tries to reconstruct the
-original input from a sampled point in the latent space p(x|z). 
-"""
-mutable struct VAE <: AbstractVariationalAutoEncoder
-    encoder::AbstractVariationalEncoder
-    decoder::AbstractVariationalDecoder
-end # struct
-
-# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor VAE
-
 # ==============================================================================
 
 @doc raw"""
@@ -188,7 +165,7 @@ mu, logσ = je(some_input)
 Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
-function (encoder::JointEncoder)(x::Array{Float32})
+function (encoder::JointEncoder)(x::AbstractVecOrMat{Float32})
     # Run input to encoder network
     h = encoder.encoder(x)
     # Map from last encoder layer to latent space mean
@@ -214,7 +191,7 @@ models) while keeping the gradient flow intact.
 - `µ::Array{Float32}`: The mean of the latent space.
 - `logσ::Array{Float32}`: The log standard deviation of the latent space.
 
-# Keyword Arguments
+# Optional Keyword Arguments
 - `prior::Distributions.Sampleable`: The prior distribution for the latent
   space. By default, this is a standard normal distribution
   (`Distributions.Normal{Float32}(0.0f0, 1.0f0)`). The function supports both
@@ -370,9 +347,9 @@ function SimpleDecoder(
     )
 
     # Check if there are multiple middle layers
-    if length(decoder) > 1
+    if length(decoder_neurons) > 1
         # Loop through middle layers
-        for i = 2:length(decoder)
+        for i = 2:length(decoder_neurons)
             # Set middle layers of decoder
             decoder[i] = Flux.Dense(
                 decoder_neurons[i-1] => decoder_neurons[i],
@@ -582,7 +559,7 @@ z = ... # some latent space representation
 Ensure that the latent space representation z matches the expected input
 dimensionality for the JointDecoder.
 """
-function (decoder::JointDecoder)(z::Array{Float32})
+function (decoder::JointDecoder)(z::AbstractVecOrMat{Float32})
     # Run input through the primary decoder network
     h = decoder.decoder(z)
     # Map to mean
@@ -779,12 +756,88 @@ z = ... # some latent space representation
 Ensure that the latent space representation z matches the expected input
 dimensionality for both networks in the SplitDecoder.
 """
-function (decoder::SplitDecoder)(z::Array{Float32})
+function (decoder::SplitDecoder)(z::AbstractVecOrMat{Float32})
     # Map through the decoder dedicated to the mean
     µ = decoder.decoder_µ(z)
     # Map through the decoder dedicated to the log standard deviation
     logσ = decoder.decoder_logσ(z)
     return µ, logσ
+end # function
+
+# ==============================================================================
+
+@doc raw"""
+`struct VAE{E<:AbstractVariationalEncoder, D<:AbstractVariationalDecoder}`
+
+Variational autoencoder (VAE) model defined for `Flux.jl`
+
+# Fields
+- `encoder::E`: Neural network that encodes the input into the latent space. `E`
+  is a subtype of `AbstractVariationalEncoder`.
+- `decoder::D`: Neural network that decodes the latent representation back to
+  the original input space. `D` is a subtype of `AbstractVariationalDecoder`.
+
+A VAE consists of an encoder and decoder network with a bottleneck latent space
+in between. The encoder compresses the input into a low-dimensional
+probabilistic representation q(z|x). The decoder tries to reconstruct the
+original input from a sampled point in the latent space p(x|z). 
+"""
+mutable struct VAE{E<:AbstractVariationalEncoder,D<:AbstractVariationalDecoder} <: AbstractVariationalAutoEncoder
+    encoder::E
+    decoder::D
+end # struct
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor VAE
+
+@doc raw"""
+    (vae::VAE{JointEncoder,SimpleDecoder})(x::AbstractVecOrMat{Float32}; 
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0))
+
+Processes the given input data `x` through a VAE that consists of a
+`JointEncoder` and a `SimpleDecoder`.
+
+# Arguments
+- `x::AbstractVecOrMat{Float32}`: Input data to be processed by the VAE. 
+
+# Optional Keyword Arguments
+- `prior::Distributions.Sampleable`: Specifies the prior distribution to be used
+  during the reparametrization trick. Defaults to a standard normal
+  distribution.
+
+# Returns
+- `Array{Float32}`: The reconstructed data after processing through the encoder,
+  performing the reparametrization trick, and passing through the decoder.
+
+# Description
+The function first encodes the input data `x` using the `JointEncoder` to obtain
+the mean and log standard deviation of the latent space representation. It then
+uses the reparametrization trick to sample from this latent distribution, which
+is then decoded using the `SimpleDecoder` to produce the final reconstructed
+data.
+
+# Example
+```julia
+vae_model = VAE{JointEncoder,SimpleDecoder}(...)
+input_data = ... 
+reconstructed_data = vae_model(input_data)
+```
+# Note
+Ensure that the input data x matches the expected input dimensionality for the
+encoder in the VAE.
+"""
+function (vae::VAE{JointEncoder,SimpleDecoder})(
+    x::AbstractVecOrMat{Float32};
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0)
+)
+    # Run input through encoder to obtain mean and log std
+    encoder_µ, encoder_logσ = vae.encoder(x)
+
+    # Run reparametrization trick
+    z_sample = reparameterize(encoder_µ, encoder_logσ; prior)
+
+    # Run latent sample through decoder
+    return vae.decoder(z_sample)
 end # function
 
 # ==============================================================================
