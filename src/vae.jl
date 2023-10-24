@@ -1329,7 +1329,7 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 @doc raw"""
-    `train!(vae, x, opt; kwargs...)`
+    `train!(vae, x, opt; loss_kwargs...)`
 
 Customized training function to update parameters of a variational autoencoder
 given a loss function.
@@ -1345,9 +1345,6 @@ given a loss function.
 # Optional Keyword Arguments
 - `loss_kwargs::Union{NamedTuple,Dict} = Dict(:σ => 1.0f0, :β => 1.0f0,)`:
   Arguments for the loss function.
-- `average::Bool = true`: Determines whether the gradient should be computed and
-  averaged for all samples in `x` before updating parameters or updated after
-  each sample.
 
 # Description
 Trains the VAE by:
@@ -1366,18 +1363,18 @@ function train!(
     vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
     x::AbstractVector{Float32},
     opt::NamedTuple;
-    kwargs...
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
     # Compute VAE gradient
     ∇loss_ = Flux.gradient(vae) do vae_model
-        loss(vae_model, x; kwargs...)
+        loss(vae_model, x; loss_kwargs...)
     end # do block
     # Update parameters
     Flux.Optimisers.update!(opt, vae, ∇loss_[1])
 end # function
 
 @doc raw"""
-    `train!(vae, x, opt; kwargs...)`
+    `train!(vae, x, opt; loss_kwargs...)`
 
 Customized training function to update parameters of a variational autoencoder
 when provided with matrix data.
@@ -1416,23 +1413,23 @@ function train!(
     x::AbstractMatrix{Float32},
     opt::NamedTuple;
     average=true,
-    kwargs...
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
     # Decide on training approach based on 'average'
     if average
         # Compute the averaged gradient across all samples
         ∇loss_ = Flux.gradient(vae) do vae_model
-            StatsBase.mean(loss.(Ref(vae_model), eachcol(x); kwargs...))
+            StatsBase.mean(loss.(Ref(vae_model), eachcol(x); loss_kwargs...))
         end # do block
         # Update parameters using the optimizer
         Flux.Optimisers.update!(opt, vae, ∇loss_[1])
     else
-        foreach(col -> train!(vae, col, opt; kwargs...), eachcol(x))
+        foreach(col -> train!(vae, col, opt; loss_kwargs...), eachcol(x))
     end # if
 end # function
 
 @doc raw"""
-    `train!(vae, x_in, x_out, opt; kwargs...)`
+    `train!(vae, x_in, x_out, opt; loss_kwargs...)`
 
 Customized training function to update parameters of a variational autoencoder
 given a loss function.
@@ -1469,18 +1466,18 @@ function train!(
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32},
     opt::NamedTuple;
-    kwargs...
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
     # Compute VAE gradient
     ∇loss_ = Flux.gradient(vae) do vae_model
-        loss(vae_model, x_in, x_out; kwargs...)
+        loss(vae_model, x_in, x_out; loss_kwargs...)
     end # do block
     # Update parameters
     Flux.Optimisers.update!(opt, vae, ∇loss_[1])
 end # function
 
 @doc raw"""
-    `train!(vae, x_in, x_out, opt; kwargs...)`
+    `train!(vae, x_in, x_out, opt; loss_kwargs...)`
 
 Customized training function to update parameters of a variational autoencoder
 when provided with matrix data.
@@ -1522,14 +1519,19 @@ function train!(
     x_out::AbstractMatrix{Float32},
     opt::NamedTuple;
     average=true,
-    kwargs...
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
 )
     # Decide on training approach based on 'average'
     if average
         # Compute the averaged gradient across all samples
         ∇loss_ = Flux.gradient(vae) do vae_model
             StatsBase.mean(
-                loss.(Ref(vae_model), eachcol(x_in), eachcol(x_out); kwargs...)
+                loss.(
+                    Ref(vae_model),
+                    eachcol(x_in),
+                    eachcol(x_out);
+                    loss_kwargs...
+                )
             )
         end
         # Update parameters using the optimizer
@@ -1537,7 +1539,7 @@ function train!(
     else
         foreach(
             (col_in, col_out) -> train!(
-                vae, col_in, col_out, opt; kwargs...
+                vae, col_in, col_out, opt; loss_kwargs...
             ), zip(eachcol(x_in), eachcol(x_out)
             )
         )
