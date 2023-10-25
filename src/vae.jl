@@ -875,9 +875,10 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 @doc raw"""
-    `loss(vae, x; σ=1.0f0, β=1.0f0)`
+    `loss(vae, x; σ=1.0f0, β=1.0f0, n_samples=1)`
 
-Computes the loss for the variational autoencoder (VAE).
+Computes the loss for the variational autoencoder (VAE) by averaging over
+`n_samples` latent space samples.
 
 The loss function combines the reconstruction loss with the Kullback-Leibler
 (KL) divergence, defined as:
@@ -885,9 +886,9 @@ The loss function combines the reconstruction loss with the Kullback-Leibler
 loss = -⟨π(x|z)⟩ + β × Dₖₗ[qᵩ(z|x) || π(z)]
 
 Where:
-- π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲)) 
-- f(z) is the function defining the mean of the decoder π(x|z) 
-- qᵩ(z|x) is the approximated encoder: qᵩ(z|x) = N(g(x), h(x))
+- π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲)) - f(z) is the
+function defining the mean of the decoder π(x|z) - qᵩ(z|x) is the approximated
+encoder: qᵩ(z|x) = N(g(x), h(x))
 - g(x) and h(x) define the mean and covariance of the encoder respectively.
 
 # Arguments
@@ -900,10 +901,12 @@ Where:
 - `σ::Float32=1.0f0`: Standard deviation for the probabilistic decoder π(x|z).
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
   annealing.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
 
 # Returns
-- `Float32`: The computed loss value for the input `x` and its reconstructed
-  counterpart.
+- `Float32`: The computed average loss value for the input `x` and its
+  reconstructed counterparts over `n_samples` samples.
 
 # Note
 Ensure that the input data `x` matches the expected input dimensionality for the
@@ -913,24 +916,26 @@ function loss(
     vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder},
     x::AbstractVector{Float32};
     σ::Float32=1.0f0,
-    β::Float32=1.0f0
+    β::Float32=1.0f0,
+    n_samples::Int=1
 )
-    # 1. Forward Pass (run input through reconstruct function)
-    µ, logσ, _, x̂ = vae(x; latent=true)
+    # Forward Pass (run input through reconstruct function with n_samples)
+    µ, logσ, z_samples, x̂ = vae(x; latent=true, n_samples=n_samples)
 
-    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder
-    logπ_x_z = -1 / (2 * σ^2) * sum((x .- x̂) .^ 2)
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
+    logπ_x_z = -1 / (2 * σ^2 * n_samples) * sum((x .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
     kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
 
-    # Compute loss function
+    # Compute average loss function
     return -logπ_x_z + β * kl_qᵩ_π
 end # function
 
+
 @doc raw"""
-    `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0)`
+    `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0, n_samples=1)`
 
 Computes the loss for the variational autoencoder (VAE).
 
@@ -958,6 +963,8 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   π(x_out|z).
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
   annealing.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
 
 # Returns
 - `Float32`: The computed loss value between the input `x_out` and its
@@ -972,13 +979,14 @@ function loss(
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32};
     σ::Float32=1.0f0,
-    β::Float32=1.0f0
+    β::Float32=1.0f0,
+    n_samples::Int=1
 )
     # 1. Forward Pass (run input x_in through reconstruct function)
-    µ, logσ, _, x̂ = vae(x_in; latent=true)
+    µ, logσ, _, x̂ = vae(x_in; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder
-    logπ_x_z = -1 / (2 * σ^2) * sum((x_out .- x̂) .^ 2)
+    logπ_x_z = -1 / (2 * σ^2 * n_samples) * sum((x_out .- x̂) .^ 2)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x_in)
     # and latent prior distribution π(z)
@@ -992,10 +1000,11 @@ end # function
 
 @doc raw"""
     loss(vae::VAE{<:AbstractVariationalEncoder,T}, 
-        x::AbstractVector{Float32}; β::Float32=1.0f0)
+        x::AbstractVector{Float32}; β::Float32=1.0f0, n_samples=1)
 
 Calculate the loss for a variational autoencoder (VAE) by combining the
-reconstruction loss and the Kullback-Leibler (KL) divergence.
+reconstruction loss and the Kullback-Leibler (KL) divergence, averaged over
+`n_samples` latent space samples.
 
 The VAE loss is given by: loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)]
 
@@ -1015,9 +1024,12 @@ Where:
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
   balance between reconstruction and regularization.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
 
 # Returns
-- `loss::Float32`: The computed VAE loss value for the given input `x`.
+- `loss::Float32`: The computed average VAE loss value for the given input `x`
+  over `n_samples` samples.
 
 # Notes
 - Ensure that the dimensionality of the input data `x` aligns with the encoder's
@@ -1028,15 +1040,20 @@ expected input in the VAE.
 function loss(
     vae::VAE{<:AbstractVariationalEncoder,T},
     x::AbstractVector{Float32};
-    β::Float32=1.0f0
+    β::Float32=1.0f0,
+    n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
-    # Run input through reconstruct function
-    encoder_µ, encoder_logσ, z, (decoder_µ, decoder_logσ) = vae(x; latent=true)
+    # Run input through reconstruct function with n_samples
+    encoder_µ, encoder_logσ, z_samples, (decoder_µ, decoder_logσ) = vae(
+        x; latent=true, n_samples=n_samples
+    )
 
-    # Compute reconstruction loss for a Gaussian decoder
-    logπ_x_z = -1 / 2.0f0 * length(decoder_µ) * log(2 * π) -
-               1 / 2.0f0 * sum(decoder_logσ) -
-               1 / 2.0f0 * sum((x .- decoder_µ) .^ 2 ./ exp.(2 * decoder_logσ))
+    # Compute average reconstruction loss for a Gaussian decoder over all
+    # samples
+    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
+               1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+               1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
+                                             exp.(2 * decoder_logσ))
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
@@ -1045,14 +1062,14 @@ function loss(
            2.0f0 * encoder_logσ
     )
 
-    # Compute total loss
+    # Compute average total loss
     return -logπ_x_z + β * kl_qᵩ_π
 end # function
 
 @doc raw"""
     loss(vae::VAE{<:AbstractVariationalEncoder,T}, 
          x_in::AbstractVector{Float32}, x_out::AbstractVector{Float32};
-         β::Float32=1.0f0)
+         β::Float32=1.0f0, n_samples=1)
 
 Calculate the loss for a variational autoencoder (VAE) by combining the
 reconstruction loss and the Kullback-Leibler (KL) divergence.
@@ -1083,6 +1100,9 @@ Where:
 # Returns
 - `loss::Float32`: The computed VAE loss value between `x_out` and its
   reconstructed counterpart from `x_in`.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
+
 
 # Notes
 - Ensure that the dimensionality of the input data `x_in` aligns with the
@@ -1094,7 +1114,8 @@ function loss(
     vae::VAE{<:AbstractVariationalEncoder,T},
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32};
-    β::Float32=1.0f0
+    β::Float32=1.0f0,
+    n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input x_in through reconstruct function
     encoder_μ, encoder_logσ, z, (decoder_μ, decoder_logσ) = vae(
@@ -1102,10 +1123,10 @@ function loss(
     )
 
     # Compute reconstruction loss for a Gaussian decoder
-    logπ_x_z = -1 / 2.0f0 * length(decoder_μ) * log(2 * π) -
-               1 / 2.0f0 * sum(decoder_logσ) -
-               1 / 2.0f0 * sum((x_out .- decoder_μ) .^ 2 ./
-                               exp.(2 * decoder_logσ))
+    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
+               1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+               1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
+                                             exp.(2 * decoder_logσ))
 
     # Compute Kullback-Leibler divergence between approximated decoder
     # qᵩ(z|x_in) and latent prior distribution π(z)
