@@ -365,14 +365,17 @@ function SimpleDecoder(
 end # function
 
 @doc raw"""
-    (decoder::SimpleDecoder)(z::AbstractVecOrMat{Float32})
-
+    (decoder::SimpleDecoder)(
+        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    )
 Maps the given latent representation `z` through the `SimpleDecoder` network.
 
 # Arguments
-- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
-  This can be a vector or a matrix where each column represents a separate
-  sample from the latent space of a VAE.
+- `z::Union{AbstractVector{Float32}, AbstractMatrix{Float32}, Array{Float32,
+  3}}`: The latent space representation to be decoded. This can be a vector (1D
+  tensor), a matrix (2D tensor), or a 3D tensor, where each column (or slice, in
+  the case of 3D tensor) represents a separate sample from the latent space of a
+  VAE.
 
 # Returns
 An array representing the output of the decoder, which should resemble the
@@ -394,7 +397,9 @@ output = decoder(z)
 Ensure that the latent space representation z matches the expected input
 dimensionality for the SimpleDecoder.
 """
-function (decoder::SimpleDecoder)(z::AbstractVecOrMat{Float32})
+function (decoder::SimpleDecoder)(
+    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+)
     # Run input to decoder network
     return decoder.decoder(z)
 end # function
@@ -530,15 +535,19 @@ function JointDecoder(
 end
 
 @doc raw"""
-    (decoder::JointDecoder)(z::Array{Float32})
+    (decoder::JointDecoder)(
+        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    )
 
 Maps the given latent representation `z` through the `JointDecoder` network to
 produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Arguments
-- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
-  This can be a vector or a matrix where each column represents a separate
-  sample from the latent space of a VAE.
+- `z::Union{AbstractVector{Float32}, AbstractMatrix{Float32}, Array{Float32,
+  3}}`: The latent space representation to be decoded. This can be a vector (1D
+  tensor), a matrix (2D tensor), or a 3D tensor, where each column (or slice, in
+  the case of 3D tensor) represents a separate sample from the latent space of a
+  VAE.
 
 # Returns
 - `µ::Array{Float32}`: The mean representation obtained from the decoder.
@@ -562,7 +571,9 @@ z = ... # some latent space representation
 Ensure that the latent space representation z matches the expected input
 dimensionality for the JointDecoder.
 """
-function (decoder::JointDecoder)(z::AbstractVecOrMat{Float32})
+function (decoder::JointDecoder)(
+    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+)
     # Run input through the primary decoder network
     h = decoder.decoder(z)
     # Map to mean
@@ -724,16 +735,20 @@ function SplitDecoder(
 end # function
 
 @doc raw"""
-    (decoder::SplitDecoder)(z::Array{Float32})
+    (decoder::SplitDecoder)(
+        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    )
 
 Maps the given latent representation `z` through the separate networks of the
 `SplitDecoder` to produce both the mean (`µ`) and log standard deviation
 (`logσ`).
 
 # Arguments
-- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
-  This can be a vector or a matrix where each column represents a separate
-  sample from the latent space of a VAE.
+- `z::Union{AbstractVector{Float32}, AbstractMatrix{Float32}, Array{Float32,
+  3}}`: The latent space representation to be decoded. This can be a vector (1D
+  tensor), a matrix (2D tensor), or a 3D tensor, where each column (or slice, in
+  the case of 3D tensor) represents a separate sample from the latent space of a
+  VAE.
 
 # Returns
 - `µ::Array{Float32}`: The mean representation obtained using the dedicated
@@ -758,7 +773,9 @@ z = ... # some latent space representation
 Ensure that the latent space representation z matches the expected input
 dimensionality for both networks in the SplitDecoder.
 """
-function (decoder::SplitDecoder)(z::AbstractVecOrMat{Float32})
+function (decoder::SplitDecoder)(
+    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+)
     # Map through the decoder dedicated to the mean
     µ = decoder.µ(z)
     # Map through the decoder dedicated to the log standard deviation
