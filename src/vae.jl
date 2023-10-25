@@ -365,13 +365,14 @@ function SimpleDecoder(
 end # function
 
 @doc raw"""
-    (decoder::SimpleDecoder)(z::Array{Float32})
+    (decoder::SimpleDecoder)(z::AbstractVecOrMat{Float32})
 
 Maps the given latent representation `z` through the `SimpleDecoder` network.
 
 # Arguments
-- `z::Array{Float32}`: The latent space representation to be decoded. Typically,
-  this is a point or sample from the latent space of a VAE.
+- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
+  This can be a vector or a matrix where each column represents a separate
+  sample from the latent space of a VAE.
 
 # Returns
 An array representing the output of the decoder, which should resemble the
@@ -388,12 +389,12 @@ decoder = SimpleDecoder(...)
 z = ... # some latent space representation
 output = decoder(z)
 ```
-
 # Note
+
 Ensure that the latent space representation z matches the expected input
-dimensionality for the SimpleDecoder
+dimensionality for the SimpleDecoder.
 """
-function (decoder::SimpleDecoder)(z::Array{Float32})
+function (decoder::SimpleDecoder)(z::AbstractVecOrMat{Float32})
     # Run input to decoder network
     return decoder.decoder(z)
 end # function
@@ -535,8 +536,9 @@ Maps the given latent representation `z` through the `JointDecoder` network to
 produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Arguments
-- `z::Array{Float32}`: The latent space representation to be decoded. Typically,
-  this is a point or sample from the latent space of a VAE.
+- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
+  This can be a vector or a matrix where each column represents a separate
+  sample from the latent space of a VAE.
 
 # Returns
 - `µ::Array{Float32}`: The mean representation obtained from the decoder.
@@ -729,8 +731,9 @@ Maps the given latent representation `z` through the separate networks of the
 (`logσ`).
 
 # Arguments
-- `z::Array{Float32}`: The latent space representation to be decoded. Typically,
-  this is a point or sample from the latent space of a VAE.
+- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
+  This can be a vector or a matrix where each column represents a separate
+  sample from the latent space of a VAE.
 
 # Returns
 - `µ::Array{Float32}`: The mean representation obtained using the dedicated
@@ -798,7 +801,9 @@ Processes the given input data `x` through a VAE that consists of a
 `JointEncoder` and a `SimpleDecoder`.
 
 # Arguments
-- `x::AbstractVecOrMat{Float32}`: Input data to be processed by the VAE. 
+- `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
+  or a matrix where each column represents a separate sample from the data
+  space.
 
 # Optional Keyword Arguments
 - `prior::Distributions.Sampleable`: Specifies the prior distribution to be used
@@ -807,12 +812,19 @@ Processes the given input data `x` through a VAE that consists of a
 - `latent::Bool`: If set to `true`, returns the latent variables (mean, log
   standard deviation, and the sampled latent representation) alongside the
   reconstructed data. Defaults to `false`.
+- `n_samples::Int=1`: The number of samples to draw using the reparametrization
+  trick.
 
 # Returns
-- `Array{Float32}`: The reconstructed data after processing through the encoder,
-  performing the reparametrization trick, and passing through the decoder. If
-  `latent=true`, also returns a tuple with the mean, log standard deviation,
-  sampled latent representation, and the reconstructed data.
+- If `latent=false`: `Array{Float32}`, the reconstructed data after processing
+  through the encoder, performing the reparametrization trick, and passing
+  through the decoder. The last dimension of the array will be of size
+  `n_samples`, containing multiple reconstructions based on the number of
+  samples from the latent space.
+- If `latent=true`: A tuple containing the mean, log standard deviation, an
+  array of `n_samples` sampled latent representations, and the reconstructed
+  data. The last dimension of the reconstructed data in the tuple will be of
+  size `n_samples`.
 
 # Description
 The function first encodes the input data `x` using the `JointEncoder` to obtain
@@ -827,6 +839,7 @@ vae_model = VAE{JointEncoder,SimpleDecoder}(...)
 input_data = ... 
 reconstructed_data = vae_model(input_data; latent=true)
 ```
+
 # Note
 Ensure that the input data x matches the expected input dimensionality for the
 encoder in the VAE.
@@ -834,13 +847,16 @@ encoder in the VAE.
 function (vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder})(
     x::AbstractVecOrMat{Float32},
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
-    latent::Bool=false
+    latent::Bool=false,
+    n_samples::Int=1
 )
     # Run input through encoder to obtain mean and log std
     encoder_µ, encoder_logσ = vae.encoder(x)
 
     # Run reparametrization trick
-    z_sample = reparameterize(encoder_µ, encoder_logσ; prior)
+    z_sample = reparameterize(
+        encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples
+    )
 
     # Check if latent variables should be returned
     if latent
