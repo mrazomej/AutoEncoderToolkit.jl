@@ -1507,6 +1507,75 @@ function train!(
 end # function
 
 @doc raw"""
+    `train!(vae, x, opt; loss_kwargs...)`
+
+Customized training function to update parameters of a variational autoencoder
+when provided with 3D tensor data.
+
+# Arguments
+- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
+  elements of a variational autoencoder.
+- `x::Array{Float32, 3}`: 3D tensor of data samples on which to evaluate the
+  loss function. Each slice represents a matrix, and within each matrix, each
+  column represents an individual sample.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Train.setup`.
+
+# Optional Keyword Arguments
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `σ`, `β`, or `n_samples`,
+  depending on the specific loss function in use.
+- `average::Bool = true`: If `true`, computes and averages the gradient for all
+  samples in `x` before updating parameters. If `false`, updates parameters
+  after computing the gradient for each sample.
+
+# Description
+Trains the VAE on 3D tensor data by:
+1. Computing the gradient of the loss w.r.t the VAE parameters, either for each
+   sample individually or averaged across all samples within a slice.
+2. Updating the VAE parameters using the optimizer.
+
+# Examples
+```julia
+opt = Flux.setup(Optax.adam(1e-3), vae)
+for x in dataloader # assuming dataloader yields 3D tensors
+    train!(vae, x, opt; β=1.0f0, n_samples=5) 
+end
+```
+"""
+function train!(
+    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    x::Array{Float32,3},
+    opt::NamedTuple;
+    average=true,
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+)
+    # Decide on training approach based on 'average'
+    if average
+        # Compute the averaged gradient across all slices of the tensor
+        ∇loss_ = Flux.gradient(vae) do vae_model
+            StatsBase.mean([
+                StatsBase.mean(
+                    loss.(Ref(vae_model), eachcol(slice)); loss_kwargs...
+                )
+                for slice in eachslice(x, dims=3)
+            ])
+        end # do block
+        # Update parameters using the optimizer
+        Flux.Optimisers.update!(opt, vae, ∇loss_[1])
+    else
+        foreach(
+            slice -> foreach(
+                col -> train!(vae, col, opt; loss_kwargs...), eachcol(slice)
+            ),
+            eachslice(x, dims=3)
+        )
+    end # if
+end # function
+
+# ==============================================================================
+
+@doc raw"""
     `train!(vae, x_in, x_out, opt; loss_kwargs...)`
 
 Customized training function to update parameters of a variational autoencoder
@@ -1624,4 +1693,85 @@ function train!(
             )
         )
     end # for
+end # function
+
+@doc raw"""
+    `train!(vae, x_in, x_out, opt; loss_kwargs...)`
+
+Customized training function to update parameters of a variational autoencoder
+when provided with 3D tensor data.
+
+# Arguments
+- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
+  elements of a variational autoencoder.
+- `x_in::Array{Float32, 3}`: 3D tensor of input data samples on which to
+  evaluate the loss function. Each slice represents a matrix, and within each
+  matrix, each column represents an individual sample.
+- `x_out::Array{Float32, 3}`: 3D tensor of target output data samples. Each
+  slice represents a matrix, and within each matrix, each column represents the
+  corresponding output for an individual sample in `x_in`.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Train.setup`.
+
+# Optional Keyword Arguments
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `σ`, `β`, or `n_samples`,
+  depending on the specific loss function in use.
+- `average::Bool = true`: If `true`, computes and averages the gradient for all
+  samples in `x_in` before updating parameters. If `false`, updates parameters
+  after computing the gradient for each sample.
+
+# Description
+Trains the VAE on 3D tensor data by:
+1. Computing the gradient of the loss w.r.t the VAE parameters, either for each
+   sample individually or averaged across all samples within a slice.
+2. Updating the VAE parameters using the optimizer.
+
+# Examples
+```julia
+opt = Flux.setup(Optax.adam(1e-3), vae)
+for (x_in_batch, x_out_batch) in dataloader # assuming dataloader yields 3D tensors
+    train!(vae, x_in_batch, x_out_batch, opt; β=1.0f0, n_samples=5) 
+end
+```
+"""
+function train!(
+    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    x_in::Array{Float32,3},
+    x_out::Array{Float32,3},
+    opt::NamedTuple;
+    average=true,
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+)
+    # Decide on training approach based on 'average'
+    if average
+        # Compute the averaged gradient across all slices of the tensor
+        ∇loss_ = Flux.gradient(vae) do vae_model
+            StatsBase.mean([
+                StatsBase.mean(
+                    loss.(
+                        Ref(vae_model),
+                        eachcol(slice_in),
+                        eachcol(slice_out);
+                        loss_kwargs...
+                    )
+                )
+                for (slice_in, slice_out) in zip(
+                    eachslice(x_in, dims=3), eachslice(x_out, dims=3)
+                )
+            ])
+        end
+        # Update parameters using the optimizer
+        Flux.Optimisers.update!(opt, vae, ∇loss_[1])
+    else
+        foreach(
+            (slice_in, slice_out) -> foreach(
+                (col_in, col_out) -> train!(
+                    vae, col_in, col_out, opt; loss_kwargs...
+                ),
+                zip(eachcol(slice_in), eachcol(slice_out))
+            ),
+            zip(eachslice(x_in, dims=3), eachslice(x_out, dims=3))
+        )
+    end # if
 end # function
