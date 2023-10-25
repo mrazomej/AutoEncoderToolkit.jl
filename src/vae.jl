@@ -180,7 +180,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    reparameterize(µ, logσ; prior=Distributions.Normal{Float32}(0.0f0, 1.0f0))
+    reparameterize(µ, logσ; prior=Distributions.Normal{Float32}(0.0f0, 1.0f0), n_samples=1)
 
 Reparameterize the latent space using the given mean (`µ`) and log standard
 deviation (`logσ`), employing the reparameterization trick. This function helps
@@ -193,14 +193,14 @@ models) while keeping the gradient flow intact.
 
 # Optional Keyword Arguments
 - `prior::Distributions.Sampleable`: The prior distribution for the latent
-  space. By default, this is a standard normal distribution
-  (`Distributions.Normal{Float32}(0.0f0, 1.0f0)`). The function supports both
-  univariate and multivariate distributions from the `Distributions` package.
+  space. By default, this is a standard normal distribution.
+- `n_samples::Int=1`: The number of samples to draw using the reparametrization
+  trick.
 
 # Returns
-A sampled point from the reparameterized latent space, obtained by applying the
-reparameterization trick on the provided mean and log standard deviation, using
-the specified prior distribution.
+An array containing `n_samples` samples from the reparameterized latent space,
+obtained by applying the reparameterization trick on the provided mean and log
+standard deviation, using the specified prior distribution.
 
 # Description
 This function employs the reparameterization trick to sample from the latent
@@ -229,19 +229,20 @@ http://arxiv.org/abs/1312.6114 (2014).
 function reparameterize(
     µ::Array{Float32},
     logσ::Array{Float32};
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0)
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
+    n_samples::Int=1
 )
     # Check type of prior distribution
     if typeof(prior) <: Distributions.UnivariateDistribution
-        # Sample random latent variable point estimate given the mean and
-        # standard deviation
-        return µ .+ Random.rand(prior, size(µ)...) .* exp.(logσ)
+        # Sample n_samples random latent variable point estimates given the mean
+        # and standard deviation
+        return µ .+ Random.rand(prior, size(µ)..., n_samples) .* exp.(logσ)
     elseif typeof(prior) <: Distributions.MultivariateDistribution
-        # Sample random latent variable point estimate given the mean and
-        # standard deviation
-        return µ .+ Random.rand(prior, 1) .* exp.(logσ)
+        # Sample n_samples random latent variable point estimates given the mean
+        # and standard deviation  
+        return µ .+ Random.rand(prior, n_samples) .* exp.(logσ)
     end # if
-end # function
+end # for
 
 # ==============================================================================
 
