@@ -1142,7 +1142,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    `loss_terms(vae, x; σ=1.0f0, β=1.0f0, logpost=true, kl=true)`
+    `loss_terms(vae, x; σ=1.0f0, β=1.0f0, logpost=true, kl=true, n_samples=1)`
 
 Computes the individual loss terms for the variational autoencoder (VAE).
 
@@ -1158,6 +1158,8 @@ Kullback-Leibler (KL) divergence `Dₖₗ[qᵩ(z|x) || π(z)]` separately.
 - `σ::Float32=1.0f0`: Standard deviation for the probabilistic decoder π(x|z).
 - `logpost::Bool=true`: If true, computes the `logπ(x|z)` term. 
 - `kl::Bool=true`: If true, computes the `Dₖₗ[qᵩ(z|x) || π(z)]` term.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
 
 # Returns
 - `(logπ_x_z, kl_qᵩ_π)`: Tuple containing the computed loss terms. Returns
@@ -1172,14 +1174,17 @@ function loss_terms(
     x::AbstractVector{Float32};
     σ::Float32=1.0f0,
     logpost::Bool=true,
-    kl::Bool=true
+    kl::Bool=true,
+    n_samples::Int=1
 )
     # Forward Pass (run input through reconstruct function)
-    μ, logσ, _, x̂ = vae(x; latent=true)
+    μ, logσ, _, x̂ = vae(x; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder if logpost is true, otherwise
     # return nothing
-    logπ_x_z = logpost ? -1 / (2 * σ^2) * sum((x .- x̂) .^ 2) : nothing
+    logπ_x_z = logpost ? (
+        -1 / (2 * σ^2 * n_samples) * sum((x .- x̂) .^ 2)
+    ) : nothing
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z) if kl is true, otherwise return nothing
@@ -1191,7 +1196,8 @@ function loss_terms(
 end # function
 
 @doc raw"""
-    `loss_terms(vae, x_in, x_out; σ=1.0f0, β=1.0f0, logpost=true, kl=true)`
+    `loss_terms(vae, x_in, x_out; σ=1.0f0, β=1.0f0, logpost=true, kl=true, 
+                n_samples=1)`
 
 Computes the individual loss terms for the variational autoencoder (VAE) using
 `x_in` for encoding and `x_out` for decoding.
@@ -1211,6 +1217,8 @@ the Kullback-Leibler (KL) divergence `Dₖₗ[qᵩ(z|x_in) || π(z)]` separately
   π(x_out|z).
 - `logpost::Bool=true`: If true, computes the `logπ(x_out|z)` term. 
 - `kl::Bool=true`: If true, computes the `Dₖₗ[qᵩ(z|x_in) || π(z)]` term.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
 
 # Returns
 - `(logπ_x_z, kl_qᵩ_π)`: Tuple containing the computed loss terms. Returns
@@ -1226,14 +1234,17 @@ function loss_terms(
     x_out::AbstractVector{Float32};
     σ::Float32=1.0f0,
     logpost::Bool=true,
-    kl::Bool=true
+    kl::Bool=true,
+    n_samples::Int=1
 )
     # Forward Pass (run input x_in through reconstruct function)
-    μ, logσ, _, x̂ = vae(x_in; latent=true)
+    μ, logσ, _, x̂ = vae(x_in; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder if logpost is true,
     # otherwise return nothing
-    logπ_x_z = logpost ? -1 / (2 * σ^2) * sum((x_out .- x̂) .^ 2) : nothing
+    logπ_x_z = logpost ? (
+        -1 / (2 * σ^2 * n_samples) * sum((x_out .- x̂) .^ 2)
+    ) : nothing
 
     # Compute Kullback-Leibler divergence between approximated decoder
     # qᵩ(z|x_in) and latent prior distribution π(z) if kl is true, otherwise
@@ -1248,7 +1259,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    `loss_terms(vae, x; β=1.0f0, logpost=true, kl=true)`
+    `loss_terms(vae, x; β=1.0f0, logpost=true, kl=true, n_samples=1)`
 
 Computes the individual loss terms for the variational autoencoder (VAE) using
 `x` as both encoding and decoding input.
@@ -1262,8 +1273,10 @@ Kullback-Leibler (KL) divergence `Dₖₗ[qᵩ(z|x) || π(z)]` separately.
 - `x::AbstractVector{Float32}`: Input vector.
 
 # Optional Keyword Arguments
-- `logpost::Bool=true`: If true, computes the `logπ(x|z)` term. -
-`kl::Bool=true`: If true, computes the `Dₖₗ[qᵩ(z|x) || π(z)]` term.
+- `logpost::Bool=true`: If true, computes the `logπ(x|z)` term. 
+- `kl::Bool=true`: If true, computes the `Dₖₗ[qᵩ(z|x) || π(z)]` term.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
 
 # Returns
 - `(logπ_x_z, kl_qᵩ_π)`: Tuple containing the computed loss terms. Returns
@@ -1277,17 +1290,21 @@ function loss_terms(
     vae::VAE{<:AbstractVariationalEncoder,T},
     x::AbstractVector{Float32};
     logpost::Bool=true,
-    kl::Bool=true
+    kl::Bool=true,
+    n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input through reconstruct function
-    encoder_μ, encoder_logσ, z, (decoder_µ, decoder_logσ) = vae(x; latent=true)
+    encoder_μ, encoder_logσ, z, (decoder_µ, decoder_logσ) = vae(
+        x; latent=true, n_samples=n_samples
+    )
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder if logpost is true, otherwise
     # return nothing
     logπ_x_z = logpost ? (
-        -1 / 2.0f0 * length(decoder_µ) * log(2 * π) -
-        1 / 2.0f0 * sum(decoder_logσ) -
-        1 / 2.0f0 * sum((x .- decoder_µ) .^ 2 ./ exp.(2 * decoder_logσ))
+        -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
+        1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+        1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
+                                      exp.(2 * decoder_logσ))
     ) : nothing
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
@@ -1303,7 +1320,7 @@ function loss_terms(
 end # function
 
 @doc raw"""
-    `loss_terms(vae, x_in, x_out; β=1.0f0, logpost=true, kl=true)`
+    `loss_terms(vae, x_in, x_out; β=1.0f0, logpost=true, kl=true, n_samples=1)`
 
 Computes the individual loss terms for the variational autoencoder (VAE) using
 `x_in` as encoding input and `x_out` as the reconstruction target.
@@ -1318,8 +1335,10 @@ the Kullback-Leibler (KL) divergence `Dₖₗ[qᵩ(z|x_in) || π(z)]` separately
 - `x_out::AbstractVector{Float32}`: Target vector for the reconstruction.
 
 # Optional Keyword Arguments
-- `logpost::Bool=true`: If true, computes the `logπ(x_out|z)` term. -
-`kl::Bool=true`: If true, computes the `Dₖₗ[qᵩ(z|x_in) || π(z)]` term.
+- `logpost::Bool=true`: If true, computes the `logπ(x_out|z)` term. 
+- `kl::Bool=true`: If true, computes the `Dₖₗ[qᵩ(z|x_in) || π(z)]` term.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
 
 # Returns
 - `(logπ_x_z, kl_qᵩ_π)`: Tuple containing the computed loss terms. Returns
@@ -1334,7 +1353,8 @@ function loss_terms(
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32};
     logpost::Bool=true,
-    kl::Bool=true
+    kl::Bool=true,
+    n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input x_in through reconstruct function
     encoder_μ, encoder_logσ, z, (decoder_μ, decoder_logσ) = vae(
@@ -1344,9 +1364,10 @@ function loss_terms(
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder if logpost is true,
     # otherwise return nothing
     logπ_x_z = logpost ? (
-        -1 / 2.0f0 * length(decoder_μ) * log(2 * π) -
-        1 / 2.0f0 * sum(decoder_logσ) -
-        1 / 2.0f0 * sum((x_out .- decoder_μ) .^ 2 ./ exp.(2 * decoder_logσ))
+        -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
+        1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+        1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
+                                      exp.(2 * decoder_logσ))
     ) : nothing
 
     # Compute Kullback-Leibler divergence between approximated decoder
@@ -1381,8 +1402,9 @@ given a loss function.
   initialized using `Flux.Train.setup`.
 
 # Optional Keyword Arguments
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict(:σ => 1.0f0, :β => 1.0f0,)`:
-  Arguments for the loss function.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `σ`, `β`, or `n_samples`,
+  depending on the specific loss function in use.
 
 # Description
 Trains the VAE by:
@@ -1393,15 +1415,15 @@ Trains the VAE by:
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
 for x in dataloader
-    train!(vae, x, opt) 
+    train!(vae, x, opt; β=1.0f0, n_samples=5) 
 end
-````
+```
 """
 function train!(
     vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
     x::AbstractVector{Float32},
     opt::NamedTuple;
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
 )
     # Compute VAE gradient
     ∇loss_ = Flux.gradient(vae) do vae_model
@@ -1426,8 +1448,9 @@ when provided with matrix data.
   initialized using `Flux.Train.setup`.
 
 # Optional Keyword Arguments
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict(:σ => 1.0f0, :β => 1.0f0,)`:
-  Arguments for the loss function.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `σ`, `β`, or `n_samples`,
+  depending on the specific loss function in use.
 - `average::Bool = true`: If `true`, computes and averages the gradient for all
   samples in `x` before updating parameters. If `false`, updates parameters
   after computing the gradient for each sample.
@@ -1442,7 +1465,7 @@ Trains the VAE on matrix data by:
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
 for x in dataloader # assuming dataloader yields matrices
-    train!(vae, x, opt) 
+    train!(vae, x, opt; β=1.0f0, n_samples=5) 
 end
 ```
 """
@@ -1451,7 +1474,7 @@ function train!(
     x::AbstractMatrix{Float32},
     opt::NamedTuple;
     average=true,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
 )
     # Decide on training approach based on 'average'
     if average
@@ -1483,8 +1506,9 @@ given a loss function.
   initialized using `Flux.Train.setup`.
 
 # Optional Keyword Arguments
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict(:σ => 1.0f0, :β => 1.0f0,)`:
-  Arguments for the loss function.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `σ`, `β`, or `n_samples`,
+  depending on the specific loss function in use.
 
 # Description
 Trains the VAE by:
@@ -1504,7 +1528,7 @@ function train!(
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32},
     opt::NamedTuple;
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
 )
     # Compute VAE gradient
     ∇loss_ = Flux.gradient(vae) do vae_model
@@ -1531,8 +1555,9 @@ when provided with matrix data.
   initialized using `Flux.Train.setup`.
 
 # Optional Keyword Arguments
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict(:σ => 1.0f0, :β => 1.0f0,)`:
-  Arguments for the loss function.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `σ`, `β`, or `n_samples`,
+  depending on the specific loss function in use.
 - `average::Bool = true`: If `true`, computes and averages the gradient for all
   samples in `x_in` before updating parameters. If `false`, updates parameters
   after computing the gradient for each sample.
@@ -1557,7 +1582,7 @@ function train!(
     x_out::AbstractMatrix{Float32},
     opt::NamedTuple;
     average=true,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(:σ => 1.0f0, :β => 1.0f0,)
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
 )
     # Decide on training approach based on 'average'
     if average
