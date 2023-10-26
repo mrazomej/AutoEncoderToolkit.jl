@@ -188,8 +188,15 @@ in sampling from the latent space in variational autoencoders (or similar
 models) while keeping the gradient flow intact.
 
 # Arguments
-- `µ::Array{Float32}`: The mean of the latent space.
-- `logσ::Array{Float32}`: The log standard deviation of the latent space.
+- `µ::AbstractVecOrMat{Float32}`: The mean of the latent space. If it is a
+  vector, it represents the mean for a single data point. If it is a matrix,
+  each column corresponds to the mean for a specific data point, and each row
+  corresponds to a dimension of the latent space.
+- `logσ::AbstractVecOrMat{Float32}`: The log standard deviation of the latent
+  space. Like `µ`, if it's a vector, it represents the log standard deviation
+  for a single data point. If a matrix, each column corresponds to the log
+  standard deviation for a specific data point.
+
 
 # Optional Keyword Arguments
 - `prior::Distributions.Sampleable`: The prior distribution for the latent
@@ -227,22 +234,36 @@ Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
-    µ::Array{Float32},
-    logσ::Array{Float32};
+    µ::T,
+    logσ::T;
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     n_samples::Int=1
-)
-    # Check type of prior distribution
-    if typeof(prior) <: Distributions.UnivariateDistribution
+) where {T<:AbstractVecOrMat{Float32}}
+
+    # Sample result depending on type of prior distribution
+    result = if typeof(prior) <: Distributions.UnivariateDistribution
         # Sample n_samples random latent variable point estimates given the mean
         # and standard deviation
-        return µ .+ Random.rand(prior, size(µ)..., n_samples) .* exp.(logσ)
+        µ .+ Random.rand(prior, size(µ)..., n_samples) .* exp.(logσ)
     elseif typeof(prior) <: Distributions.MultivariateDistribution
         # Sample n_samples random latent variable point estimates given the mean
-        # and standard deviation  
-        return µ .+ Random.rand(prior, n_samples) .* exp.(logσ)
+        # and standard deviation
+        µ .+ Random.rand(prior, n_samples) .* exp.(logσ)
     end # if
-end # for
+
+    # Remove dimensions of size 1 based on type of T and n_samples = 1
+    if n_samples == 1
+        if T <: AbstractVector
+            # Drop second dimension when input is vector and n_samples = 1
+            return dropdims(result, dims=2)
+        elseif T <: AbstractMatrix
+            # Drop third dimension when input is matrix and n_samples = 1
+            return dropdims(result, dims=3)
+        end # if
+    end # if
+
+    return result
+end # function
 
 # ==============================================================================
 
