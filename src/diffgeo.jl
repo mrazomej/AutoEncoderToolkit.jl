@@ -270,28 +270,27 @@ end # function
 @doc raw"""
     geodesic_system!(du, u, param, t)
 
-Funtion thefining the right-hand side of the system of geodesic ODEs. The
-function is evaluated in place⸺making `du` the first input⸺to accelerate the
-integration. To define the 2nd order system of differential equtions we define a
-system of coupled 1st order ODEs.
+Define the right-hand side of the geodesic system of ODEs. This function
+evaluates in-place by making `du` the first input, which is intended to
+accelerate the integration process. To represent the 2nd order ODE system, we
+use a system of coupled 1st order ODEs.
 
 # Arguments
-- `du::Array{<:AbstractFloat}`: derivatives of state variables. The first `end ÷
-  2` entries define the velocity in latent space where the curve γ is being
-  evaluated, i.e., dγ/dt. The second half defines the acceleration of the curve,
-  i.e., d²γ/dt².
+- `du::Array{<:AbstractFloat}`: Derivatives of state variables. The first `end ÷
+  2` entries represent the velocity in the latent space (i.e., dγ/dt), while the
+  latter half represents the curve's acceleration (i.e., d²γ/dt²).
 - `u::Array{<:AbstractFloat}`: State variables. The first `end ÷ 2` entries
-  define the coordinates in latent space where the curve γ is being evaluated,
-  i.e., γ. The second half defines the velocity of the curve, i.e., dγ/dt.
-- `param::Dictionary`: Parameters required for the geodesic differential
-  equation system and the boundary value integration. The list of required
-  parameters are:
-  - `in_dim::Int`: Dimensionality of input space.
-  - `out_dim::Int`: Dimensionality of output space.
-  - `manifold::Function`: Function definining the manifold.
-  - `γ_init::Vector{<:AbstractFloat}`: Initial position in latent space.
-  - `γ_end::Vector{<:AbstractFloat}`: Final position in latent space.
-- `t::AbstractFloat`: Time where to evaluate the righ-hand side.
+  specify the coordinates in the latent space (i.e., γ), and the second half
+  represents the curve's velocity (i.e., dγ/dt).
+- `param::Dict`: Parameters necessary for the geodesic differential equation
+  system and boundary value integration. The required parameters include:
+  - `in_dim::Int`: Dimensionality of the input space.
+  - `out_dim::Int`: Dimensionality of the output space.
+  - `manifold::Union{Function, Flux.Chain}`: The function or Flux model that 
+    defines the manifold.
+  - `γ_init::Vector{<:AbstractFloat}`: Initial position in the latent space.
+  - `γ_end::Vector{<:AbstractFloat}`: Final position in the latent space.
+- `t::AbstractFloat`: Time at which to evaluate the right-hand side.
 """
 function geodesic_system!(du, u, param, t)
     # Extract dimensions d and D
@@ -314,24 +313,35 @@ function geodesic_system!(du, u, param, t)
     du .= [dγ; d²γ]
 end # function
 
+# ==============================================================================
+
 @doc raw"""
     bc_collocation!(residual, u, param, t)
 
-Function that evaluates the residuals between the current position and the
-desired boundary conditions.
+Evaluates the residuals between the current position in latent space and the
+desired boundary conditions. This function is crucial when implementing
+collocation methods for boundary value problems in differential equations.
 
 # Arguments
-- `residual::Vector{<:AbstractFloat}`: Array containing the residuals between
+- `residual::Vector{<:AbstractFloat}`: A vector to store the residuals between
   the desired boundary conditions and the current state.
-- `param::Dictionary`: Parameters required for the geodesic differential
-  equation system and the boundary value integration. The list of required
-  parameters are:
-  - `in_dim::Int`: Dimensionality of input space.
-  - `out_dim::Int`: Dimensionality of output space.
-  - `manifold::Function`: Function definining the manifold.
+- `u::Array{Array{<:AbstractFloat}}`: A sequence of state vectors at each time
+  step, where each state vector represents a position in latent space.
+- `param::Dict`: Parameters necessary for the geodesic differential equation
+  system and boundary value integration. The required parameters include:
+  - `in_dim::Int`: Dimensionality of the input space.
+  - `manifold::Union{Function, Flux.Chain}`: The function or Flux model that 
+    defines the manifold.
   - `γ_init::Vector{<:AbstractFloat}`: Initial position in latent space.
   - `γ_end::Vector{<:AbstractFloat}`: Final position in latent space.
-- `t::AbstractFloat`: Time where to evaluate the righ-hand side.
+- `t::AbstractFloat`: Time at which to evaluate the residuals. Note: this
+  argument is present for compatibility with solvers but isn't used directly in
+  this function.
+
+# Returns
+- The function modifies the `residual` vector in-place, updating it with the
+  calculated residuals between the desired boundary conditions and the current
+  state at each boundary.
 """
 function bc_collocation!(residual, u, param, t)
     # Extract parameters
@@ -347,21 +357,30 @@ end # function
 @doc raw"""
     bc_shooting!(residual, u, param, t)
 
-Function that evaluates the residuals between the current position and the
-desired boundary conditions.
+Evaluates the residuals between the current position in latent space and the
+desired boundary conditions for solving boundary value problems using the
+shooting method.
 
 # Arguments
-- `residual::Vector{<:AbstractFloat}`: Array containing the residuals between
+- `residual::Vector{<:AbstractFloat}`: A vector to store the residuals between
   the desired boundary conditions and the current state.
-- `param::Dictionary`: Parameters required for the geodesic differential
-  equation system and the boundary value integration. The list of required
-  parameters are:
-  - `in_dim::Int`: Dimensionality of input space.
-  - `out_dim::Int`: Dimensionality of output space.
-  - `manifold::Function`: Function definining the manifold.
+- `u::Function`: A function that, when evaluated at a specific time `t`, returns
+  the state vector representing a position in latent space.
+- `param::Dict`: Parameters necessary for the geodesic differential equation
+  system and boundary value integration. The required parameters include:
+  - `in_dim::Int`: Dimensionality of the input space.
+  - `manifold::Union{Function, Flux.Chain}`: The function or Flux model that 
+    defines the manifold.
   - `γ_init::Vector{<:AbstractFloat}`: Initial position in latent space.
   - `γ_end::Vector{<:AbstractFloat}`: Final position in latent space.
-- `t::AbstractFloat`: Time where to evaluate the righ-hand side.
+- `t::AbstractFloat`: Time at which to evaluate the residuals. Note: this
+  argument is present for compatibility with solvers but isn't used directly in
+  this function.
+
+# Returns
+- The function modifies the `residual` vector in-place, updating it with the
+  calculated residuals between the desired boundary conditions and the current
+  state at each boundary.
 """
 function bc_shooting!(residual, u, param, t)
     # Extract parameters
