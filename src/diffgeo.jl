@@ -48,13 +48,14 @@ end # function
 @doc raw"""
     riemannian_metric(manifold, val)
 
-Compute the Riemannian metric `M = JᵀJ` of a manifold defined by a neural network using 
-numerical differentiation with `Zygote.jl`. The metric is evaluated based on the outputs 
-of the network with respect to its inputs.
+Compute the Riemannian metric `M = JᵀJ` of a manifold defined by a neural
+network using numerical differentiation with `Zygote.jl`. The metric is
+evaluated based on the outputs of the network with respect to its inputs.
 
 # Arguments
-- `manifold::Flux.Chain`: A neural network model (as a chain) defining the manifold.
-- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold 
+- `manifold::Flux.Chain`: A neural network model (as a chain) defining the
+  manifold.
+- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
   (neural network) where the metric should be evaluated.
 
 # Returns
@@ -76,22 +77,32 @@ function riemannian_metric(
     return jac' * jac
 end # function
 
+# ==============================================================================
+
 @doc raw"""
     ∂M̲̲∂γ̲(manifold, val, out_dim)
 
-Function to compute the derivative of the Riemmanian metric `M̲̲` as a function
-of the coordinates in the input space using `Zygote.jl`.
+Compute the derivative of the Riemannian metric `M̲̲` with respect to the
+coordinates in the input space using `Zygote.jl`.
 
 # Arguments
-- `manifold::Function`: Function defining the manifold.
-- `val::Vector{<:AbstractFloat}`: Value where to evaluate the metric.
-- `out_dim::Int`: Dimensionality of the output space. This is required because
-  `Zygote.jl` cannot compute the required derivatives automatically, but we have
-  to "manually" iterate over the variables in the output space, one at the time.
+- `manifold::Function`: A function defining the manifold.
+- `val::Vector{<:AbstractFloat}`: A vector specifying the point on the manifold
+  where the derivative should be evaluated.
+- `out_dim::Int`: Dimensionality of the output space. This is essential because
+  `Zygote.jl` can't compute certain derivatives automatically. We must iterate
+  over each dimension of the output space manually.
 
 # Returns
-- `∂M̲̲::Array{<:AbstractFloat}`: Rank-3 tensor evaluating the derivative of the
-  Riemmanian manifold metric.
+- `∂M̲̲::Array{<:AbstractFloat}`: A rank-3 tensor evaluating the derivative of
+  the Riemannian manifold metric.
+
+# Example
+```julia-repl
+manifold(x) = [x[1]^2 + x[2], x[1]*x[2]]
+val = [1.0, 2.0]
+∂M = ∂M̲̲∂γ̲(manifold, val, 2)
+```
 """
 function ∂M̲̲∂γ̲(
     manifold::Function, val::Vector{T}, out_dim::Int
@@ -122,21 +133,80 @@ function ∂M̲̲∂γ̲(
 end # function
 
 @doc raw"""
-    christoffel_simbols(manifold, val, out_dim)
+    ∂M̲̲∂γ̲(manifold, val, out_dim)
 
-Function to compute the Christoffel symbols from the Riemmanian metric `M̲̲` as
-a function of the coordinates in the input space using `Zygote.jl`.
+Compute the derivative of the Riemannian metric `M̲̲` with respect to the
+coordinates in the input space using `Zygote.jl`.
 
 # Arguments
-- `manifold::Function`: Function defining the manifold.
-- `val::Vector{<:AbstractFloat}`: Value where to evaluate the metric.
-- `out_dim::Int`: Dimensionality of the output space. This is required because
-  `Zygote.jl` cannot compute the required derivatives automatically, but we have
-  to "manually" iterate over the variables in the output space, one at the time.
+- `manifold::Flux.Chain`: A neural network model (as a chain) defining the
+  manifold.
+- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
+  (neural network) where the derivative should be evaluated.
+- `out_dim::Int`: Dimensionality of the output space. This is essential because
+  `Zygote.jl` can't compute certain derivatives automatically. We must iterate
+  over each dimension of the output space manually.
 
 # Returns
-- `Γᵏᵢⱼ::Array{<:AbstractFloat}`: Rank-3 tensor evaluating the Christoffel
-  symbols given a Riemmanian manifold metric.
+- `∂M̲̲::Array{<:AbstractFloat}`: A rank-3 tensor evaluating the derivative of
+  the Riemannian manifold metric.
+
+# Example
+```julia-repl
+model = Chain(Dense(2, 3, relu), Dense(3, 2))
+val = [1.0, 2.0]
+∂M = ∂M̲̲∂γ̲(model, val, 2)
+```
+"""
+function ∂M̲̲∂γ̲(
+    manifold::Flux.Chain, val::Vector{T}, out_dim::Int
+)::Array{T} where {T<:AbstractFloat}
+    # Compute the Jacobian of the manifold with respect to its input
+    J̲̲ = first(Zygote.jacobian(manifold, val))
+    # Compute Hessian tensor for each dimension of the output, then permute
+    # dimensions to get the desired third-order tensor structure
+    H̲̲ = permutedims(
+        cat(
+            [Zygote.hessian(v -> manifold(v)[D], val) for D = 1:out_dim]...,
+            dims=3
+        ),
+        (3, 1, 2)
+    )
+
+    # Compute the derivative of the Riemannian metric using the tensor product of 
+    # the Hessian tensor and the Jacobian matrix
+    return @tensor ∂M̲̲[i, j, k] := H̲̲[l, i, k] * J̲̲[l, j] +
+                                    H̲̲[l, k, j] * J̲̲[l, i]
+end # function
+
+# ==============================================================================
+
+@doc raw"""
+    christoffel_symbols(manifold, val, out_dim)
+
+Compute the Christoffel symbols of the first kind, which are derived from the
+Riemannian metric `M̲̲` of a manifold. The Christoffel symbols represent the
+connection on the manifold and are used in the geodesic equation to determine
+the shortest paths between points.
+
+# Arguments
+- `manifold::Function`: A function defining the manifold.
+- `val::Vector{<:AbstractFloat}`: A vector specifying the point on the manifold
+  where the Christoffel symbols should be evaluated.
+- `out_dim::Int`: Dimensionality of the output space. This is essential because
+  `Zygote.jl` can't compute certain derivatives automatically. We must iterate
+  over each dimension of the output space manually.
+
+# Returns
+- `Γᵏᵢⱼ::Array{<:AbstractFloat}`: A rank-3 tensor (dimensions: k, i, j)
+  representing the Christoffel symbols for the given Riemannian manifold metric.
+
+# Example
+```julia-repl
+manifold(x) = [x[1]^2 + x[2], x[1]*x[2]]
+val = [1.0, 2.0]
+Γ = christoffel_symbols(manifold, val, 2)
+```
 """
 function christoffel_symbols(
     manifold::Function, val::Vector{T}, out_dim::Int
@@ -151,6 +221,51 @@ function christoffel_symbols(
     return @tensor Γᵏᵢⱼ[i, j, k] := (1 / 2) * M̲̲⁻¹[k, h] *
                                     (∂M̲̲[i, h, j] + ∂M̲̲[j, h, i] - ∂M̲̲[i, j, h])
 end # function
+
+@doc raw"""
+    christoffel_symbols(manifold, val, out_dim)
+
+Compute the Christoffel symbols of the first kind, derived from the Riemannian
+metric `M̲̲` of a manifold represented by a neural network (as a `Flux.Chain`).
+The Christoffel symbols represent the connection on the manifold and are used in
+the geodesic equation to determine the shortest paths between points.
+
+# Arguments
+- `manifold::Flux.Chain`: A neural network model (as a chain) defining the
+  manifold.
+- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
+  (neural network) where the Christoffel symbols should be evaluated.
+- `out_dim::Int`: Dimensionality of the output space. This is essential because
+  `Zygote.jl` can't compute certain derivatives automatically. We must iterate
+  over each dimension of the output space manually.
+
+# Returns
+- `Γᵏᵢⱼ::Array{<:AbstractFloat}`: A rank-3 tensor (dimensions: k, i, j)
+  representing the Christoffel symbols for the given Riemannian manifold metric.
+
+# Example
+```julia-repl
+model = Chain(Dense(2, 3, relu), Dense(3, 2))
+val = [1.0, 2.0]
+Γ = christoffel_symbols(model, val, 2)
+```
+"""
+function christoffel_symbols(
+    manifold::Flux.Chain, val::Vector{T}, out_dim::Int
+)::Array{T} where {T<:AbstractFloat}
+    # Compute the inverse of the Riemannian metric
+    M̲̲⁻¹ = LinearAlgebra.inv(riemannian_metric(manifold, val))
+
+    # Compute the derivative of the Riemannian metric
+    ∂M̲̲ = ∂M̲̲∂γ̲(manifold, val, out_dim)
+
+    # Use the metric inverse and its derivative to compute the Christoffel
+    # symbols
+    return @tensor Γᵏᵢⱼ[i, j, k] := (1 / 2) * M̲̲⁻¹[k, h] *
+                                    (∂M̲̲[i, h, j] + ∂M̲̲[j, h, i] - ∂M̲̲[i, j, h])
+end # function
+
+# ==============================================================================
 
 @doc raw"""
     geodesic_system!(du, u, param, t)
