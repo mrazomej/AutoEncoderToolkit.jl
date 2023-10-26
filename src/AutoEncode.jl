@@ -94,4 +94,12 @@ module utils
 include("utils.jl")
 end # submodule
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Include Differential Geometry Module
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+module diffgeo
+include("diffgeo.jl")
+end # submodule
+
 end
