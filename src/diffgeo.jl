@@ -12,11 +12,7 @@ import Flux
 
 # Import Abstract Types
 
-using ..AutoEncode: AbstractAutoEncoder, AbstractVariationalAutoEncoder,
-    AbstractEncoder, AbstractDecoder, AbstractVariationalEncoder,
-    AbstractVariationalDecoder
-
-using ..VAEs: JointEncocder, SimpleDecoder, JointDecoder, SplitDecoder
+using ..AutoEncode: JointEncoder, SimpleDecoder, JointDecoder, SplitDecoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Differential Geometry on Riemmanian Manifolds
