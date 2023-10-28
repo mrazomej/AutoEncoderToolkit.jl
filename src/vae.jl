@@ -965,7 +965,9 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    kl_qᵩ_π = 1 / 2.0f0 * sum(
+        @. exp(2.0f0 * logσ) + μ^2 - 1.0f0 - 2.0f0 * logσ
+    )
 
     # Compute average loss function
     return -logπ_x_z + β * kl_qᵩ_π
@@ -1026,9 +1028,11 @@ function loss(
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder
     logπ_x_z = -1 / (2 * σ^2 * n_samples) * sum((x_out .- x̂) .^ 2)
 
-    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x_in)
-    # and latent prior distribution π(z)
-    kl_qᵩ_π = sum(@. (exp(2 * logσ) + μ^2 - 1.0f0) / 2.0f0 - logσ)
+    # Compute Kullback-Leibler divergence between approximated decoder
+    # qᵩ(z|x_in) and latent prior distribution π(z)
+    kl_qᵩ_π = 1 / 2.0f0 * sum(
+        @. exp(2.0f0 * logσ) + μ^2 - 1.0f0 - 2.0f0 * logσ
+    )
 
     # Compute loss function
     return -logπ_x_z + β * kl_qᵩ_π
@@ -1089,7 +1093,7 @@ function loss(
     # Compute average reconstruction loss for a Gaussian decoder over all
     # samples
     logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
-               1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+               1 / n_samples * sum(decoder_logσ) -
                1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
                                              exp.(2 * decoder_logσ))
 
@@ -1162,7 +1166,7 @@ function loss(
 
     # Compute reconstruction loss for a Gaussian decoder
     logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
-               1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+               1 / n_samples * sum(decoder_logσ) -
                1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
                                              exp.(2 * decoder_logσ))
 
@@ -1340,7 +1344,7 @@ function loss_terms(
     # return nothing
     logπ_x_z = logpost ? (
         -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
-        1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+        1 / n_samples * sum(decoder_logσ) -
         1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
                                       exp.(2 * decoder_logσ))
     ) : nothing
@@ -1403,7 +1407,7 @@ function loss_terms(
     # otherwise return nothing
     logπ_x_z = logpost ? (
         -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
-        1 / (2.0f0 * n_samples) * sum(decoder_logσ) -
+        1 / n_samples * sum(decoder_logσ) -
         1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
                                       exp.(2 * decoder_logσ))
     ) : nothing
