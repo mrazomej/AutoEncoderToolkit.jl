@@ -708,13 +708,15 @@ function SplitDecoder(
 
     # Check that final number of neurons matches input dimension
     if µ_neurons[end] ≠ n_input
-        println("We changed the last layer number of µ_neurons to match the input dimension")
+        println("We changed the last layer number of µ_neurons to match the " *
+                "input dimension")
         µ_neurons[end] = n_input
     end # if
 
     # Check that final number of neurons matches input dimension
     if logσ_neurons[end] ≠ n_input
-        println("We changed the last layer number of logσ_neurons to match the input dimension")
+        println("We changed the last layer number of logσ_neurons to match " *
+                "the input dimension")
         logσ_neurons[end] = n_input
     end # if
 
