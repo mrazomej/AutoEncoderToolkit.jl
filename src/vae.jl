@@ -979,20 +979,20 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 @doc raw"""
-    `loss(vae, x; σ=1.0f0, β=1.0f0, n_samples=1)`
+    `loss(vae, x; σ=1.0f0, β=1.0f0, n_samples=1, regularization=nothing, reg_strength=1.0f0)`
 
 Computes the loss for the variational autoencoder (VAE) by averaging over
 `n_samples` latent space samples.
 
 The loss function combines the reconstruction loss with the Kullback-Leibler
-(KL) divergence, defined as:
+(KL) divergence, and possibly a regularization term, defined as:
 
-loss = -⟨π(x|z)⟩ + β × Dₖₗ[qᵩ(z|x) || π(z)]
+loss = -⟨π(x|z)⟩ + β × Dₖₗ[qᵩ(z|x) || π(z)] + reg_strength × reg_term
 
 Where:
-- π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲)) - f(z) is the
-function defining the mean of the decoder π(x|z) - qᵩ(z|x) is the approximated
-encoder: qᵩ(z|x) = N(g(x), h(x))
+- π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲))
+- f(z) is the function defining the mean of the decoder π(x|z)
+- qᵩ(z|x) is the approximated encoder: qᵩ(z|x) = N(g(x), h(x))
 - g(x) and h(x) define the mean and covariance of the encoder respectively.
 
 # Arguments
@@ -1007,10 +1007,14 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
+- `regularization::Function=nothing`: A function that computes the regularization 
+  term based on the VAE outputs. Should return a Float32.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
 - `Float32`: The computed average loss value for the input `x` and its
-  reconstructed counterparts over `n_samples` samples.
+  reconstructed counterparts over `n_samples` samples, including possible 
+  regularization terms.
 
 # Note
 Ensure that the input data `x` matches the expected input dimensionality for the
@@ -1021,7 +1025,9 @@ function loss(
     x::AbstractVector{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
-    n_samples::Int=1
+    n_samples::Int=1,
+    regularization::Function=nothing,
+    reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input through reconstruct function with n_samples)
     outputs = vae(x; latent=true, n_samples=n_samples)
@@ -1043,20 +1049,23 @@ function loss(
         @. exp(2.0f0 * logσ) + µ^2 - 1.0f0 - 2.0f0 * logσ
     )
 
+    # Compute regularization term if regularization function is provided
+    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+
     # Compute average loss function
-    return -logπ_x_z + β * kl_qᵩ_π
+    return -logπ_x_z + β * kl_qᵩ_π + reg_strength * reg_term
 end
 
-
 @doc raw"""
-    `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0, n_samples=1)`
+    `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0, n_samples=1, 
+            regularization=nothing, reg_strength=1.0f0)`
 
 Computes the loss for the variational autoencoder (VAE).
 
 The loss function combines the reconstruction loss with the Kullback-Leibler
-(KL) divergence, defined as:
+(KL) divergence and possibly a regularization term, defined as:
 
-loss = -⟨π(x_out|z)⟩ + β × Dₖₗ[qᵩ(z|x_in) || π(z)]
+loss = -⟨π(x_out|z)⟩ + β × Dₖₗ[qᵩ(z|x_in) || π(z)] + reg_strength × reg_term
 
 Where:
 - π(x_out|z) is a probabilistic decoder: π(x_out|z) = N(f(z), σ² I̲̲)) - f(z) is
@@ -1079,10 +1088,14 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
+- `regularization::Function=nothing`: A function that computes the
+  regularization term based on the VAE outputs. Should return a Float32.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
 - `Float32`: The computed loss value between the input `x_out` and its
-  reconstructed counterpart from `x_in`.
+  reconstructed counterpart from `x_in`, including possible regularization
+  terms.
 
 # Note
 Ensure that the input data `x_in` matches the expected input dimensionality for
@@ -1094,7 +1107,9 @@ function loss(
     x_out::AbstractVector{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
-    n_samples::Int=1
+    n_samples::Int=1,
+    regularization::Function=nothing,
+    reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input x_in through reconstruct function)
     outputs = vae(x_in; latent=true, n_samples=n_samples)
@@ -1104,7 +1119,7 @@ function loss(
         outputs[:encoder_µ],
         outputs[:encoder_logσ],
         outputs[:z],
-        outputs[:decoder_µ],
+        outputs[:decoder_µ]
     )
 
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder
@@ -1116,21 +1131,30 @@ function loss(
         @. exp(2.0f0 * logσ) + µ^2 - 1.0f0 - 2.0f0 * logσ
     )
 
+    # Compute regularization term if regularization function is provided
+    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+
     # Compute loss function
-    return -logπ_x_z + β * kl_qᵩ_π
+    return -logπ_x_z + β * kl_qᵩ_π + reg_strength * reg_term
 end
+
 
 # ==============================================================================
 
 @doc raw"""
     loss(vae::VAE{<:AbstractVariationalEncoder,T}, 
-        x::AbstractVector{Float32}; β::Float32=1.0f0, n_samples=1)
+        x::AbstractVector{Float32}; 
+        β::Float32=1.0f0, 
+        n_samples=1, 
+        regularization=nothing, 
+        reg_strength=1.0f0) where {T<:Union{JointDecoder,SplitDecoder}}
 
 Calculate the loss for a variational autoencoder (VAE) by combining the
-reconstruction loss and the Kullback-Leibler (KL) divergence, averaged over
-`n_samples` latent space samples.
+reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
+regularization term, averaged over `n_samples` latent space samples.
 
-The VAE loss is given by: loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)]
+The VAE loss is given by: 
+loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)] + reg_strength × reg_term
 
 Where:
 - π(x|z) is the probabilistic decoder represented by a Gaussian distribution:
@@ -1142,7 +1166,8 @@ Where:
   - g(x) and h(x) respectively define the mean and covariance of the encoder.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,JointDecoder}`: A VAE model.
+- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointDecoder,SplitDecoder}}`:
+  A VAE model.
 - `x::AbstractVector{Float32}`: Input vector.
 
 # Optional Keyword Arguments
@@ -1150,10 +1175,13 @@ Where:
   balance between reconstruction and regularization.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
+- `regularization::Function=nothing`: A function that computes the
+  regularization term based on the VAE outputs. Should return a Float32.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
 - `loss::Float32`: The computed average VAE loss value for the given input `x`
-  over `n_samples` samples.
+  over `n_samples` samples, including possible regularization terms.
 
 # Notes
 - Ensure that the dimensionality of the input data `x` aligns with the encoder's
@@ -1165,12 +1193,18 @@ function loss(
     vae::VAE{<:AbstractVariationalEncoder,T},
     x::AbstractVector{Float32};
     β::Float32=1.0f0,
-    n_samples::Int=1
+    n_samples::Int=1,
+    regularization::Function=nothing,
+    reg_strength::Float32=1.0f0
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input through reconstruct function with n_samples
-    encoder_µ, encoder_logσ, z_samples, (decoder_µ, decoder_logσ) = vae(
-        x; latent=true, n_samples=n_samples
+    outputs = vae(x; latent=true, n_samples=n_samples)
+    encoder_µ, encoder_logσ, z_samples = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
     )
+    decoder_µ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
     # Compute average reconstruction loss for a Gaussian decoder over all
     # samples
@@ -1186,19 +1220,34 @@ function loss(
            2.0f0 * encoder_logσ
     )
 
-    # Compute average total loss
-    return -logπ_x_z + β * kl_qᵩ_π
+    # Compute ELBO
+    total_loss = -logπ_x_z + β * kl_qᵩ_π
+
+    # Add regularization term if provided
+    if regularization !== nothing
+        # Compute regularization term
+        reg_term = regularization(outputs)
+        # Add regularization to total loss
+        total_loss += reg_strength * reg_term
+    end
+
+    return total_loss
 end # function
+
 
 @doc raw"""
     loss(vae::VAE{<:AbstractVariationalEncoder,T}, 
          x_in::AbstractVector{Float32}, x_out::AbstractVector{Float32};
-         β::Float32=1.0f0, n_samples=1)
+         β::Float32=1.0f0, n_samples=1, 
+         regularization::Function=nothing, 
+         reg_strength::Float32=1.0f0)
 
 Calculate the loss for a variational autoencoder (VAE) by combining the
-reconstruction loss and the Kullback-Leibler (KL) divergence.
+reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
+regularization term.
 
-The VAE loss is given by: loss = -⟨logπ(x_out|z)⟩ + β × Dₖₗ[qᵨ(z|x_in) ‖ π(z)]
+The VAE loss is given by: loss = -⟨logπ(x_out|z)⟩ + β × Dₖₗ[qᵨ(z|x_in) ‖ π(z)] +
+reg_strength × reg_term
 
 Where:
 - π(x_out|z) is the probabilistic decoder represented by a Gaussian
@@ -1212,7 +1261,8 @@ Where:
     encoder.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,JointDecoder}`: A VAE model.
+- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointDecoder,SplitDecoder}}`:
+  A VAE model.
 - `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
 - `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
   error.
@@ -1220,13 +1270,15 @@ Where:
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
   balance between reconstruction and regularization.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
+- `regularization::Function=nothing`: A function that computes the
+  regularization term based on the VAE outputs. Should return a Float32.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
 - `loss::Float32`: The computed VAE loss value between `x_out` and its
   reconstructed counterpart from `x_in`.
-- `n_samples::Int=1`: The number of samples to draw from the latent space when
-  computing the loss.
-
 
 # Notes
 - Ensure that the dimensionality of the input data `x_in` aligns with the
@@ -1239,29 +1291,47 @@ function loss(
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32};
     β::Float32=1.0f0,
-    n_samples::Int=1
+    n_samples::Int=1,
+    regularization::Function=nothing,
+    reg_strength::Float32=1.0f0
 ) where {T<:Union{JointDecoder,SplitDecoder}}
-    # Run input x_in through reconstruct function
-    encoder_μ, encoder_logσ, z, (decoder_μ, decoder_logσ) = vae(
-        x_in; latent=true
+    # Run input x_in through the VAE
+    outputs = vae(x_in; latent=true, n_samples=n_samples)
+    encoder_μ, encoder_logσ, z_samples = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
     )
+    decoder_μ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
-    # Compute reconstruction loss for a Gaussian decoder
+    # Compute average reconstruction loss for a Gaussian decoder over all
+    # samples
     logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
                1 / n_samples * sum(decoder_logσ) -
                1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
                                              exp.(2 * decoder_logσ))
 
-    # Compute Kullback-Leibler divergence between approximated decoder
-    # qᵩ(z|x_in) and latent prior distribution π(z)
+    # Compute Kullback-Leibler divergence between approximated encoder qᵩ(z|x_in)
+    # and latent prior distribution π(z)
     kl_qᵩ_π = 1 / 2.0f0 * sum(
         @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
            2.0f0 * encoder_logσ
     )
 
-    # Compute total loss
-    return -logπ_x_z + β * kl_qᵩ_π
-end # function
+    # Compute ELBO
+    total_loss = -logπ_x_z + β * kl_qᵩ_π
+
+    # Add regularization term if provided
+    if regularization !== nothing
+        # Compute regularization term
+        reg_term = regularization(outputs)
+        # Add regularization to total loss
+        total_loss += reg_strength * reg_term
+    end
+
+    return total_loss
+end
+
 
 # ==============================================================================
 
