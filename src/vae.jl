@@ -1024,7 +1024,15 @@ function loss(
     n_samples::Int=1
 )
     # Forward Pass (run input through reconstruct function with n_samples)
-    µ, logσ, z_samples, x̂ = vae(x; latent=true, n_samples=n_samples)
+    outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Unpack outputs
+    µ, logσ, _, x̂ = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z],
+        outputs[:decoder_µ]
+    )
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     logπ_x_z = -1 / (2 * σ^2 * n_samples) * sum((x .- x̂) .^ 2)
@@ -1032,12 +1040,12 @@ function loss(
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
     kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. exp(2.0f0 * logσ) + μ^2 - 1.0f0 - 2.0f0 * logσ
+        @. exp(2.0f0 * logσ) + µ^2 - 1.0f0 - 2.0f0 * logσ
     )
 
     # Compute average loss function
     return -logπ_x_z + β * kl_qᵩ_π
-end # function
+end
 
 
 @doc raw"""
@@ -1088,8 +1096,16 @@ function loss(
     β::Float32=1.0f0,
     n_samples::Int=1
 )
-    # 1. Forward Pass (run input x_in through reconstruct function)
-    µ, logσ, _, x̂ = vae(x_in; latent=true, n_samples=n_samples)
+    # Forward Pass (run input x_in through reconstruct function)
+    outputs = vae(x_in; latent=true, n_samples=n_samples)
+
+    # Unpack outputs
+    µ, logσ, _, x̂ = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z],
+        outputs[:decoder_µ],
+    )
 
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder
     logπ_x_z = -1 / (2 * σ^2 * n_samples) * sum((x_out .- x̂) .^ 2)
@@ -1097,12 +1113,12 @@ function loss(
     # Compute Kullback-Leibler divergence between approximated decoder
     # qᵩ(z|x_in) and latent prior distribution π(z)
     kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. exp(2.0f0 * logσ) + μ^2 - 1.0f0 - 2.0f0 * logσ
+        @. exp(2.0f0 * logσ) + µ^2 - 1.0f0 - 2.0f0 * logσ
     )
 
     # Compute loss function
     return -logπ_x_z + β * kl_qᵩ_π
-end # function
+end
 
 # ==============================================================================
 
