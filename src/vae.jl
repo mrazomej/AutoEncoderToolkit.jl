@@ -1009,7 +1009,7 @@ Where:
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Function=nothing`: A function that computes the regularization 
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes the regularization 
   term based on the VAE outputs. Should return a Float32.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
@@ -1028,7 +1028,7 @@ function loss(
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
     n_samples::Int=1,
-    regularization::Function=nothing,
+    regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input through reconstruct function with n_samples)
@@ -1056,7 +1056,7 @@ function loss(
 
     # Compute average loss function
     return -logπ_x_z + β * kl_qᵩ_π + reg_strength * reg_term
-end
+end # function
 
 @doc raw"""
     `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0, n_samples=1, 
@@ -1090,7 +1090,7 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Function=nothing`: A function that computes the
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. Should return a Float32.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
@@ -1110,7 +1110,7 @@ function loss(
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
     n_samples::Int=1,
-    regularization::Function=nothing,
+    regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input x_in through reconstruct function)
@@ -1155,8 +1155,8 @@ Calculate the loss for a variational autoencoder (VAE) by combining the
 reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
 regularization term, averaged over `n_samples` latent space samples.
 
-The VAE loss is given by: 
-loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)] + reg_strength × reg_term
+The VAE loss is given by: loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)] +
+reg_strength × reg_term
 
 Where:
 - π(x|z) is the probabilistic decoder represented by a Gaussian distribution:
@@ -1177,8 +1177,9 @@ Where:
   balance between reconstruction and regularization.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Function=nothing`: A function that computes the
-  regularization term based on the VAE outputs. Should return a Float32.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the VAE outputs. If provided, it should 
+  return a Float32. If not, no regularization will be applied.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
@@ -1196,7 +1197,7 @@ function loss(
     x::AbstractVector{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
-    regularization::Function=nothing,
+    regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input through reconstruct function with n_samples
@@ -1241,7 +1242,7 @@ end # function
     loss(vae::VAE{<:AbstractVariationalEncoder,T}, 
          x_in::AbstractVector{Float32}, x_out::AbstractVector{Float32};
          β::Float32=1.0f0, n_samples=1, 
-         regularization::Function=nothing, 
+         regularization::Union{Function, Nothing}=nothing, 
          reg_strength::Float32=1.0f0)
 
 Calculate the loss for a variational autoencoder (VAE) by combining the
@@ -1257,8 +1258,7 @@ Where:
   - µ(z) is the mean derived from the decoder.
   - logσ(z) is the log standard deviation, also derived from the decoder.
 - qᵨ(z|x_in) is the approximated encoder with Gaussian distribution: qᵨ(z|x_in)
-  =
-  N(g(x_in), h(x_in)).
+  = N(g(x_in), h(x_in)).
   - g(x_in) and h(x_in) respectively define the mean and covariance of the
     encoder.
 
@@ -1274,8 +1274,9 @@ Where:
   balance between reconstruction and regularization.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Function=nothing`: A function that computes the
-  regularization term based on the VAE outputs. Should return a Float32.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the VAE outputs. If provided, it should 
+  return a Float32. If not, no regularization will be applied.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
@@ -1294,7 +1295,7 @@ function loss(
     x_out::AbstractVector{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
-    regularization::Function=nothing,
+    regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input x_in through the VAE
