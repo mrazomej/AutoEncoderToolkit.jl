@@ -102,4 +102,12 @@ module diffgeo
 include("diffgeo.jl")
 end # submodule
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Include Regularization Functions module
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+module regularization
+include("regularization.jl")
+end # submodule
+
 end
