@@ -831,58 +831,47 @@ end # struct
 Flux.@functor VAE
 
 @doc raw"""
-    (vae::VAE{JointEncoder,SimpleDecoder})(x::AbstractVecOrMat{Float32}; 
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
-    latent::Bool=false)
+    (vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder})(
+        x::AbstractVecOrMat{Float32}; 
+        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
+        latent::Bool=false, n_samples::Int=1)
 
-Processes the given input data `x` through a VAE that consists of a
-`JointEncoder` and a `SimpleDecoder`.
+Processes the input data `x` through a VAE that consists of an encoder and a
+`SimpleDecoder`.
 
 # Arguments
 - `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
-  or a matrix where each column represents a separate sample from the data
-  space.
+  or a matrix where each column represents a separate sample.
 
 # Optional Keyword Arguments
 - `prior::Distributions.Sampleable`: Specifies the prior distribution to be used
   during the reparametrization trick. Defaults to a standard normal
   distribution.
-- `latent::Bool`: If set to `true`, returns the latent variables (mean, log
-  standard deviation, and the sampled latent representation) alongside the
-  reconstructed data. Defaults to `false`.
-- `n_samples::Int=1`: The number of samples to draw using the reparametrization
+- `latent::Bool`: If set to `true`, returns a dictionary containing the latent
+  variables (mean, log standard deviation, and the sampled latent
+  representation) alongside the mean of the reconstructed data. Defaults to
+  `false`.
+- `n_samples::Int=1`: Number of samples to draw using the reparametrization
   trick.
 
 # Returns
 - If `latent=false`: `Array{Float32}`, the reconstructed data after processing
-  through the encoder, performing the reparametrization trick, and passing
-  through the decoder. The last dimension of the array will be of size
-  `n_samples`, containing multiple reconstructions based on the number of
-  samples from the latent space.
-- If `latent=true`: A tuple containing the mean, log standard deviation, an
-  array of `n_samples` sampled latent representations, and the reconstructed
-  data. The last dimension of the reconstructed data in the tuple will be of
-  size `n_samples`.
+  through the encoder and decoder.
+- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
+  and `:decoder_µ`, containing the corresponding values.
 
 # Description
-The function first encodes the input data `x` using the `JointEncoder` to obtain
-the mean and log standard deviation of the latent space representation. It then
-uses the reparametrization trick to sample from this latent distribution, which
-is then decoded using the `SimpleDecoder` to produce the final reconstructed
-data.
-
-# Example
-```julia
-vae_model = VAE{JointEncoder,SimpleDecoder}(...)
-input_data = ... 
-reconstructed_data = vae_model(input_data; latent=true)
-```
+The function first encodes the input `x` using the encoder to get the mean and
+log standard deviation of the latent space representation. Using the
+reparametrization trick, it samples from this latent distribution, which is then
+decoded using the `SimpleDecoder`.
 
 # Note
-Ensure that the input data x matches the expected input dimensionality for the
+Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the VAE.
 """
-function (vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder})(
+
+function (vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder})(
     x::AbstractVecOrMat{Float32},
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
     latent::Bool=false,
@@ -899,7 +888,84 @@ function (vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder})(
     # Check if latent variables should be returned
     if latent
         # Run latent sample through decoder
-        return encoder_µ, encoder_logσ, z_sample, vae.decoder(z_sample)
+        return Dict(
+            :encoder_µ => encoder_µ,
+            :encoder_logσ => encoder_logσ,
+            :z => z_sample,
+            :decoder_µ => vae.decoder(z_sample)
+        )
+    else
+        # Run latent sample through decoder
+        return vae.decoder(z_sample)
+    end # if
+end # function
+
+@doc raw"""
+    (vae::VAE{<:AbstractVariationalEncoder,T})(
+        x::AbstractVecOrMat{Float32}; 
+        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
+        latent::Bool=false, n_samples::Int=1) where {T<:Union{JointDecoder,SplitDecoder}}
+
+Processes the input data `x` through a VAE, consisting of an encoder and either
+a `JointDecoder` or a `SplitDecoder`.
+
+# Arguments
+- `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
+  or a matrix where each column represents a separate sample.
+
+# Optional Keyword Arguments
+- `prior::Distributions.Sampleable`: Specifies the prior distribution to be used
+  during the reparametrization trick. Defaults to a standard normal
+  distribution.
+- `latent::Bool`: If set to `true`, returns a dictionary containing the latent
+  variables (mean, log standard deviation, and the sampled latent
+  representation) as well as the mean and log standard deviation of the
+  reconstructed data. Defaults to `false`.
+- `n_samples::Int=1`: Number of samples to draw using the reparametrization
+  trick.
+
+# Returns
+- If `latent=false`: `Array{Float32}`, the reconstructed data after processing
+  through the encoder and decoder.
+- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
+  `:decoder_µ`, and `:decoder_logσ`, containing the corresponding values.
+
+# Description
+The function first encodes the input `x` to obtain the mean and log standard
+deviation of the latent space. Using the reparametrization trick, it samples
+from this distribution, which is then decoded.
+
+# Note
+Ensure the input data `x` matches the expected input dimensionality for the
+encoder in the VAE.
+"""
+function (vae::VAE{<:AbstractVariationalEncoder,T})(
+    x::AbstractVecOrMat{Float32},
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
+    latent::Bool=false,
+    n_samples::Int=1
+) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Run input through encoder to obtain mean and log std
+    encoder_µ, encoder_logσ = vae.encoder(x)
+
+    # Run reparametrization trick
+    z_sample = reparameterize(
+        encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples
+    )
+
+    # Run input through decoder to optain mean and log std
+    decoder_µ, decoder_logσ = vae.decoder(z_sample)
+
+    # Check if latent variables should be returned
+    if latent
+        # Run latent sample through decoder
+        return Dict(
+            :encoder_µ => encoder_µ,
+            :encoder_logσ => encoder_logσ,
+            :z => z_sample,
+            :decoder_µ => decoder_µ,
+            :decoder_logσ => decoder_logσ
+        )
     else
         # Run latent sample through decoder
         return vae.decoder(z_sample)
