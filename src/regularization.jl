@@ -36,7 +36,7 @@ new, unseen data.
 - Ensure that the keys in `reg_flags` are a subset of the keys in `vae_outputs`.
 """
 function l2_regularization(
-    vae_outputs::Dict{Symbol,Any}, reg_flags::Dict{Symbol,Bool}
+    vae_outputs::Dict{Symbol,<:Any}, reg_flags::Dict{Symbol,Bool}
 )::Float32
     # Ensure all keys in reg_flags are in vae_outputs
     if !all(key in keys(vae_outputs) for key in keys(reg_flags))
@@ -85,7 +85,7 @@ predictions.
   value.
 """
 function min_variance_regularization(
-    vae_outputs::Dict{Symbol,Any}, σ_min::Float32
+    vae_outputs::Dict{Symbol,<:Any}, σ_min::Float32
 )::Float32
     # Extract decoder log variance
     decoder_logσ = vae_outputs[:decoder_logσ]
@@ -127,7 +127,7 @@ uncertain.
   valid target.
 """
 function entropy_regularization(
-    vae_output::Dict{Symbol,Any}, target::Symbol
+    vae_output::Dict{Symbol,<:Any}, target::Symbol
 )::Float32
     # Check if the target is valid
     if !(target in [:encoder_logσ, :decoder_logσ])
