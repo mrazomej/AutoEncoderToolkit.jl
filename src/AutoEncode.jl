@@ -23,11 +23,17 @@ abstract type AbstractVariationalAutoEncoder <: AbstractAutoEncoder end
 # Define main abstract enconder
 abstract type AbstractEncoder end
 
+# Define abstract type that captures deterministic enconders
+abstract type AbstractDeterministicEncoder <: AbstractEncoder end
+
 # Define abstract type that captures stochastic enconders
 abstract type AbstractVariationalEncoder <: AbstractEncoder end
 
 # Define main abstract decoder
 abstract type AbstractDecoder end
+
+# Define abstract type that captures deterministic decoders
+abstract type AbstractDeterministicDecoder <: AbstractDecoder end
 
 # Define abstract type that captures stochastic decoders
 abstract type AbstractVariationalDecoder <: AbstractDecoder end
