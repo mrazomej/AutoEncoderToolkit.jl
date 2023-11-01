@@ -824,7 +824,10 @@ in between. The encoder compresses the input into a low-dimensional
 probabilistic representation q(z|x). The decoder tries to reconstruct the
 original input from a sampled point in the latent space p(x|z). 
 """
-mutable struct VAE{E<:AbstractVariationalEncoder,D<:AbstractVariationalDecoder} <: AbstractVariationalAutoEncoder
+mutable struct VAE{
+    E<:AbstractVariationalEncoder,
+    D<:AbstractVariationalDecoder
+} <: AbstractVariationalAutoEncoder
     encoder::E
     decoder::D
 end # struct
@@ -1202,11 +1205,15 @@ function loss(
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input through reconstruct function with n_samples
     outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
     encoder_µ, encoder_logσ, z_samples = (
         outputs[:encoder_µ],
         outputs[:encoder_logσ],
         outputs[:z]
     )
+
+    # Extract decoder-related terms
     decoder_µ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
     # Compute average reconstruction loss for a Gaussian decoder over all
@@ -1300,11 +1307,14 @@ function loss(
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Run input x_in through the VAE
     outputs = vae(x_in; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
     encoder_μ, encoder_logσ, z_samples = (
         outputs[:encoder_µ],
         outputs[:encoder_logσ],
         outputs[:z]
     )
+    # Extract decoder-related terms
     decoder_μ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
     # Compute average reconstruction loss for a Gaussian decoder over all
@@ -1374,8 +1384,16 @@ function loss_terms(
     kl::Bool=true,
     n_samples::Int=1
 )
-    # Forward Pass (run input through reconstruct function)
-    μ, logσ, _, x̂ = vae(x; latent=true, n_samples=n_samples)
+    # Forward Pass (run input x_in through reconstruct function)
+    outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Unpack outputs
+    µ, logσ, _, x̂ = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z],
+        outputs[:decoder_µ]
+    )
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder if logpost is true, otherwise
     # return nothing
@@ -1435,7 +1453,15 @@ function loss_terms(
     n_samples::Int=1
 )
     # Forward Pass (run input x_in through reconstruct function)
-    μ, logσ, _, x̂ = vae(x_in; latent=true, n_samples=n_samples)
+    outputs = vae(x_in; latent=true, n_samples=n_samples)
+
+    # Unpack outputs
+    µ, logσ, _, x̂ = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z],
+        outputs[:decoder_µ]
+    )
 
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder if logpost is true,
     # otherwise return nothing
@@ -1490,10 +1516,18 @@ function loss_terms(
     kl::Bool=true,
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
-    # Run input through reconstruct function
-    encoder_μ, encoder_logσ, z, (decoder_µ, decoder_logσ) = vae(
-        x; latent=true, n_samples=n_samples
+    # Run input through reconstruct function with n_samples
+    outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
+    encoder_µ, encoder_logσ, z_samples = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
     )
+
+    # Extract decoder-related terms
+    decoder_µ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder if logpost is true, otherwise
     # return nothing
@@ -1553,10 +1587,17 @@ function loss_terms(
     kl::Bool=true,
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
-    # Run input x_in through reconstruct function
-    encoder_μ, encoder_logσ, z, (decoder_μ, decoder_logσ) = vae(
-        x_in; latent=true
+    # Run input x_in through the VAE
+    outputs = vae(x_in; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
+    encoder_μ, encoder_logσ, z_samples = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
     )
+    # Extract decoder-related terms
+    decoder_μ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
     # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder if logpost is true,
     # otherwise return nothing
