@@ -4,11 +4,11 @@ using ..AutoEncode: JointEncoder, SimpleDecoder, JointDecoder, SplitDecoder
 # ==============================================================================
 
 @doc raw"""
-    l2_regularization(vae_outputs::Dict{Symbol, Any}, 
+    l2_regularization(outputs::Dict{Symbol, Any}, 
                     reg_flags::Dict{Symbol, Bool})
 
 Compute the L2 regularization term (also known as Ridge regularization) based on
-the VAE outputs and the `reg_flags` dictionary.
+the autoencoder outputs and the `reg_flags` dictionary.
 
 L2 regularization is defined as: L₂(v) = λ ∑ᵢ vᵢ²
 
@@ -24,23 +24,23 @@ boundaries or function approximations. This helps in improving generalization to
 new, unseen data.
 
 # Arguments
-- `vae_outputs::Dict{Symbol, Any}`: Dictionary containing outputs from the VAE
+- `outputs::Dict{Symbol, Any}`: Dictionary containing outputs from the AE or VAE
   model.
 - `reg_flags::Dict{Symbol, Bool}`: Dictionary that specifies which entries from
-  `vae_outputs` to consider for regularization.
+  `outputs` to consider for regularization.
 
 # Returns
 - `reg_term::Float32`: The computed L2 regularization value.
 
 # Notes
-- Ensure that the keys in `reg_flags` are a subset of the keys in `vae_outputs`.
+- Ensure that the keys in `reg_flags` are a subset of the keys in `outputs`.
 """
 function l2_regularization(
-    vae_outputs::Dict{Symbol,<:Any}, reg_flags::Dict{Symbol,Bool}
+    outputs::Dict{Symbol,<:Any}, reg_flags::Dict{Symbol,Bool}
 )::Float32
-    # Ensure all keys in reg_flags are in vae_outputs
-    if !all(key in keys(vae_outputs) for key in keys(reg_flags))
-        error("All keys in reg_flags must exist in vae_outputs!")
+    # Ensure all keys in reg_flags are in outputs
+    if !all(key in keys(outputs) for key in keys(reg_flags))
+        error("All keys in reg_flags must exist in outputs!")
     end
 
     # Initialize the regularization term to zero
@@ -49,7 +49,7 @@ function l2_regularization(
     for (key, flag) in reg_flags
         if flag
             # L2 regularization for the given key's value
-            reg_term += sum(vae_outputs[key] .^ 2)
+            reg_term += sum(outputs[key] .^ 2)
         end # if 
     end # for
 
