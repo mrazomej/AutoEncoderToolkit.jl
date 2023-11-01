@@ -3,6 +3,9 @@ import Flux
 import NNlib
 import SimpleChains
 
+# Import Stats libraries
+import StatsBase
+
 ##
 
 # Import Abstract Types
@@ -46,11 +49,11 @@ a deterministic autoencoder.
 # Arguments
 - `n_input::Int`: The dimensionality of the input data.
 - `n_latent::Int`: The dimensionality of the latent space.
-- `latent_activation::Function`: Activation function for the latent space layer.
 - `encoder_neurons::Vector{<:Int}`: A vector specifying the number of neurons in
   each layer of the encoder network.
 - `encoder_activation::Vector{<:Function}`: Activation functions corresponding
   to each layer in the `encoder_neurons`.
+- `latent_activation::Function`: Activation function for the latent space layer.
 
 ## Optional Keyword Arguments
 - `init::Function=Flux.glorot_uniform`: The initialization function used for the
@@ -62,8 +65,7 @@ a deterministic autoencoder.
 # Examples
 ```julia
 encoder = Encoder(784, 20, tanh, [400], [relu])
-```
-
+````
 # Notes
 The length of encoder_neurons should match the length of encoder_activation,
 ensuring that each layer in the encoder has a corresponding activation function.
@@ -71,36 +73,36 @@ ensuring that each layer in the encoder has a corresponding activation function.
 function Encoder(
     n_input::Int,
     n_latent::Int,
-    latent_activation::Function,
-    encoder::Vector{<:Int},
-    encoder_activation::Vector{<:Function};
+    encoder_neurons::Vector{<:Int},
+    encoder_activation::Vector{<:Function},
+    latent_activation::Function;
     init::Function=Flux.glorot_uniform
 )
-    # Check there's enough activation functions for all layers
-    if length(encoder_activation) != length(encoder)
+    # Ensure there's a matching activation function for every layer in the encoder
+    if length(encoder_activation) != length(encoder_neurons)
         error("Each layer needs exactly one activation function in encoder")
     end # if
-
     # Initialize list with encoder layers
     layers = []
 
-    # Loop through layers
-    for i = 1:length(encoder)
-        # Check if it is the first layer
+    # Iterate through encoder layers and add them to the list
+    for i = 1:length(encoder_neurons)
+        # For the first layer
         if i == 1
-            # Set first layer from input to encoder with activation
             push!(
                 layers,
                 Flux.Dense(
-                    n_input => encoder[i], encoder_activation[i]; init=init
+                    n_input => encoder_neurons[i],
+                    encoder_activation[i];
+                    init=init
                 )
             )
         else
-            # Set middle layers from input to encoder with activation
+            # For subsequent layers
             push!(
                 layers,
                 Flux.Dense(
-                    encoder[i-1] => encoder[i],
+                    encoder_neurons[i-1] => encoder_neurons[i],
                     encoder_activation[i];
                     init=init
                 )
@@ -108,11 +110,12 @@ function Encoder(
         end # if
     end # for
 
-    # Add last layer from encoder to latent space with activation
+    # Add the layer mapping to the latent space, with its specified activation
+    # function
     push!(
         layers,
         Flux.Dense(
-            encoder[end] => n_latent,
+            encoder_neurons[end] => n_latent,
             latent_activation;
             init=init
         )
@@ -178,8 +181,8 @@ end # struct
 Flux.@functor Decoder
 
 @doc raw"""
-    Decoder(n_input, n_latent, output_activation, decoder_neurons, 
-            decoder_activation; init=Flux.glorot_uniform)
+    Decoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+            output_activation; init=Flux.glorot_uniform)
 
 Construct and initialize a `Decoder` struct that defines a decoder network for a
 deterministic autoencoder.
@@ -188,11 +191,11 @@ deterministic autoencoder.
 - `n_input::Int`: The dimensionality of the output data (which typically matches
   the input data dimensionality of the autoencoder).
 - `n_latent::Int`: The dimensionality of the latent space.
-- `output_activation::Function`: Activation function for the final output layer.
 - `decoder_neurons::Vector{<:Int}`: A vector specifying the number of neurons in
   each layer of the decoder network.
 - `decoder_activation::Vector{<:Function}`: Activation functions corresponding
   to each layer in the `decoder_neurons`.
+- `output_activation::Function`: Activation function for the final output layer.
 
 ## Optional Keyword Arguments
 - `init::Function=Flux.glorot_uniform`: The initialization function used for the
@@ -213,13 +216,13 @@ ensuring that each layer in the decoder has a corresponding activation function.
 function Decoder(
     n_input::Int,
     n_latent::Int,
-    output_activation::Function,
-    decoder::Vector{<:Int},
-    decoder_activation::Vector{<:Function};
+    decoder_neurons::Vector{<:Int},
+    decoder_activation::Vector{<:Function},
+    output_activation::Function;
     init::Function=Flux.glorot_uniform
 )
     # Check there's enough activation functions for all layers
-    if length(decoder_activation) != length(decoder)
+    if length(decoder_activation) != length(decoder_neurons)
         error("Each layer needs exactly one activation function in decoder")
     end # if
 
@@ -229,28 +232,32 @@ function Decoder(
     # Add first layer from latent space to decoder
     push!(
         layers,
-        Flux.Dense(n_latent => decoder[1], decoder_activation[1]; init=init)
-    )
-
-    # Add last layer from decoder to output
-    push!(
-        layers, Flux.Dense(decoder[end] => n_input, output_activation)
+        Flux.Dense(
+            n_latent => decoder_neurons[1],
+            decoder_activation[1];
+            init=init
+        )
     )
 
     # Check if there are multiple middle layers
-    if length(decoder) > 1
+    if length(decoder_neurons) > 1
         # Loop through middle layers
-        for i = 2:length(decoder)
+        for i = 2:length(decoder_neurons)
             # Set middle layers of decoder
             push!(
                 layers,
                 Flux.Dense(
-                    decoder[i-1] => decoder[i],
+                    decoder_neurons[i-1] => decoder_neurons[i],
                     decoder_activation[i]; init=init
                 )
             )
         end # for
     end # if
+
+    # Add last layer from decoder to output
+    push!(
+        layers, Flux.Dense(decoder_neurons[end] => n_input, output_activation)
+    )
 
     return Decoder(Flux.Chain(layers...))
 end # function
@@ -365,7 +372,391 @@ function (ae::AE{Encoder,Decoder})(
     end # if
 end # function
 
+# ==============================================================================
 
+@doc raw"""
+    mse_loss(ae::AE, 
+             x::AbstractVector{Float32}; 
+             regularization::Union{Function, Nothing}=nothing, 
+             reg_strength::Float32=1.0f0)
+
+Calculate the loss for an autoencoder (AE) by computing the mean squared error
+(MSE) reconstruction loss and a possible regularization term.
+
+The AE loss is given by: loss = MSE(x, x̂) + reg_strength × reg_term
+
+Where:
+- x is the input vector.
+- x̂ is the reconstructed output from the AE.
+- reg_strength × reg_term is an optional regularization term.
+
+# Arguments
+- `ae::AE`: An AE model.
+- `x::AbstractVector{Float32}`: Input vector.
+
+# Optional Keyword Arguments
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the AE outputs. If provided, it should return
+  a Float32. If not, no regularization will be applied.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+
+# Returns
+- `loss::Float32`: The computed average AE loss value for the given input `x`,
+  including possible regularization terms.
+
+# Notes
+- Ensure that the dimensionality of the input data `x` aligns with the encoder's
+  expected input in the AE.
+- For batch processing or evaluating an entire dataset, use:
+  `sum(mse_loss.(Ref(ae), eachcol(x)))`.
+"""
+function mse_loss(
+    ae::AE,
+    x::AbstractVector{Float32};
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+)
+    # Run input through the AE to obtain the reconstruction
+    x̂ = ae(x)
+
+    # Compute the MSE loss
+    mse = Flux.mse(x̂, x)
+
+    # Initialize total loss with MSE
+    total_loss = mse
+
+    # Add regularization term if provided
+    if regularization !== nothing
+        # Compute regularization term
+        reg_term = regularization(ae, x)
+        # Add regularization to total loss
+        total_loss += reg_strength * reg_term
+    end # if
+
+    return total_loss
+end # function
+
+@doc raw"""
+    mse_loss(ae::AE, 
+             x_in::AbstractVector{Float32}, 
+             x_out::AbstractVector{Float32};
+             regularization::Union{Function, Nothing}=nothing, 
+             reg_strength::Float32=1.0f0)
+
+Calculate the mean squared error (MSE) loss for an autoencoder (AE) using
+separate input and target output vectors.
+
+The AE loss is computed as: loss = MSE(x_out, x̂) + reg_strength × reg_term
+
+Where:
+- x_out is the target output vector.
+- x̂ is the reconstructed output from the AE given x_in as input.
+- reg_strength × reg_term is an optional regularization term.
+
+# Arguments
+- `ae::AE`: An AE model.
+- `x_in::AbstractVector{Float32}`: Input vector to the AE encoder.
+- `x_out::AbstractVector{Float32}`: Target output vector to compute the
+  reconstruction error.
+
+# Optional Keyword Arguments
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the AE outputs. Should return a Float32.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+
+# Returns
+- `Float32`: The computed loss value between the target `x_out` and its
+  reconstructed counterpart from `x_in`, including possible regularization
+  terms.
+
+# Note
+Ensure that the input data `x_in` matches the expected input dimensionality for
+the encoder in the AE.
+"""
+function mse_loss(
+    ae::AE,
+    x_in::AbstractVector{Float32},
+    x_out::AbstractVector{Float32};
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+)
+    # Run input through the AE to obtain the reconstruction
+    x̂ = ae(x_in)
+
+    # Compute the MSE loss between the target output and the reconstructed output
+    mse = Flux.mse(x̂, x_out)
+
+    # Initialize total loss with MSE
+    total_loss = mse
+
+    # Add regularization term if provided
+    if regularization !== nothing
+        # Compute regularization term
+        reg_term = regularization(ae, x_in, x_out)
+        # Add regularization to total loss
+        total_loss += reg_strength * reg_term
+    end
+
+    return total_loss
+end # function
+
+# ==============================================================================
+
+@doc raw"""
+    `train!(ae, x, opt; loss_function, loss_kwargs...)`
+
+Customized training function to update parameters of an autoencoder given a
+specified loss function.
+
+# Arguments
+- `ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder}`: A
+  struct containing the elements of an autoencoder.
+- `x::AbstractVector{Float32}`: Input data on which the autoencoder will be
+  trained.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Train.setup`.
+
+# Optional Keyword Arguments
+- `loss_function::Function`: The loss function used for training. It should
+  accept the autoencoder model and input data `x`, and return a loss value.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Additional arguments for the
+  loss function.
+
+# Description
+Trains the autoencoder by:
+1. Computing the gradient of the loss with respect to the autoencoder
+   parameters.
+2. Updating the autoencoder parameters using the optimizer.
+
+# Examples
+```julia
+opt = Flux.setup(Optax.adam(1e-3), ae)
+for x in dataloader
+    train!(ae, x, opt; loss_function)
+end
+```
+"""
+function train!(
+    ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder},
+    x::AbstractVector{Float32},
+    opt::NamedTuple;
+    loss_function::Function=mse_loss,
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+)
+    # Compute AE gradient
+    ∇loss_ = Flux.gradient(params(ae)) do
+        loss_function(ae(x), x; loss_kwargs...)
+    end # do block
+    # Update parameters
+    Flux.Optimisers.update!(opt, ae, ∇loss_[1])
+end # function
+
+@doc raw"""
+train!(ae, x, opt; loss_function, loss_kwargs, average)
+
+Customized training function to update parameters of an autoencoder when
+provided with matrix data, where each column in x_in and x_out represents an
+individual sample.
+
+# Arguments
+
+- `ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder}`: A
+  struct containing the elements of an autoencoder.
+- `x::AbstractMatrix{Float32}`: Matrix of input data samples on which to
+  evaluate the loss function. Each column represents an individual sample.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Train.setup`.
+
+# Optional Keyword Arguments
+
+- `loss_function::Function=loss`: The loss function used for training. It should
+  accept the autoencoder model, input data `x_in`, output data `x_out`, and
+  keyword arguments in that order.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `reg_strength` if a
+  regularization function is included.
+- `average::Bool=true`: If true, computes and averages the gradient for all
+  samples in x_in and x_out before updating parameters. If false, updates
+  parameters after computing the gradient for each sample.
+
+# Description
+
+Trains the autoencoder on matrix data by:
+
+1. Computing the gradient of the loss w.r.t the autoencoder parameters, either
+for each sample individually or averaged across all samples.
+2. Updating the autoencoder parameters using the optimizer.
+
+# Examples
+```
+opt = Flux.setup(Optax.adam(1e-3), ae)
+for x in dataloader
+    train!(ae, x, opt; loss_function, average=true)
+end
+```
+"""
+function train!(
+    ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder},
+    x::AbstractMatrix{Float32},
+    opt::NamedTuple;
+    loss_function::Function=mse_loss,
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    average=true
+)
+    # Decide on training approach based on 'average'
+    if average
+        # Compute the averaged gradient across all samples
+        ∇loss_ = Flux.gradient(ae) do ae_model
+            StatsBase.mean(
+                loss_function.(Ref(ae_model), eachcol(x); loss_kwargs...)
+            )
+        end # do block
+        # Update parameters using the optimizer
+        Flux.Optimisers.update!(opt, ae, ∇loss_[1])
+    else
+        foreach(
+            col -> train!(ae, col, opt; loss_function, loss_kwargs...),
+            eachcol(x)
+        )
+    end # if
+end # function
+
+
+# ==============================================================================
+
+@doc raw"""
+    `train!(ae, x_in, x_out, opt; loss_function, loss_kwargs...)`
+
+Customized training function to update parameters of an autoencoder given a
+specified loss function, where the loss is calculated between `x_in` and
+`x_out`.
+
+# Arguments
+- `ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder}`: A struct containing the
+  elements of an autoencoder.
+- `x_in::AbstractVector{Float32}`: Input data on which to evaluate the loss
+  function. Columns represent individual samples.
+- `x_out::AbstractVector{Float32}`: Output data to which the model's output will
+  be compared.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Train.setup`.
+
+# Optional Keyword Arguments
+- `loss_function::Function=loss`: The loss function used for training. It should
+  accept the autoencoder model, input data `x_in`, output data `x_out`, and
+  keyword arguments in that order.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `reg_strength` if a
+  regularization function is included.
+
+# Description
+Trains the autoencoder by:
+1. Computing the gradient of the loss w.r.t the autoencoder parameters.
+2. Updating the autoencoder parameters using the optimizer.
+
+# Examples
+```julia
+opt = Flux.setup(Optax.adam(1e-3), ae)
+for (x_in, x_out) in dataloader
+    train!(ae, x_in, x_out, opt; loss_function)
+end
+```
+"""
+function train!(
+    ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder},
+    x_in::AbstractVector{Float32},
+    x_out::AbstractVector{Float32},
+    opt::NamedTuple;
+    loss_function::Function=mse_loss,
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+)
+    # Compute AE gradient
+    ∇loss_ = Flux.gradient(params(ae)) do
+        loss_function(ae, x_in, x_out; loss_kwargs...)
+    end
+    # Update parameters
+    Flux.Optimisers.update!(opt, vae, ∇loss_[1])
+end
+
+@doc raw"""
+train!(ae, x_in, x_out, opt; loss_function, loss_kwargs, average)
+
+Customized training function to update parameters of an autoencoder when
+provided with matrix data, where each column in x_in and x_out represents an
+individual sample.
+
+# Arguments
+
+- `ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder}`: A
+  struct containing the elements of an autoencoder.
+- `x_in::AbstractMatrix{Float32}`: Matrix of input data samples on which to
+  evaluate the loss function. Each column represents an individual sample.
+- `x_out::AbstractMatrix{Float32}`: Matrix of target output data samples. Each
+  column represents the corresponding output for an individual sample in `x_in`.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Train.setup`.
+
+# Optional Keyword Arguments
+
+- `loss_function::Function=loss`: The loss function used for training. It should
+  accept the autoencoder model, input data `x_in`, output data `x_out`, and
+  keyword arguments in that order.
+- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+  function. These might include parameters like `reg_strength` if a
+  regularization function is included.
+- `average::Bool=true`: If true, computes and averages the gradient for all
+  samples in x_in and x_out before updating parameters. If false, updates
+  parameters after computing the gradient for each sample.
+
+# Description
+
+Trains the autoencoder on matrix data by:
+
+1. Computing the gradient of the loss w.r.t the autoencoder parameters, either
+for each sample individually or averaged across all samples.
+2. Updating the autoencoder parameters using the optimizer.
+
+# Examples
+```
+opt = Flux.setup(Optax.adam(1e-3), ae)
+for (x_in, x_out) in dataloader
+    train!(ae, x_in, x_out, opt; loss_function)
+end
+```
+"""
+function train!(
+    ae::AE{<:AbstractDeterministicEncoder,<:AbstractDeterministicDecoder},
+    x_in::AbstractMatrix{Float32},
+    x_out::AbstractMatrix{Float32},
+    opt::NamedTuple;
+    loss_function::Function=mse_loss,
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    average=true
+)
+    # Decide on training approach based on 'average'
+    if average
+        # Compute the averaged gradient across all samples
+        ∇loss_ = Flux.gradient(ae) do ae_model
+            StatsBase.mean(
+                loss_function.(
+                    Ref(ae_model),
+                    eachcol(x_in),
+                    eachcol(x_out);
+                    loss_kwargs...
+                )
+            )
+        end
+        # Update parameters using the optimizer
+        Flux.Optimisers.update!(opt, ae, ∇loss_[1])
+    else
+        foreach(
+            (col_in, col_out) -> train!(
+                ae, col_in, col_out, opt; loss_function, loss_kwargs...
+            ), zip(eachcol(x_in), eachcol(x_out)
+            )
+        )
+    end # for
+end # function
 
 # ==============================================================================
 
