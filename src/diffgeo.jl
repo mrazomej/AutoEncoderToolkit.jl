@@ -12,7 +12,8 @@ import Flux
 
 # Import Abstract Types
 
-using ..AutoEncode: JointEncoder, SimpleDecoder, JointDecoder, SplitDecoder
+using ..AutoEncode: JointEncoder, SimpleDecoder, JointDecoder, SplitDecoder,
+    AbstractDeterministicDecoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Differential Geometry on Riemmanian Manifolds
@@ -77,6 +78,44 @@ function riemannian_metric(
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input
     jac = first(Zygote.jacobian(manifold, val))
+    # Compute the metric
+    return jac' * jac
+end # function
+
+@doc raw"""
+    riemannian_metric(manifold::AbstractDeterministicDecoder, 
+    val::Vector{T})::Matrix{T} where {T<:AbstractFloat}
+
+Compute the Riemannian metric `M = JᵀJ` of a manifold defined by the decoder
+structure of a variational autoencoder (VAE) using numerical differentiation
+with `Zygote.jl`. The metric is the squared Jacobian matrix, representing the
+local geometry of the decoder's output space in relation to its input space.
+
+# Arguments
+- `manifold::AbstractDeterministicDecoder`: A VAE decoder structure containing a
+  neural network model that defines the manifold. It should be an instance of a
+  subtype of `AbstractDeterministicDecoder`.
+- `val::Vector{T}`: A vector of type `T` where `T` is a subtype of
+  `AbstractFloat`, specifying the input to the decoder (neural network) where
+  the metric should be evaluated.
+
+# Returns
+- `M::Matrix{T}`: The Riemannian metric matrix evaluated at `val`, where `M` is
+  of the same floating-point type as the input `val`.
+
+# Example
+```julia-repl
+decoder_model = Chain(Dense(2, 3, relu), Dense(3, 2))
+decoder = SimpleDecoder(decoder_model)
+val = [1.0, 2.0]
+M = riemannian_metric(decoder, val)
+```
+"""
+function riemannian_metric(
+    manifold::AbstractDeterministicDecoder, val::Vector{T}
+)::Matrix{T} where {T<:AbstractFloat}
+    # Compute Jacobian with respect to the input
+    jac = first(Zygote.jacobian(manifold.decoder, val))
     # Compute the metric
     return jac' * jac
 end # function
