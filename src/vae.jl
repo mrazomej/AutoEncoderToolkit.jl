@@ -18,6 +18,9 @@ using ..AutoEncode: AbstractAutoEncoder, AbstractVariationalAutoEncoder,
     AbstractEncoder, AbstractDecoder, AbstractVariationalEncoder,
     AbstractVariationalDecoder
 
+# Export functions to use elsewhere
+export reparameterize
+
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 #    http://arxiv.org/abs/1312.6114 (2014).
@@ -995,9 +998,9 @@ The loss function combines the reconstruction loss with the Kullback-Leibler
 loss = -⟨π(x|z)⟩ + β × Dₖₗ[qᵩ(z|x) || π(z)] + reg_strength × reg_term
 
 Where:
-- π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲))
-- f(z) is the function defining the mean of the decoder π(x|z)
-- qᵩ(z|x) is the approximated encoder: qᵩ(z|x) = N(g(x), h(x))
+- π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲)) - f(z) is the
+function defining the mean of the decoder π(x|z) - qᵩ(z|x) is the approximated
+encoder: qᵩ(z|x) = N(g(x), h(x))
 - g(x) and h(x) define the mean and covariance of the encoder respectively.
 
 # Arguments
@@ -1012,18 +1015,20 @@ Where:
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes the regularization 
-  term based on the VAE outputs. Should return a Float32.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the VAE outputs. Should return a Float32.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
 - `Float32`: The computed average loss value for the input `x` and its
-  reconstructed counterparts over `n_samples` samples, including possible 
+  reconstructed counterparts over `n_samples` samples, including possible
   regularization terms.
 
 # Note
-Ensure that the input data `x` matches the expected input dimensionality for the
-encoder in the VAE.
+- Ensure that the input data `x` matches the expected input dimensionality for
+  the encoder in the VAE.
+- For batch processing or evaluating an entire dataset, use:
+  `sum(loss.(Ref(vae), eachcol(x)))`.
 """
 function loss(
     vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder},
@@ -1093,8 +1098,8 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes the
-  regularization term based on the VAE outputs. Should return a Float32.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the VAE outputs. Should return a Float32.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
@@ -1103,8 +1108,10 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   terms.
 
 # Note
-Ensure that the input data `x_in` matches the expected input dimensionality for
-the encoder in the VAE.
+- Ensure that the input data `x_in` matches the expected input dimensionality
+  for the encoder in the VAE.
+- For batch processing or evaluating an entire dataset, use:
+    `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
 """
 function loss(
     vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder},
@@ -1340,7 +1347,7 @@ function loss(
         reg_term = regularization(outputs)
         # Add regularization to total loss
         total_loss += reg_strength * reg_term
-    end
+    end # if
 
     return total_loss
 end
