@@ -169,4 +169,5 @@ function locality_sampler(
         return @view data[:, [idx_primary; idx_secondary]]
     else
         return [idx_primary; idx_secondary]
+    end # if
 end # function
