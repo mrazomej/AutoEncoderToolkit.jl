@@ -1558,7 +1558,6 @@ function train!(
 end # function
 
 # ==============================================================================
-# ==============================================================================
 
 """
     `train!(infomaxvae, x_in, x_out, opt_vae, opt_mlp; loss_function=loss, 
@@ -1779,9 +1778,12 @@ optional averaging of gradients across the tensor slices.
 
 # Arguments
 - `infomaxvae::InfoMaxVAE`: The InfoMax VAE model to be trained.
-- `x::AbstractArray{Float32,3}`: A 3D tensor of training data where the first
+- `x_in::AbstractArray{Float32,3}`: A 3D tensor of training data where the first
   dimension corresponds to features, the second to time or sequence, and the
   third to different samples or batch items.
+- `x_out::AbstractArray{Float32,3}`: A 3D tensor of training data where the
+  first dimension corresponds to features, the second to time or sequence, and
+  the third to different samples or batch items.
 - `opt_vae::Flux.Optimise.Optimiser`: The optimizer to use for the VAE
   parameters.
 - `opt_mlp::Flux.Optimise.Optimiser`: The optimizer to use for the MLP
@@ -1806,22 +1808,27 @@ for the MLP computing the variational free energy, defaulting to `mlp_loss`.
 This function allows training on 3D data by handling each slice along the third
 dimension either in an averaged manner or individually. If `average=true`, the
 function computes the gradients by averaging the loss across all slices of the
-3D tensor `x` and updates the VAE and MLP parameters accordingly. If
+3D tensor `x_in` and updates the VAE and MLP parameters accordingly. If
 `average=false`, it loops over each slice of x and applies updates individually
 to each column of the slice.
 
 # Examples
 
 ```julia
-code opt_vae = (...) opt_mlp = (...) x = rand(Float32, 10, 100, 5) 
-# 5 samples of 100 timesteps with 10 features each
+# Assuming the existence of a predefined loss function `loss` and `mlp_loss`
+infomaxvae = InfoMaxVAE(...)  # Instantiate the model
+opt_vae = ADAM(...)  # Set up the optimizer for VAE
+opt_mlp = ADAM(...)  # Set up the optimizer for MLP
+x_in = rand(Float32, 10, 100, 5)
+x_out = rand(Float32, 10, 100, 5)  # Corresponding target data
 
-train!(infomaxvae, x, opt_vae, opt_mlp, average=true)
+train!(infomaxvae, x_in, x_out, opt_vae, opt_mlp, average=true)
 ```
 """
 function train!(
     infomaxvae::InfoMaxVAE,
-    x::AbstractArray{Float32,3},
+    x_in::AbstractArray{Float32,3},
+    x_out::AbstractArray{Float32,3},
     opt_vae::NamedTuple,
     opt_mlp::NamedTuple;
     loss_function::Function=loss,
@@ -1831,7 +1838,7 @@ function train!(
     average=true
 )
     # Permute the data for each slice to compute the mutual information
-    x_shuffled = map(eachslice(x, dims=3)) do slice
+    x_shuffled = map(eachslice(x_in, dims=3)) do slice
         # Shuffling needs to be done along the second dimension for each slice
         slice[:, Random.shuffle(1:size(slice, 2)), :]
     end
@@ -1843,11 +1850,19 @@ function train!(
             StatsBase.mean([
                 StatsBase.mean(
                     loss_function.(
-                        Ref(vae_model), eachcol(slice), Ref(loss_kwargs)...
+                        Ref(vae_model),
+                        eachcol(slice_in),
+                        eachcol(slice_out),
+                        eachcol(slice_shuffled),
+                        Ref(loss_kwargs)...
                     )
                 )
-                for (slice, slice_shuffled) in
-                zip(eachslice(x, dims=3), eachslice(x_shuffled, dims=3))
+                for (slice_in, slice_out, slice_shuffled) in
+                zip(
+                    eachslice(x_in, dims=3),
+                    eachslice(x_out, dims=3),
+                    eachslice(x_shuffled, dims=3)
+                )
             ])
         end # do block
         # Update the VAE network parameters averaging gradient from all datasets
@@ -1858,25 +1873,28 @@ function train!(
             StatsBase.mean([
                 StatsBase.mean(
                     mlp_loss_function.(
-                        Ref(mlp), eachcol(slice), Ref(mlp_loss_kwargs)...
+                        Ref(mlp), eachcol(slice_in), Ref(mlp_loss_kwargs)...
                     )
                 )
-                for slice in eachslice(x, dims=3)
+                for slice in eachslice(x_in, dims=3)
             ])
         end # do block
         # Update the VAE network parameters averaging gradient from all datasets
         Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
     else
         foreach(
-            slice -> foreach(
-                col -> train!(
-                    infomax, col, opt_vae, opt_mlp;
-                    loss_function, loss_kwargs,
-                    mlp_loss_function, mlp_loss_kwargs
+            ((slice_in, slice_out) -> foreach(
+                (col_in, col_out) -> train!(
+                    infomax, col_in, col_out, opt_vae, opt_mlp;
+                    loss_function=loss_function,
+                    loss_kwargs=loss_kwargs,
+                    mlp_loss_function=mlp_loss_function,
+                    mlp_loss_kwargs=mlp_loss_kwargs
                 ),
-                eachcol(slice)
+                zip(eachcol(slice_in), eachcol(slice_out))
             ),
-            eachslice(x, dims=3)
+            zip(eachslice(x_in, dims=3), eachslice(x_out, dims=3))
+        )
         )
     end # if
 end # function
