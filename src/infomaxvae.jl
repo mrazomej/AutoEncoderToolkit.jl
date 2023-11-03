@@ -82,6 +82,7 @@ Flux.@functor InfoMaxVAE
 """
     MLP(
         n_input::Int,
+        n_latent::Int,
         mlp_neurons::Vector{<:Int},
         mlp_activations::Vector{<:Function},
         output_activation::Function;
@@ -94,6 +95,7 @@ ending with a single neuron output layer with its own activation function.
 
 # Arguments
 - `n_input::Int`: Number of input features to the MLP.
+- `n_latent::Int`: The dimensionality of the latent space.
 - `mlp_neurons::Vector{<:Int}`: A vector of integers where each element
   represents the number of neurons in the corresponding hidden layer of the MLP.
 - `mlp_activations::Vector{<:Function}`: A vector of activation functions to be
@@ -124,6 +126,7 @@ does not match the number of layers specified in mlp_neurons.
 """
 function MLP(
     n_input::Int,
+    n_latent::Int,
     mlp_neurons::Vector{<:Int},
     mlp_activation::Vector{<:Function},
     output_activation::Function;
@@ -139,7 +142,9 @@ function MLP(
     # Add first layer (input layer to first hidden layer)
     push!(
         mlp_layers,
-        Flux.Dense(n_input => mlp_neurons[1], mlp_activation[1]; init=init)
+        Flux.Dense(
+            n_input + n_latent => mlp_neurons[1], mlp_activation[1]; init=init
+        )
     )
 
     # Add hidden layers
@@ -162,11 +167,12 @@ function MLP(
 end # function
 
 @doc raw"""
-    (vae::InfoMaxVAE{<:AbstractVariationalEncoder,T, Flux.Chain})(
+    (vae::InfoMaxVAE)(
         x::AbstractVecOrMat{Float32}; 
         prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
         latent::Bool=false, 
-        n_samples::Int=1) where {T<:Union{JointDecoder,SplitDecoder}}
+        n_samples::Int=1
+    ) 
 
 Processes the input data `x` through an InfoMaxVAE, which consists of an
 encoder, a decoder, and a multi-layer perceptron (MLP) to estimate variational
@@ -203,116 +209,23 @@ MLP estimates the variational mutual information.
 Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the InfoMaxVAE.
 """
-function (infomaxvae::InfoMaxVAE{VAE{E,D},Flux.Chain})(
+function (infomaxvae::InfoMaxVAE)(
     x::AbstractVecOrMat{Float32},
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
     latent::Bool=false,
     n_samples::Int=1
-) where {E<:AbstractVariationalEncoder,D<:SimpleDecoder}
-    # Run input through encoder to obtain mean and log std
-    encoder_µ, encoder_logσ = infomaxvae.vae.encoder(x)
-
-    # Run reparametrization trick
-    z_sample = reparameterize(
-        encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples
-    )
-
-    # Run latent sample through decoder to obtain mean and log std
-    decoder_µ = infomaxvae.vae.decoder(z_sample)
-
+)
     # Check if latent variables and mutual information should be returned
     if latent
-        # Compute mutual information estimate using MLP
-        mutual_info = vae.mlp([x; z_sample])
+        outputs = infomaxvae.vae(x, prior; latent=latent, n_samples=n_samples)
 
-        return Dict(
-            :encoder_µ => encoder_µ,
-            :encoder_logσ => encoder_logσ,
-            :z => z_sample,
-            :decoder_µ => decoder_µ,
-            :mutual_info => mutual_info
-        )
+        # Compute mutual information estimate using MLP
+        outputs[:mutual_info] = infomaxvae.mlp([x; outputs[:z]])
+
+        return outputs
     else
         # or return reconstructed data from decoder
-        return decoder_µ
-    end # if
-end # function
-
-@doc raw"""
-    (vae::InfoMaxVAE{<:AbstractVariationalEncoder,T, Flux.Chain})(
-        x::AbstractVecOrMat{Float32}; 
-        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
-        latent::Bool=false, 
-        n_samples::Int=1) where {T<:Union{JointDecoder,SplitDecoder}}
-
-Processes the input data `x` through an InfoMaxVAE, which consists of an
-encoder, a decoder, and a multi-layer perceptron (MLP) to estimate variational
-mutual information.
-
-# Arguments
-- `x::AbstractVecOrMat{Float32}`: The data to be processed. Can be a vector or a
-  matrix where each column represents a separate data sample.
-
-# Optional Keyword Arguments
-- `prior::Distributions.Sampleable`: Specifies the prior distribution for the
-  latent space during the reparametrization trick. Defaults to a standard normal
-  distribution.
-- `latent::Bool`: If `true`, returns a dictionary with latent variables and
-  mutual information estimations along with the reconstruction. Defaults to
-  `false`.
-- `n_samples::Int=1`: The number of samples to draw from the latent distribution
-  using the reparametrization trick.
-
-# Returns
-- If `latent=false`: `Array{Float32}`, the reconstructed data after processing
-  through the encoder and decoder.
-- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
-  `:decoder_µ`, `:decoder_logσ`, and `:mutual_info`, containing the
-  corresponding values.
-
-# Description
-This function first encodes the input `x` to obtain the mean and log standard
-deviation of the latent space. It then samples from this distribution using the
-reparametrization trick. The sampled latent vectors are then decoded, and the
-MLP estimates the variational mutual information.
-
-# Note
-Ensure the input data `x` matches the expected input dimensionality for the
-encoder in the InfoMaxVAE.
-"""
-function (infomaxvae::InfoMaxVAE{VAE{E,D},Flux.Chain})(
-    x::AbstractVecOrMat{Float32},
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
-    latent::Bool=false,
-    n_samples::Int=1
-) where {E<:AbstractVariationalEncoder,D<:Union{JointDecoder,SplitDecoder}}
-    # Run input through encoder to obtain mean and log std
-    encoder_µ, encoder_logσ = infomaxvae.vae.encoder(x)
-
-    # Run reparametrization trick
-    z_sample = reparameterize(
-        encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples
-    )
-
-    # Run latent sample through decoder to obtain mean and log std
-    decoder_µ, decoder_logσ = infomaxvae.vae.decoder(z_sample)
-
-    # Check if latent variables and mutual information should be returned
-    if latent
-        # Compute mutual information estimate using MLP
-        mutual_info = vae.mlp([x; z_sample])
-
-        return Dict(
-            :encoder_µ => encoder_µ,
-            :encoder_logσ => encoder_logσ,
-            :z => z_sample,
-            :decoder_µ => decoder_µ,
-            :decoder_logσ => decoder_logσ,
-            :mutual_info => mutual_info
-        )
-    else
-        # or return reconstructed data from decoder
-        return decoder_µ, decoder_logσ
+        return infomaxvae.vae(x, prior; latent=latent, n_samples=n_samples)
     end # if
 end # function
 
@@ -413,14 +326,14 @@ function loss(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x, z])
+        I_xz = mlp([x; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x, z_shuffle])
+        I_xz_perm = mlp([x; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x); eachcol(z_shuffle)])) / n_samples
     end
 
     # Compute variational mutual information
@@ -538,14 +451,14 @@ function loss(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x_in, z])
+        I_xz = mlp([x_in; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x_in, z_shuffle])
+        I_xz_perm = mlp([x_in; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x_in, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x_in); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x_in, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x_in); eachcol(z_shuffle)])) / n_samples
     end
 
     # Compute variational mutual information
@@ -662,14 +575,14 @@ function loss(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x, z])
+        I_xz = mlp([x; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x, z_shuffle])
+        I_xz_perm = mlp([x; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x); eachcol(z_shuffle)])) / n_samples
     end
 
     # Compute variational mutual information
@@ -690,8 +603,8 @@ function loss(
 end #function
 
 @doc raw"""
-    `loss(vae, mlp, x, x_shuffle; σ=1.0f0, β=1.0f0, α=1.0f0, n_samples=1, 
-    regularization=nothing, reg_strength=1.0f0)`
+    `loss(vae, mlp, x_in, x_out, x_shuffle; σ=1.0f0, β=1.0f0, α=1.0f0, 
+    n_samples=1, regularization=nothing, reg_strength=1.0f0)`
 
 Computes the loss for an InfoMax variational autoencoder (VAE) which integrates
 mutual information constraints, by averaging over `n_samples` samples drawn from
@@ -788,14 +701,14 @@ function loss(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x_in, z])
+        I_xz = mlp([x_in; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x_in, z_shuffle])
+        I_xz_perm = mlp([x_in; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x_in, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x_in); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x_in, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x_in); eachcol(z_shuffle)])) / n_samples
     end # if
 
     # Compute variational mutual information
@@ -884,7 +797,7 @@ function mlp_loss(
     reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input through reconstruct function with n_samples)
-    outputs = vae(x_in; latent=true, n_samples=n_samples)
+    outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Extract relevant variable
     z = outputs[:z]
@@ -897,14 +810,14 @@ function mlp_loss(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x, z])
+        I_xz = mlp([x; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x, z_shuffle])
+        I_xz_perm = mlp([x; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x_in, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([x; eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x_in, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([x_in; eachcol(z_shuffle)])) / n_samples
     end
 
     # Compute regularization term if regularization function is provided
@@ -992,14 +905,14 @@ function loss_terms(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x, z])
+        I_xz = mlp([x; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x, z_shuffle])
+        I_xz_perm = mlp([x; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x); eachcol(z_shuffle)])) / n_samples
     end
 
     # Compute variational mutual information
@@ -1093,14 +1006,14 @@ function loss_terms(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x_in, z])
+        I_xz = mlp([x_in; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x_in, z_shuffle])
+        I_xz_perm = mlp([x_in; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x_in, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x_in); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x_in, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x_in); eachcol(z_shuffle)])) / n_samples
     end
 
     # Compute variational mutual information
@@ -1198,14 +1111,14 @@ function loss_terms(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x, z])
+        I_xz = mlp([x; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x, z_shuffle])
+        I_xz_perm = mlp([x; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x); eachcol(z_shuffle)])) / n_samples
     end
 
     # Compute variational mutual information
@@ -1305,14 +1218,14 @@ function loss_terms(
     # Mutual Information Calculation
     if n_samples == 1
         # Compute mutual information for real input
-        I_xz = mlp([x_in, z])
+        I_xz = mlp([x_in; z])
         # Compute mutual information for shuffled input
-        I_xz_perm = mlp([x_in, z_shuffle])
+        I_xz_perm = mlp([x_in; z_shuffle])
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([x_in, eachcol(z)])) / n_samples
+        I_xz = sum(mlp.([Ref(x_in); eachcol(z)])) / n_samples
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([x_in, eachcol(z_shuffle)])) / n_samples
+        I_xz_perm = sum(mlp.([Ref(x_in); eachcol(z_shuffle)])) / n_samples
     end # if
 
     # Compute variational mutual information
