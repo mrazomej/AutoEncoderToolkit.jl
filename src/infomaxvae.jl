@@ -548,7 +548,7 @@ function loss(
     outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Extract encoder-related terms
-    encoder_µ, encoder_logσ, z_samples = (
+    encoder_µ, encoder_logσ, z = (
         outputs[:encoder_µ],
         outputs[:encoder_logσ],
         outputs[:z]
@@ -674,7 +674,7 @@ function loss(
     outputs = vae(x_in; latent=true, n_samples=n_samples)
 
     # Extract encoder-related terms
-    encoder_µ, encoder_logσ, z_samples = (
+    encoder_µ, encoder_logσ, z = (
         outputs[:encoder_µ],
         outputs[:encoder_logσ],
         outputs[:z]
@@ -1084,7 +1084,7 @@ function loss_terms(
     outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Extract encoder-related terms
-    encoder_µ, encoder_logσ, z_samples = (
+    encoder_µ, encoder_logσ, z = (
         outputs[:encoder_µ],
         outputs[:encoder_logσ],
         outputs[:z]
