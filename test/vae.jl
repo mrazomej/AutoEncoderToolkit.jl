@@ -19,21 +19,12 @@ Random.seed!(42)
 n_input = 3
 # Define number of synthetic data points
 n_data = 50
-# Define number of epochs
-n_epoch = 10
-# Define how often to compute error
-n_error = 100
-# Define batch size
-n_batch = 32
 # Define number of hidden layers
 n_hidden = 2
 # Define number of neurons in non-linear hidden layers
 n_neuron = 10
 # Define dimensionality of latent space
 n_latent = 2
-# Define parameter scheduler
-epoch_change = [1, 10^4, 10^5, 5 * 10^5, 10^6]
-learning_rates = [10^-4, 10^-5, 10^-6, 10^-5.5, 10^-6];
 
 ## =============================================================================
 
@@ -127,17 +118,10 @@ opt_state = Flux.Train.setup(
 )
 
 # Extract parameters
-params_init = deepcopy(
-    Flux.params(
-        vae.encoder.encoder,
-        vae.encoder.µ,
-        vae.encoder.logσ,
-        vae.decoder
-    )
-)
+params_init = deepcopy(Flux.params(vae))
 
 # Loop through a couple of epochs
-losses = Float64[]  # Track the loss
+losses = Float32[]  # Track the loss
 for epoch = 1:10
     Random.seed!(42)
     # Test training function
@@ -149,14 +133,7 @@ end
 @test all(diff(losses) ≠ 0)
 
 # Extract modified parameters
-params_end = deepcopy(
-    Flux.params(
-        vae.encoder.encoder,
-        vae.encoder.µ,
-        vae.encoder.logσ,
-        vae.decoder
-    )
-)
+params_end = deepcopy(Flux.params(vae))
 
 # Check that parameters have significantly changed
 threshold = 1e-5
@@ -225,16 +202,7 @@ opt_state = Flux.Train.setup(
 )
 
 # Extract parameters
-params_init = deepcopy(
-    Flux.params(
-        vae.encoder.encoder,
-        vae.encoder.µ,
-        vae.encoder.logσ,
-        vae.decoder.decoder,
-        vae.decoder.µ,
-        vae.decoder.logσ
-    )
-)
+params_init = deepcopy(Flux.params(vae))
 
 # Loop through a couple of epochs
 losses = Float64[]  # Track the loss
@@ -249,16 +217,7 @@ end
 @test all(diff(losses) ≠ 0)
 
 # Extract parameters
-params_end = deepcopy(
-    Flux.params(
-        vae.encoder.encoder,
-        vae.encoder.µ,
-        vae.encoder.logσ,
-        vae.decoder.decoder,
-        vae.decoder.µ,
-        vae.decoder.logσ
-    )
-)
+params_end = deepcopy(Flux.params(vae))
 
 # Check that parameters have significantly changed
 threshold = 1e-5
@@ -328,15 +287,7 @@ opt_state = Flux.Train.setup(
 )
 
 # Extract parameters
-params_init = deepcopy(
-    Flux.params(
-        vae.encoder.encoder,
-        vae.encoder.µ,
-        vae.encoder.logσ,
-        vae.decoder.µ,
-        vae.decoder.logσ
-    )
-)
+params_init = deepcopy(Flux.params(vae))
 
 # Loop through a couple of epochs
 losses = Float64[]  # Track the loss
@@ -352,15 +303,7 @@ end
 @test all(diff(losses) ≠ 0)
 
 # Extract parameters
-params_end = deepcopy(
-    Flux.params(
-        vae.encoder.encoder,
-        vae.encoder.µ,
-        vae.encoder.logσ,
-        vae.decoder.µ,
-        vae.decoder.logσ
-    )
-)
+params_end = deepcopy(Flux.params(vae))
 
 # Check that parameters have significantly changed
 threshold = 1e-5
