@@ -87,31 +87,44 @@ function cycle_anneal(
 end # function
 
 @doc raw"""
-`locality_sampler(dist, n_primary, n_secondary, k_neighbors)`
+`locality_sampler(data, dist_tree, n_primary, n_secondary, k_neighbors;
+index=false)`
 
-Algorithm to generate mini-batches based on a distance metric `dist`.
+Algorithm to generate mini-batches based on spatial locality as determined by a
+pre-constructed nearest neighbors tree.
 
 # Arguments
-- `dist_tree::NearestNeighbors.NNTree`: `NearestNeighbors.jl` tree determining
-  the distance between data elements.
-- `n_primary:Int`: Number of primary points to sample.
-- `n_secondary:Int`: Number of secondary points to sample.
-- `k_neighbors:Int`: Number of nearest neighbors from which to take the
-  secondary sample.
+- `data::Matrix{<:Float32}`: A matrix containing the data points in its columns.
+- `dist_tree::NearestNeighbors.NNTree`: `NearestNeighbors.jl` tree used to
+  determine the distance between data points.
+- `n_primary::Int`: Number of primary points to sample.
+- `n_secondary::Int`: Number of secondary points to sample from the neighbors of
+  each primary point.
+- `k_neighbors::Int`: Number of nearest neighbors from which to potentially
+  sample the secondary points.
+
+# Optional Keyword Arguments
+- `index::Bool`: If `true`, returns the indices of the selected samples. If
+  `false`, returns the `data` corresponding to the indexes. Defaults to `false`.
 
 # Returns
-- `sample_idx::Vector{Int64}`: List of data index to include in mini-batch.
+- `sample_idx::Vector{Int64}`: Indices of data points to include in the
+  mini-batch.
 
 # Description
-The algorithm proceeds in 3 steps:
+This sampling algorithm consists of three steps:
+1. For each datapoint, determine the `k_neighbors` nearest neighbors using the
+   `dist_tree`.
+2. Uniformly sample `n_primary` points without replacement from all data points.
+3. For each primary point, sample `n_secondary` points without replacement from
+   its `k_neighbors` nearest neighbors.
 
-1. For each datapoint calculate the `k_neighbors` nearest neighbors under the
-metric d. 
-2. Sample `n_primary` primary sampling units with uniform probability without
-replacement among all `N` units. 
-3. For each of the primary sampling units sample `n_secondary` secondary
-sampling units among the primary sampling units `k_neighbors` nearest neighbors
-with uniform probability without replacement.
+# Examples
+```julia
+# Pre-constructed NearestNeighbors.jl tree
+dist_tree = NearestNeighbors.KDTree(data, metric)
+sample_indices = locality_sampler(data, dist_tree, 10, 5, 50)
+```
 
 # Citation
 > Skafte, N., Jø rgensen, M. & Hauberg, S. ren. Reliable training and estimation
@@ -123,7 +136,8 @@ function locality_sampler(
     dist_tree::NearestNeighbors.NNTree,
     n_primary::Int,
     n_secondary::Int,
-    k_neighbors::Int
+    k_neighbors::Int;
+    index::Bool=false
 )
     # Check that n_secondary ≤ k_neighbors
     if !(n_secondary ≤ k_neighbors)
@@ -151,5 +165,8 @@ function locality_sampler(
     ]...)
 
     # Return minibatch data
-    return @view data[:, [idx_primary; idx_secondary]]
+    if index
+        return @view data[:, [idx_primary; idx_secondary]]
+    else
+        return [idx_primary; idx_secondary]
 end # function
