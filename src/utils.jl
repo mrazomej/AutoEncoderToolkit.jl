@@ -166,8 +166,8 @@ function locality_sampler(
 
     # Return minibatch data
     if index
-        return @view data[:, [idx_primary; idx_secondary]]
-    else
         return [idx_primary; idx_secondary]
+    else
+        return @view data[:, [idx_primary; idx_secondary]]
     end # if
 end # function
