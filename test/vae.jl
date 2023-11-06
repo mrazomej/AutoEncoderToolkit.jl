@@ -60,7 +60,7 @@ data = StatsBase.transform(dt, data);
 
 ## =============================================================================
 
-println("Testing VAE = JointEncoder + SimpleDecoder")
+println("Testing VAE = JointLogEncoder + SimpleDecoder")
 
 # Define latent space activation function
 latent_activation = Flux.identity
@@ -76,7 +76,7 @@ decoder_neurons = repeat([n_neuron], n_hidden)
 decoder_activation = repeat([Flux.swish], n_hidden)
 
 # Initialize encoder
-encoder = VAEs.JointEncoder(
+encoder = VAEs.JointLogEncoder(
     n_input,
     n_latent,
     encoder_neurons,
@@ -85,7 +85,7 @@ encoder = VAEs.JointEncoder(
 )
 
 # Test if it returns the right type
-@test isa(encoder, VAEs.JointEncoder)
+@test isa(encoder, VAEs.JointLogEncoder)
 
 # Initialize decoder
 decoder = VAEs.SimpleDecoder(
@@ -144,7 +144,7 @@ threshold = 1e-5
 
 ## =============================================================================
 
-println("Testing VAE = JointEncoder + JointLogDecoder")
+println("Testing VAE = JointLogEncoder + JointLogDecoder")
 
 # Define latent space activation function
 latent_activation = Flux.identity
@@ -160,7 +160,7 @@ decoder_neurons = repeat([n_neuron], n_hidden)
 decoder_activation = repeat([Flux.swish], n_hidden)
 
 # Initialize encoder
-encoder = VAEs.JointEncoder(
+encoder = VAEs.JointLogEncoder(
     n_input,
     n_latent,
     encoder_neurons,
@@ -169,7 +169,7 @@ encoder = VAEs.JointEncoder(
 )
 
 # Test if it returns the right type
-@test isa(encoder, VAEs.JointEncoder)
+@test isa(encoder, VAEs.JointLogEncoder)
 
 # Initialize decoder
 decoder = VAEs.JointLogDecoder(
@@ -228,7 +228,7 @@ threshold = 1e-5
 
 ## =============================================================================
 
-println("Testing VAE = JointEncoder + SplitLogDecoder")
+println("Testing VAE = JointLogEncoder + SplitLogDecoder")
 
 # Define latent space activation function
 latent_activation = Flux.identity
@@ -244,7 +244,7 @@ decoder_neurons = [repeat([n_neuron], n_hidden); n_input]
 decoder_activation = [repeat([Flux.swish], n_hidden); Flux.identity]
 
 # Initialize encoder
-encoder = VAEs.JointEncoder(
+encoder = VAEs.JointLogEncoder(
     n_input,
     n_latent,
     encoder_neurons,
@@ -253,7 +253,7 @@ encoder = VAEs.JointEncoder(
 )
 
 # Test if it returns the right type
-@test isa(encoder, VAEs.JointEncoder)
+@test isa(encoder, VAEs.JointLogEncoder)
 
 # Initialize decoder
 decoder = VAEs.SplitLogDecoder(

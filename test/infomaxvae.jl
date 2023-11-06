@@ -60,7 +60,7 @@ data = StatsBase.transform(dt, data);
 
 ## =============================================================================
 
-println("Testing InfoMaxVAE = JointEncoder + SimpleDecoder")
+println("Testing InfoMaxVAE = JointLogEncoder + SimpleDecoder")
 
 # Define latent space activation function
 latent_activation = Flux.identity
@@ -83,7 +83,7 @@ mlp_activation = repeat([Flux.swish], n_hidden)
 mlp_output_activation = Flux.identity
 
 # Initialize encoder
-encoder = InfoMaxVAEs.JointEncoder(
+encoder = InfoMaxVAEs.JointLogEncoder(
     n_input,
     n_latent,
     encoder_neurons,
