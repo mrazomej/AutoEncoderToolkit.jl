@@ -431,7 +431,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    JointDecoder <: AbstractVariationalDecoder
+    JointLogDecoder <: AbstractVariationalDecoder
 
 An extended decoder structure for VAEs that incorporates separate layers for
 mapping from the latent space to both its mean (`µ`) and log standard deviation
@@ -446,24 +446,24 @@ mapping from the latent space to both its mean (`µ`) and log standard deviation
   to the log standard deviation of the latent space.
 
 # Description
-`JointDecoder` is tailored for VAE architectures where the same decoder network
+`JointLogDecoder` is tailored for VAE architectures where the same decoder network
 is used initially, and then splits into two separate paths for determining both
 the mean and log standard deviation of the latent space.
 """
-mutable struct JointDecoder <: AbstractVariationalDecoder
+mutable struct JointLogDecoder <: AbstractVariationalDecoder
     decoder::Flux.Chain
     µ::Flux.Dense
     logσ::Flux.Dense
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor JointDecoder
+Flux.@functor JointLogDecoder
 
 @doc raw"""
-    JointDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+    JointLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 latent_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `JointDecoder` object for variational autoencoders
+Constructs and initializes a `JointLogDecoder` object for variational autoencoders
 (VAEs). This function sets up a decoder network that first processes the latent
 space and then maps it separately to both its mean (`µ`) and log standard
 deviation (`logσ`).
@@ -484,10 +484,10 @@ deviation (`logσ`).
   parameters.
 
 # Returns
-A `JointDecoder` object with the specified architecture and initialized weights.
+A `JointLogDecoder` object with the specified architecture and initialized weights.
 
 # Description
-This function constructs a `JointDecoder` object, setting up its primary decoder
+This function constructs a `JointLogDecoder` object, setting up its primary decoder
 network based on the provided specifications. The architecture begins with a
 dense layer mapping from the latent space and goes through a sequence of middle
 layers if specified. After processing the latent space through the primary
@@ -501,7 +501,7 @@ n_latent = 64
 decoder_neurons = [128, 256]
 decoder_activation = [relu, relu]
 latent_activation = tanh
-decoder = JointDecoder(
+decoder = JointLogDecoder(
     n_input, n_latent, decoder_neurons, decoder_activation, latent_activation
 )
 ```
@@ -509,7 +509,7 @@ decoder = JointDecoder(
 # Note
 Ensure that the lengths of decoder_neurons and decoder_activation match.
 """
-function JointDecoder(
+function JointLogDecoder(
     n_input::Int,
     n_latent::Int,
     decoder_neurons::Vector{<:Int},
@@ -555,15 +555,15 @@ function JointDecoder(
     )
 
     # Initialize joint decoder
-    return JointDecoder(decoder_chain, µ_layer, logσ_layer)
+    return JointLogDecoder(decoder_chain, µ_layer, logσ_layer)
 end
 
 @doc raw"""
-    (decoder::JointDecoder)(
+    (decoder::JointLogDecoder)(
         z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
     )
 
-Maps the given latent representation `z` through the `JointDecoder` network to
+Maps the given latent representation `z` through the `JointLogDecoder` network to
 produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Arguments
@@ -580,22 +580,22 @@ produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Description
 This function processes the latent space representation `z` using the primary
-neural network of the `JointDecoder` struct. It then separately maps the output
+neural network of the `JointLogDecoder` struct. It then separately maps the output
 of this network to the mean and log standard deviation using the `µ` and `logσ`
 dense layers, respectively.
 
 # Example
 ```julia
-decoder = JointDecoder(...)
+decoder = JointLogDecoder(...)
 z = ... # some latent space representation
 µ, logσ = decoder(z)
 ```
 
 # Note
 Ensure that the latent space representation z matches the expected input
-dimensionality for the JointDecoder.
+dimensionality for the JointLogDecoder.
 """
-function (decoder::JointDecoder)(
+function (decoder::JointLogDecoder)(
     z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
 )
     # Run input through the primary decoder network
@@ -610,7 +610,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    SplitDecoder <: AbstractVariationalDecoder
+    SplitLogDecoder <: AbstractVariationalDecoder
 
 A specialized decoder structure for VAEs that uses distinct neural networks for
 determining the mean (`µ`) and log standard deviation (`logσ`) of the latent
@@ -623,23 +623,23 @@ space.
   latent space and mapping it to its log standard deviation.
 
 # Description
-`SplitDecoder` is designed for VAE architectures where separate decoder networks
+`SplitLogDecoder` is designed for VAE architectures where separate decoder networks
 are preferred for computing the mean and log standard deviation, ensuring that
 each has its own distinct set of parameters and transformation logic.
 """
-mutable struct SplitDecoder <: AbstractVariationalDecoder
+mutable struct SplitLogDecoder <: AbstractVariationalDecoder
     µ::Flux.Chain
     logσ::Flux.Chain
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor SplitDecoder
+Flux.@functor SplitLogDecoder
 
 @doc raw"""
-    SplitDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
+    SplitLogDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
                 logσ_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `SplitDecoder` object for variational autoencoders
+Constructs and initializes a `SplitLogDecoder` object for variational autoencoders
 (VAEs). This function sets up two distinct decoder networks, one dedicated for
 determining the mean (`µ`) and the other for the log standard deviation (`logσ`)
 of the latent space.
@@ -662,11 +662,11 @@ of the latent space.
   parameters.
 
 # Returns
-A `SplitDecoder` object with two distinct networks initialized with the
+A `SplitLogDecoder` object with two distinct networks initialized with the
 specified architectures and weights.
 
 # Description
-This function constructs a `SplitDecoder` object, setting up two separate
+This function constructs a `SplitLogDecoder` object, setting up two separate
 decoder networks based on the provided specifications. The first network,
 dedicated to determining the mean (`µ`), and the second for the log standard
 deviation (`logσ`), both begin with a dense layer mapping from the latent space
@@ -679,7 +679,7 @@ n_latent = 64
 µ_activation = [relu, relu]
 logσ_neurons = [128, 256]
 logσ_activation = [relu, relu]
-decoder = SplitDecoder(
+decoder = SplitLogDecoder(
     n_latent, µ_neurons, µ_activation, logσ_neurons, logσ_activation
 )
 ```
@@ -690,7 +690,7 @@ decoder = SplitDecoder(
 - If µ_neurons[end] or logσ_neurons[end] do not match n_input, the function
   automatically changes this number to match the right dimensionality
 """
-function SplitDecoder(
+function SplitLogDecoder(
     n_input::Int,
     n_latent::Int,
     µ_neurons::Vector{<:Int},
@@ -757,16 +757,16 @@ function SplitDecoder(
     end # for
 
     # Initialize split decoder
-    return SplitDecoder(Flux.Chain(µ_layers...), Flux.Chain(logσ_layers...))
+    return SplitLogDecoder(Flux.Chain(µ_layers...), Flux.Chain(logσ_layers...))
 end # function
 
 @doc raw"""
-    (decoder::SplitDecoder)(
+    (decoder::SplitLogDecoder)(
         z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
     )
 
 Maps the given latent representation `z` through the separate networks of the
-`SplitDecoder` to produce both the mean (`µ`) and log standard deviation
+`SplitLogDecoder` to produce both the mean (`µ`) and log standard deviation
 (`logσ`).
 
 # Arguments
@@ -784,22 +784,22 @@ Maps the given latent representation `z` through the separate networks of the
 
 # Description
 This function processes the latent space representation `z` through two distinct
-neural networks within the `SplitDecoder` struct. The `decoder_µ` network is
+neural networks within the `SplitLogDecoder` struct. The `decoder_µ` network is
 used to produce the mean representation, while the `decoder_logσ` network is
 utilized for the log standard deviation.
 
 # Example
 ```julia
-decoder = SplitDecoder(...)
+decoder = SplitLogDecoder(...)
 z = ... # some latent space representation
 µ, logσ = decoder(z)
 ```
 
 # Note
 Ensure that the latent space representation z matches the expected input
-dimensionality for both networks in the SplitDecoder.
+dimensionality for both networks in the SplitLogDecoder.
 """
-function (decoder::SplitDecoder)(
+function (decoder::SplitLogDecoder)(
     z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
 )
     # Map through the decoder dedicated to the mean
@@ -912,10 +912,10 @@ end # function
     (vae::VAE{<:AbstractVariationalEncoder,T})(
         x::AbstractVecOrMat{Float32}; 
         prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
-        latent::Bool=false, n_samples::Int=1) where {T<:Union{JointDecoder,SplitDecoder}}
+        latent::Bool=false, n_samples::Int=1) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
 
 Processes the input data `x` through a VAE, consisting of an encoder and either
-a `JointDecoder` or a `SplitDecoder`.
+a `JointLogDecoder` or a `SplitLogDecoder`.
 
 # Arguments
 - `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
@@ -952,7 +952,7 @@ function (vae::VAE{<:AbstractVariationalEncoder,T})(
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
     latent::Bool=false,
     n_samples::Int=1
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input through encoder to obtain mean and log std
     encoder_µ, encoder_logσ = vae.encoder(x)
 
@@ -1159,7 +1159,7 @@ end
         β::Float32=1.0f0, 
         n_samples=1, 
         regularization=nothing, 
-        reg_strength=1.0f0) where {T<:Union{JointDecoder,SplitDecoder}}
+        reg_strength=1.0f0) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
 
 Calculate the loss for a variational autoencoder (VAE) by combining the
 reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
@@ -1178,7 +1178,7 @@ Where:
   - g(x) and h(x) respectively define the mean and covariance of the encoder.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointDecoder,SplitDecoder}}`:
+- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`:
   A VAE model.
 - `x::AbstractVector{Float32}`: Input vector.
 
@@ -1209,7 +1209,7 @@ function loss(
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input through reconstruct function with n_samples
     outputs = vae(x; latent=true, n_samples=n_samples)
 
@@ -1277,7 +1277,7 @@ Where:
     encoder.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointDecoder,SplitDecoder}}`:
+- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`:
   A VAE model.
 - `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
 - `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
@@ -1311,7 +1311,7 @@ function loss(
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input x_in through the VAE
     outputs = vae(x_in; latent=true, n_samples=n_samples)
 
@@ -1499,7 +1499,7 @@ Kullback-Leibler (KL) divergence `Dₖₗ[qᵩ(z|x) || π(z)]` separately.
 
 # Arguments
 - `vae::VAE{<:AbstractVariationalEncoder,T}`: A VAE model.
-  - `T<:Union{JointDecoder,SplitDecoder}` ensures the correct VAE type.
+  - `T<:Union{JointLogDecoder,SplitLogDecoder}` ensures the correct VAE type.
 - `x::AbstractVector{Float32}`: Input vector.
 
 # Optional Keyword Arguments
@@ -1522,7 +1522,7 @@ function loss_terms(
     logpost::Bool=true,
     kl::Bool=true,
     n_samples::Int=1
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input through reconstruct function with n_samples
     outputs = vae(x; latent=true, n_samples=n_samples)
 
@@ -1568,7 +1568,7 @@ the Kullback-Leibler (KL) divergence `Dₖₗ[qᵩ(z|x_in) || π(z)]` separately
 
 # Arguments
 - `vae::VAE{<:AbstractVariationalEncoder,T}`: A VAE model.
-  - `T<:Union{JointDecoder,SplitDecoder}` ensures the correct VAE type.
+  - `T<:Union{JointLogDecoder,SplitLogDecoder}` ensures the correct VAE type.
 - `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
 - `x_out::AbstractVector{Float32}`: Target vector for the reconstruction.
 
@@ -1593,7 +1593,7 @@ function loss_terms(
     logpost::Bool=true,
     kl::Bool=true,
     n_samples::Int=1
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input x_in through the VAE
     outputs = vae(x_in; latent=true, n_samples=n_samples)
 

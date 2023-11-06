@@ -13,8 +13,8 @@ import Distances
 # Import Abstract Types
 
 using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
-    AbstractVariationalDecoder, JointEncoder, SimpleDecoder, JointDecoder,
-    SplitDecoder, VAE
+    AbstractVariationalDecoder, JointEncoder, SimpleDecoder, JointLogDecoder,
+    SplitLogDecoder, VAE
 
 using ..VAEs: reparameterize
 
@@ -505,7 +505,7 @@ where:
 - `reg_term` is an optional regularization term.
 
 ## Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointDecoder, SplitDecoder}}`:
+- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder, SplitLogDecoder}}`:
   The VAE model consisting of encoder and decoder components.
 - `mlp::Flux.Chain`: A multi-layer perceptron for estimating mutual information
   I(x;z).
@@ -543,7 +543,7 @@ function loss(
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input through reconstruct function with n_samples
     outputs = vae(x; latent=true, n_samples=n_samples)
 
@@ -628,7 +628,7 @@ where:
 - `reg_term` is an optional regularization term.
 
 ## Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointDecoder, SplitDecoder}}`:
+- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder, SplitLogDecoder}}`:
   The VAE model consisting of encoder and decoder components.
 - `mlp::Flux.Chain`: A multi-layer perceptron for estimating mutual information
   I(x;z).
@@ -669,7 +669,7 @@ function loss(
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input through reconstruct function with n_samples
     outputs = vae(x_in; latent=true, n_samples=n_samples)
 
@@ -1079,7 +1079,7 @@ function loss_terms(
     x::AbstractVector{Float32},
     x_shuffle::AbstractVector{Float32};
     n_samples::Int=1
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input through reconstruct function with n_samples
     outputs = vae(x; latent=true, n_samples=n_samples)
 
@@ -1186,7 +1186,7 @@ function loss_terms(
     x_out::AbstractVector{Float32},
     x_shuffle::AbstractVector{Float32};
     n_samples::Int=1
-) where {T<:Union{JointDecoder,SplitDecoder}}
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Run input through reconstruct function with n_samples
     outputs = vae(x_in; latent=true, n_samples=n_samples)
 

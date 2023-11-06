@@ -1,5 +1,5 @@
 # Import Abstract Types
-using ..AutoEncode: JointEncoder, SimpleDecoder, JointDecoder, SplitDecoder
+using ..AutoEncode: JointEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder
 
 # ==============================================================================
 

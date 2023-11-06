@@ -12,7 +12,7 @@ import Flux
 
 # Import Abstract Types
 
-using ..AutoEncode: JointEncoder, SimpleDecoder, JointDecoder, SplitDecoder,
+using ..AutoEncode: JointEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder,
     AbstractDeterministicDecoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -155,10 +155,10 @@ function riemannian_metric(
 end # function
 
 @doc raw"""
-    riemannian_metric(manifold::JointDecoder, val::Vector{T}) where {T<:AbstractFloat}
+    riemannian_metric(manifold::JointLogDecoder, val::Vector{T}) where {T<:AbstractFloat}
 
 Compute the Riemannian metric `M̲̲` for a stochastic manifold defined by a
-`JointDecoder` using numerical differentiation with `Zygote.jl`. The metric is
+`JointLogDecoder` using numerical differentiation with `Zygote.jl`. The metric is
 evaluated based on the outputs of the neural network with respect to its inputs.
 
 The Riemannian metric of a stochastic manifold with a mean `µ` and standard
@@ -168,7 +168,7 @@ Given that we compute the Jacobian of `logσ` directly, the Jacobian of `σ` is
 obtained using the chain rule.
 
 # Arguments
-- `manifold::JointDecoder`: A VAE decoder structure that has separate paths for
+- `manifold::JointLogDecoder`: A VAE decoder structure that has separate paths for
   determining both the mean and log standard deviation of the latent space.
 - `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
   (neural network) where the metric should be evaluated.
@@ -179,7 +179,7 @@ obtained using the chain rule.
 
 # Example
 ```julia-repl
-model = JointDecoder(
+model = JointLogDecoder(
     Chain(Dense(2, 3, relu), Dense(3, 2)),
     Dense(2, 1),
     Dense(2, 1)
@@ -189,7 +189,7 @@ M = riemannian_metric(model, val)
 ```
 """
 function riemannian_metric(
-    manifold::JointDecoder, val::Vector{T}
+    manifold::JointLogDecoder, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input for the mean µ
     jac_µ = first(
@@ -212,10 +212,10 @@ function riemannian_metric(
 end # function
 
 @doc raw"""
-    riemannian_metric(manifold::SplitDecoder, val::Vector{T}) where {T<:AbstractFloat}
+    riemannian_metric(manifold::SplitLogDecoder, val::Vector{T}) where {T<:AbstractFloat}
 
 Compute the Riemannian metric `M̲̲` for a stochastic manifold defined by a
-`SplitDecoder` using numerical differentiation with `Zygote.jl`. The metric is
+`SplitLogDecoder` using numerical differentiation with `Zygote.jl`. The metric is
 evaluated based on the outputs of the individual neural networks with respect to
 their inputs.
 
@@ -226,7 +226,7 @@ Given that we compute the Jacobian of `logσ` directly, the Jacobian of `σ` is
 obtained using the chain rule.
 
 # Arguments
-- `manifold::SplitDecoder`: A VAE decoder structure that has separate neural
+- `manifold::SplitLogDecoder`: A VAE decoder structure that has separate neural
   networks for determining both the mean and log standard deviation of the
   latent space.
 - `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
@@ -238,7 +238,7 @@ obtained using the chain rule.
 
 # Example
 ```julia-repl
-model = SplitDecoder(
+model = SplitLogDecoder(
     Chain(Dense(2, 3, relu), Dense(3, 1)),
     Chain(Dense(2, 3, relu), Dense(3, 1))
 )
@@ -247,7 +247,7 @@ M = riemannian_metric(model, val)
 ```
 """
 function riemannian_metric(
-    manifold::SplitDecoder, val::Vector{T}
+    manifold::SplitLogDecoder, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input for the mean µ
     jac_µ = first(Zygote.jacobian(manifold.µ, val))
