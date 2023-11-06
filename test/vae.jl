@@ -144,7 +144,7 @@ threshold = 1e-5
 
 ## =============================================================================
 
-println("Testing VAE = JointEncoder + JointDecoder")
+println("Testing VAE = JointEncoder + JointLogDecoder")
 
 # Define latent space activation function
 latent_activation = Flux.identity
@@ -172,7 +172,7 @@ encoder = VAEs.JointEncoder(
 @test isa(encoder, VAEs.JointEncoder)
 
 # Initialize decoder
-decoder = VAEs.JointDecoder(
+decoder = VAEs.JointLogDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -181,7 +181,7 @@ decoder = VAEs.JointDecoder(
 )
 
 # Test if it returns the right type
-@test isa(decoder, VAEs.JointDecoder)
+@test isa(decoder, VAEs.JointLogDecoder)
 
 # Define VAE
 vae = VAEs.VAE(encoder, decoder)
@@ -228,7 +228,7 @@ threshold = 1e-5
 
 ## =============================================================================
 
-println("Testing VAE = JointEncoder + SplitDecoder")
+println("Testing VAE = JointEncoder + SplitLogDecoder")
 
 # Define latent space activation function
 latent_activation = Flux.identity
@@ -256,7 +256,7 @@ encoder = VAEs.JointEncoder(
 @test isa(encoder, VAEs.JointEncoder)
 
 # Initialize decoder
-decoder = VAEs.SplitDecoder(
+decoder = VAEs.SplitLogDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -266,7 +266,7 @@ decoder = VAEs.SplitDecoder(
 )
 
 # Test if it returns the right type
-@test isa(decoder, VAEs.SplitDecoder)
+@test isa(decoder, VAEs.SplitLogDecoder)
 
 # Define VAE
 vae = VAEs.VAE(encoder, decoder)
