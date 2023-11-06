@@ -1145,7 +1145,7 @@ function (decoder::JointDecoder)(
     # Map to mean
     µ = decoder.µ(h)
     # Map to standard deviation
-    σ = decoder.logσ(h)
+    σ = decoder.σ(h)
     return µ, σ
 end # function
 
