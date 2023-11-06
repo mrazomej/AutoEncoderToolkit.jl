@@ -13,7 +13,7 @@ import Distances
 # Import Abstract Types
 
 using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
-    AbstractVariationalDecoder, JointEncoder, SimpleDecoder, JointLogDecoder,
+    AbstractVariationalDecoder, JointLogEncoder, SimpleDecoder, JointLogDecoder,
     SplitLogDecoder, VAE
 
 using ..VAEs: reparameterize

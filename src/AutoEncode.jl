@@ -69,7 +69,7 @@ include("vae.jl")
 end # submodule
 
 # Export VAE structs
-using .VAEs: VAE, JointEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder
+using .VAEs: VAE, JointLogEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Add VAEs module

@@ -12,7 +12,7 @@ import Flux
 
 # Import Abstract Types
 
-using ..AutoEncode: JointEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder,
+using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder,
     AbstractDeterministicDecoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #

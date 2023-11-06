@@ -29,7 +29,7 @@ export reparameterize
 # ==============================================================================
 
 @doc raw"""
-`struct JointEncoder`
+`struct JointLogEncoder`
 
 Default encoder function for variational autoencoders where the same `encoder`
 network is used to map to the latent space mean `µ` and log standard deviation
@@ -45,24 +45,24 @@ network is used to map to the latent space mean `µ` and log standard deviation
 
 # Example
 ```julia
-enc = JointEncoder(
+enc = JointLogEncoder(
     Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
 )
 """
-mutable struct JointEncoder <: AbstractVariationalEncoder
+mutable struct JointLogEncoder <: AbstractVariationalEncoder
     encoder::Flux.Chain
     µ::Flux.Dense
     logσ::Flux.Dense
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor JointEncoder
+Flux.@functor JointLogEncoder
 
 @doc raw"""
-    JointEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
+    JointLogEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
                  latent_activation; init=Flux.glorot_uniform)
 
-Construct and initialize a `JointEncoder` struct that defines an encoder network
+Construct and initialize a `JointLogEncoder` struct that defines an encoder network
 for a variational autoencoder.
 
 # Arguments
@@ -80,18 +80,18 @@ for a variational autoencoder.
   neural network weights.
 
 # Returns
-- A `JointEncoder` struct initialized based on the provided arguments.
+- A `JointLogEncoder` struct initialized based on the provided arguments.
 
 # Examples
 ```julia
-encoder = JointEncoder(784, 20, [400], [relu], tanh)
+encoder = JointLogEncoder(784, 20, [400], [relu], tanh)
 ```
 
 # Notes
 The length of encoder_neurons should match the length of encoder_activation,
 ensuring that each layer in the encoder has a corresponding activation function.
 """
-function JointEncoder(
+function JointLogEncoder(
     n_input::Int,
     n_latent::Int,
     encoder_neurons::Vector{<:Int},
@@ -134,13 +134,13 @@ function JointEncoder(
     )
 
     # Initialize decoder
-    return JointEncoder(Flux.Chain(encoder_layers...), µ_layer, logσ_layer)
+    return JointLogEncoder(Flux.Chain(encoder_layers...), µ_layer, logσ_layer)
 end # function
 
 @doc raw"""
-    (encoder::JointEncoder)(x)
+    (encoder::JointLogEncoder)(x)
 
-Forward propagate the input `x` through the `JointEncoder` to obtain the mean
+Forward propagate the input `x` through the `JointLogEncoder` to obtain the mean
 (`mu`) and log standard deviation (`logσ`) of the latent space.
 
 # Arguments
@@ -153,14 +153,14 @@ Forward propagate the input `x` through the `JointEncoder` to obtain the mean
   through the encoder and subsequently through the `logσ` layer.
 
 # Description
-This method allows for a direct call on an instance of `JointEncoder` with the
+This method allows for a direct call on an instance of `JointLogEncoder` with the
 input data `x`. It first runs the input through the encoder network, then maps
 the output of the last encoder layer to both the mean and log standard deviation
 of the latent space.
 
 # Example
 ```julia
-je = JointEncoder(...)
+je = JointLogEncoder(...)
 mu, logσ = je(some_input)
 ```
 
@@ -168,7 +168,7 @@ mu, logσ = je(some_input)
 Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
-function (encoder::JointEncoder)(x::AbstractVecOrMat{Float32})
+function (encoder::JointLogEncoder)(x::AbstractVecOrMat{Float32})
     # Run input to encoder network
     h = encoder.encoder(x)
     # Map from last encoder layer to latent space mean
