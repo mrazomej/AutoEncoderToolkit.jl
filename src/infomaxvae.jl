@@ -14,7 +14,7 @@ import Distances
 
 using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
     AbstractVariationalDecoder, JointLogEncoder, SimpleDecoder, JointLogDecoder,
-    SplitLogDecoder, VAE
+    SplitLogDecoder, JointDecoder, SplitDecoder, VAE
 
 using ..VAEs: reparameterize
 
@@ -26,8 +26,12 @@ using ..VAEs: reparameterize
 # doi:10.1109/ISIT44484.2020.9174424.
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+# ==============================================================================
+# `InfoMaxVAE <: AbstractVariationalAutoEncoder`
+# ==============================================================================
+
 @doc raw"""
-    `InfoMaxVAE`
+    `InfoMaxVAE <: AbstractVariationalAutoEncoder`
 
 Structure encapsulating an InfoMax variational autoencoder (InfoMaxVAE), an
 architecture designed to enhance the VAE framework by maximizing mutual
@@ -78,6 +82,10 @@ end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor InfoMaxVAE
+
+# ==============================================================================
+# `MLP <: Flux.Chain`
+# ==============================================================================
 
 """
     MLP(
@@ -195,8 +203,8 @@ mutual information.
 # Returns
 - If `latent=false`: `Array{Float32}`, the reconstructed data after processing
   through the encoder and decoder.
-- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
-  `:decoder_µ`, `:decoder_logσ`, and `:mutual_info`, containing the
+- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_(log)σ`,
+  `:z`, `:decoder_µ`, `:decoder_(log)σ`, and `:mutual_info`, containing the
   corresponding values.
 
 # Description
@@ -230,10 +238,14 @@ function (infomaxvae::InfoMaxVAE)(
 end # function
 
 # ==============================================================================
-
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # InfoMaxVAE loss function
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# ==============================================================================
+
+# ==============================================================================
+# Loss InfoMax.VAE{JointLogEncoder,SimpleDecoder}
+# ==============================================================================
 
 @doc raw"""
     `loss(vae, mlp, x, x_shuffle; σ=1.0f0, β=1.0f0, α=1.0f0, n_samples=1, 
@@ -258,8 +270,8 @@ Where:
 - `mlp` is a multi-layer perceptron estimating the mutual information I(x;z).
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder}`: A VAE model with
-  encoder and decoder networks.
+- `vae::VAE{JointLogEncoder,SimpleDecoder}`: A VAE model with encoder and
+  decoder networks.
 - `mlp::Flux.Chain`: A multi-layer perceptron used to compute the mutual
   information term.
 - `x::AbstractVector{Float32}`: Input vector.
@@ -290,7 +302,7 @@ Where:
   `sum(loss.(Ref(vae), eachcol(x), eachcol(x_shuffle)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder},
+    vae::VAE{JointLogEncoder,SimpleDecoder},
     mlp::Flux.Chain,
     x::AbstractVector{Float32},
     x_shuffle::AbstractVector{Float32};
@@ -379,8 +391,8 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   `z`, approximated by a neural network (mlp).
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder}`: A VAE model with
-  encoder and decoder networks.
+- `vae::VAE{JointLogEncoder,SimpleDecoder}`: A VAE model with encoder and
+  decoder networks.
 - `mlp::Flux.Chain`: A multilayer perceptron for approximating the mutual
   information between inputs and latent variables.
 - `x_in::AbstractVector{Float32}`: Input vector for the encoder.
@@ -414,7 +426,7 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
     `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out), eachcol(x_shuffle)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder},
+    vae::VAE{JointLogEncoder,SimpleDecoder},
     mlp::Flux.Chain,
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32},
@@ -478,6 +490,8 @@ function loss(
 end #function
 
 # ==============================================================================
+# Loss InfoMaxVAE.VAE{JointLogEncoder, Union{JointLogDecoder,SplitLogDecoder}}
+# ==============================================================================
 
 @doc raw"""
     `loss(vae, mlp, x, x_shuffle; σ=1.0f0, β=1.0f0, α=1.0f0, n_samples=1, 
@@ -505,8 +519,8 @@ where:
 - `reg_term` is an optional regularization term.
 
 ## Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder, SplitLogDecoder}}`:
-  The VAE model consisting of encoder and decoder components.
+- `vae::VAE{JointLogEncoder, <:Union{JointLogDecoder, SplitLogDecoder}}`: The
+  VAE model consisting of encoder and decoder components.
 - `mlp::Flux.Chain`: A multi-layer perceptron for estimating mutual information
   I(x;z).
 - `x::AbstractVector{Float32}`: Input data vector.
@@ -534,7 +548,7 @@ where:
 `sum(loss.(Ref(vae), eachcol(x), eachcol(x_shuffle)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,T},
+    vae::VAE{JointLogEncoder,T},
     mlp::Flux.Chain,
     x::AbstractVector{Float32},
     x_shuffle::AbstractVector{Float32};
@@ -628,8 +642,8 @@ where:
 - `reg_term` is an optional regularization term.
 
 ## Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder, SplitLogDecoder}}`:
-  The VAE model consisting of encoder and decoder components.
+- `vae::VAE{JointLogEncoder, <:Union{JointLogDecoder, SplitLogDecoder}}`: The
+  VAE model consisting of encoder and decoder components.
 - `mlp::Flux.Chain`: A multi-layer perceptron for estimating mutual information
   I(x;z).
 - `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
@@ -659,7 +673,7 @@ error.
   `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out), eachcol(x_shuffle)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,T},
+    vae::VAE{JointLogEncoder,T},
     mlp::Flux.Chain,
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32},
@@ -716,6 +730,259 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated encoder qᵩ(z|x_in)
     # and latent prior distribution π(z)
+    kl_qᵩ_π = 1 / 2.0f0 * sum(
+        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
+           2.0f0 * encoder_logσ
+    )
+
+    # Compute regularization term if regularization function is provided
+    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+
+    # Compute loss function
+    return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z + reg_strength * reg_term
+end #function
+
+# ==============================================================================
+# Loss InfoMaxVAE.VAE{JointLogEncoder, Union{JointDecoder,SplitDecoder}}
+# ==============================================================================
+
+@doc raw"""
+    `loss(vae, mlp, x, x_shuffle; σ=1.0f0, β=1.0f0, α=1.0f0, n_samples=1, 
+    regularization=nothing, reg_strength=1.0f0)`
+
+Computes the loss for an InfoMax variational autoencoder (VAE) which integrates
+mutual information constraints, by averaging over `n_samples` samples drawn from
+the latent space.
+
+The loss function is a composite of the reconstruction loss, the
+Kullback-Leibler (KL) divergence, and the variational mutual information between
+the input and latent representations. A regularization term may also be
+included:
+
+    loss = -⟨log π(x|z)⟩ + β × Dₖₗ[q(z|x) || p(z)] - α × I(x;z) 
+            + reg_strength × reg_term
+
+where:
+- `⟨log π(x|z)⟩` is the expected log likelihood of the probabilistic decoder,
+  estimating how well the reconstruction matches the original input.
+- `Dₖₗ[q(z|x) || p(z)]` is the KL divergence, measuring how the variational
+  posterior q(z|x) diverges from the prior p(z) over the latent variables.
+- `I(x;z)` represents the variational mutual information, quantifying the amount
+  of information shared between the inputs `x` and the latent variables `z`.
+- `reg_term` is an optional regularization term.
+
+## Arguments
+- `vae::VAE{JointLogEncoder, <:Union{JointDecoder, SplitDecoder}}`: The VAE
+  model consisting of encoder and decoder components.
+- `mlp::Flux.Chain`: A multi-layer perceptron for estimating mutual information
+  I(x;z).
+- `x::AbstractVector{Float32}`: Input data vector.
+- `x_shuffle::AbstractVector{Float32}`: Shuffled version of input data to help
+  estimate mutual information.
+
+## Optional Keyword Arguments
+- `β::Float32=1.0f0`: The scaling factor for the KL divergence term.
+- `α::Float32=1.0f0`: The scaling factor for the mutual information term.
+- `n_samples::Int=1`: Number of latent samples to average over for loss
+  computation.
+- `regularization::Union{Function, Nothing}=nothing`: An optional regularization
+  function, should return a scalar cost component.
+- `reg_strength::Float32=1.0f0`: Strength of the regularization term.
+
+## Returns
+- `Float32`: The total computed loss, averaged over `n_samples` and inclusive of
+  the mutual information constraint and any regularization.
+
+## Notes
+- Ensure that `x` and `x_shuffle` have proper dimensions as expected by the
+  encoder within the VAE. `x_shuffle` should be a permutation of `x` to
+  facilitate an accurate mutual information estimate.
+- For batch processing or evaluating an entire dataset, use:
+`sum(loss.(Ref(vae), eachcol(x), eachcol(x_shuffle)))`.
+"""
+function loss(
+    vae::VAE{<:AbstractVariationalEncoder,T},
+    mlp::Flux.Chain,
+    x::AbstractVector{Float32},
+    x_shuffle::AbstractVector{Float32};
+    β::Float32=1.0f0,
+    α::Float32=1.0f0,
+    n_samples::Int=1,
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Run input through reconstruct function with n_samples
+    outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
+    encoder_µ, encoder_logσ, z = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
+    )
+
+    # Extract decoder-related terms
+    decoder_µ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
+
+    # Run shuffle input through reconstruct function
+    outputs_shuffle = vae(x_shuffle; latent=true, n_samples=n_samples)
+    # Extract relevant variable
+    z_shuffle = outputs_shuffle[:z]
+
+    # Initialize value to save variational form of mutual information
+    info_x_z = 0.0f0
+
+    # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
+    # averaged over all samples
+    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
+               1 / n_samples * sum(log.(decoder_σ)) -
+               1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
+                                             decoder_σ .^ 2)
+
+    # Mutual Information Calculation
+    if n_samples == 1
+        # Compute mutual information for real input
+        I_xz = mlp([x; z])
+        # Compute mutual information for shuffled input
+        I_xz_perm = mlp([x; z_shuffle])
+    else
+        # Compute mutual information for real input
+        I_xz = sum(mlp.([Ref(x); eachcol(z)])) / n_samples
+        # Compute mutual information for shuffled input
+        I_xz_perm = sum(mlp.([Ref(x); eachcol(z_shuffle)])) / n_samples
+    end
+
+    # Compute variational mutual information
+    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
+
+    # Compute Kullback-Leibler divergence between approximated encoder qᵩ(z|x_in)
+    # and latent prior distribution π(z)
+    kl_qᵩ_π = 1 / 2.0f0 * sum(
+        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
+           2.0f0 * encoder_logσ
+    )
+
+    # Compute regularization term if regularization function is provided
+    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+
+    # Compute loss function
+    return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z + reg_strength * reg_term
+end #function
+
+@doc raw"""
+    `loss(vae, mlp, x_in, x_out, x_shuffle; σ=1.0f0, β=1.0f0, α=1.0f0, 
+    n_samples=1, regularization=nothing, reg_strength=1.0f0)`
+
+Computes the loss for an InfoMax variational autoencoder (VAE) which integrates
+mutual information constraints, by averaging over `n_samples` samples drawn from
+the latent space.
+
+The loss function is a composite of the reconstruction loss, the
+Kullback-Leibler (KL) divergence, and the variational mutual information between
+the input and latent representations. A regularization term may also be
+included:
+
+    loss = -⟨log π(x|z)⟩ + β × Dₖₗ[q(z|x) || p(z)] - α × I(x;z) 
+            + reg_strength × reg_term
+
+where:
+- `⟨log π(x|z)⟩` is the expected log likelihood of the probabilistic decoder,
+  estimating how well the reconstruction matches the original input.
+- `Dₖₗ[q(z|x) || p(z)]` is the KL divergence, measuring how the variational
+  posterior q(z|x) diverges from the prior p(z) over the latent variables.
+- `I(x;z)` represents the variational mutual information, quantifying the amount
+  of information shared between the inputs `x` and the latent variables `z`.
+- `reg_term` is an optional regularization term.
+
+## Arguments
+- `vae::VAE{JointLogEncoder, <:Union{JointDecoder, SplitDecoder}}`: The VAE
+  model consisting of encoder and decoder components.
+- `mlp::Flux.Chain`: A multi-layer perceptron for estimating mutual information
+  I(x;z).
+- `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
+- `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
+error.
+- `x_shuffle::AbstractVector{Float32}`: Shuffled version of input data to help
+  estimate mutual information.
+
+## Optional Keyword Arguments
+- `β::Float32=1.0f0`: The scaling factor for the KL divergence term.
+- `α::Float32=1.0f0`: The scaling factor for the mutual information term.
+- `n_samples::Int=1`: Number of latent samples to average over for loss
+  computation.
+- `regularization::Union{Function, Nothing}=nothing`: An optional regularization
+  function, should return a scalar cost component.
+- `reg_strength::Float32=1.0f0`: Strength of the regularization term.
+
+## Returns
+- `Float32`: The total computed loss, averaged over `n_samples` and inclusive of
+  the mutual information constraint and any regularization.
+
+## Notes
+- Ensure that `x_in` and `x_shuffle` have proper dimensions as expected by the
+  encoder within the VAE. `x_shuffle` should be a permutation of `x` to
+  facilitate an accurate mutual information estimate.
+- For batch processing or evaluating an entire dataset, use:
+  `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out), eachcol(x_shuffle)))`.
+"""
+function loss(
+    vae::VAE{<:AbstractVariationalEncoder,T},
+    mlp::Flux.Chain,
+    x_in::AbstractVector{Float32},
+    x_out::AbstractVector{Float32},
+    x_shuffle::AbstractVector{Float32};
+    β::Float32=1.0f0,
+    α::Float32=1.0f0,
+    n_samples::Int=1,
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Run input through reconstruct function with n_samples
+    outputs = vae(x_in; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
+    encoder_µ, encoder_logσ, z = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
+    )
+
+    # Extract decoder-related terms
+    decoder_µ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
+
+    # Run shuffle input through reconstruct function
+    outputs_shuffle = vae(x_shuffle; latent=true, n_samples=n_samples)
+    # Extract relevant variable
+    z_shuffle = outputs_shuffle[:z]
+
+    # Initialize value to save variational form of mutual information
+    info_x_z = 0.0f0
+
+    # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
+    # averaged over all samples
+    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
+               1 / n_samples * sum(log.(decoder_σ)) -
+               1 / (2.0f0 * n_samples) * sum((x_out .- decoder_µ) .^ 2 ./
+                                             decoder_σ .^ 2)
+
+    # Mutual Information Calculation
+    if n_samples == 1
+        # Compute mutual information for real input
+        I_xz = mlp([x_in; z])
+        # Compute mutual information for shuffled input
+        I_xz_perm = mlp([x_in; z_shuffle])
+    else
+        # Compute mutual information for real input
+        I_xz = sum(mlp.([Ref(x_in); eachcol(z)])) / n_samples
+        # Compute mutual information for shuffled input
+        I_xz_perm = sum(mlp.([Ref(x_in); eachcol(z_shuffle)])) / n_samples
+    end # if
+
+    # Compute variational mutual information
+    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1))
+
+    # Compute Kullback-Leibler divergence between approximated encoder
+    # qᵩ(z|x_in) and latent prior distribution π(z)
     kl_qᵩ_π = 1 / 2.0f0 * sum(
         @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
            2.0f0 * encoder_logσ
@@ -1243,10 +1510,10 @@ function loss_terms(
 end # function
 
 # ==============================================================================
-
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # InfoMaxVAE training functions
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# ==============================================================================
 
 """
     `train!(infomaxvae, x, opt_vae, opt_mlp; loss_function=loss, loss_kwargs...)`
