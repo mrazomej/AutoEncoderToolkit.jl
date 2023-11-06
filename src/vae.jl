@@ -27,9 +27,11 @@ export reparameterize
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 # ==============================================================================
+# `struct JointLogEncoder <: AbstractVariationalEncoder`
+# ==============================================================================
 
 @doc raw"""
-`struct JointLogEncoder`
+`struct JointLogEncoder <: AbstractVariationalEncoder`
 
 Default encoder function for variational autoencoders where the same `encoder`
 network is used to map to the latent space mean `µ` and log standard deviation
@@ -62,8 +64,8 @@ Flux.@functor JointLogEncoder
     JointLogEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
                  latent_activation; init=Flux.glorot_uniform)
 
-Construct and initialize a `JointLogEncoder` struct that defines an encoder network
-for a variational autoencoder.
+Construct and initialize a `JointLogEncoder` struct that defines an encoder
+network for a variational autoencoder.
 
 # Arguments
 - `n_input::Int`: The dimensionality of the input data.
@@ -138,6 +140,85 @@ function JointLogEncoder(
 end # function
 
 @doc raw"""
+    JointLogEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
+                 latent_activation; init=Flux.glorot_uniform)
+
+Construct and initialize a `JointLogEncoder` struct that defines an encoder
+network for a variational autoencoder.
+
+# Arguments
+- `n_input::Int`: The dimensionality of the input data.
+- `n_latent::Int`: The dimensionality of the latent space.
+- `encoder_neurons::Vector{<:Int}`: A vector specifying the number of neurons in
+  each layer of the encoder network.
+- `encoder_activation::Vector{<:Function}`: Activation functions corresponding
+  to each layer in the `encoder_neurons`.
+- `latent_activation::Vector{<:Function}`: Activation functions for the latent
+  space layers (both µ and logσ).
+
+## Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: The initialization function used for the
+  neural network weights.
+
+# Returns
+- A `JointLogEncoder` struct initialized based on the provided arguments.
+
+# Examples
+```julia
+encoder = JointLogEncoder(784, 20, [400], [relu], tanh)
+```
+
+# Notes
+The length of encoder_neurons should match the length of encoder_activation,
+ensuring that each layer in the encoder has a corresponding activation function.
+"""
+function JointLogEncoder(
+    n_input::Int,
+    n_latent::Int,
+    encoder_neurons::Vector{<:Int},
+    encoder_activation::Vector{<:Function},
+    latent_activation::Vector{<:Function};
+    init::Function=Flux.glorot_uniform
+)
+    # Check there's enough activation functions for all layers
+    if (length(encoder_activation) != length(encoder_neurons))
+        error("Each layer needs exactly one activation function")
+    end # if
+
+    # Initialize list with encoder layers
+    encoder_layers = Array{Flux.Dense}(undef, length(encoder_neurons))
+
+    # Loop through layers   
+    for i in eachindex(encoder_neurons)
+        # Check if it is the first layer
+        if i == 1
+            # Set first layer from input to encoder with activation
+            encoder_layers[i] = Flux.Dense(
+                n_input => encoder_neurons[i], encoder_activation[i]; init=init
+            )
+        else
+            # Set middle layers from input to encoder with activation
+            encoder_layers[i] = Flux.Dense(
+                encoder_neurons[i-1] => encoder_neurons[i],
+                encoder_activation[i];
+                init=init
+            )
+        end # if
+    end # for
+
+    # Define layer that maps from encoder to latent space with activation
+    µ_layer = Flux.Dense(
+        encoder_neurons[end] => n_latent, latent_activation[1]; init=init
+    )
+    logσ_layer = Flux.Dense(
+        encoder_neurons[end] => n_latent, latent_activation[2]; init=init
+    )
+
+    # Initialize decoder
+    return JointLogEncoder(Flux.Chain(encoder_layers...), µ_layer, logσ_layer)
+end # function
+
+@doc raw"""
     (encoder::JointLogEncoder)(x)
 
 Forward propagate the input `x` through the `JointLogEncoder` to obtain the mean
@@ -181,13 +262,172 @@ function (encoder::JointLogEncoder)(x::AbstractVecOrMat{Float32})
 end # function
 
 # ==============================================================================
+# `struct JointEncoder <: AbstractVariationalEncoder`
+# ==============================================================================
 
 @doc raw"""
-    reparameterize(µ, logσ; prior=Distributions.Normal{Float32}(0.0f0, 1.0f0), n_samples=1)
+`struct JointEncoder <: AbstractVariationalEncoder`
 
-Reparameterize the latent space using the given mean (`µ`) and log standard
-deviation (`logσ`), employing the reparameterization trick. This function helps
-in sampling from the latent space in variational autoencoders (or similar
+Encoder function for variational autoencoders where the same `encoder` network
+is used to map to the latent space mean `µ` and standard deviation `σ`.
+
+# Fields
+- `encoder::Flux.Chain`: The primary neural network used to process input data
+  and map it into a latent space representation.
+- `µ::Flux.Dense`: A dense layer mapping from the output of the `encoder` to the
+  mean of the latent space.
+- `σ::Flux.Dense`: A dense layer mapping from the output of the `encoder` to the
+  standard deviation of the latent space.
+
+# Example
+```julia
+enc = JointEncoder(
+    Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
+)
+"""
+mutable struct JointEncoder <: AbstractVariationalEncoder
+    encoder::Flux.Chain
+    µ::Flux.Dense
+    σ::Flux.Dense
+end # struct
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor JointEncoder
+
+@doc raw"""
+    JointEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
+                 latent_activation; init=Flux.glorot_uniform)
+
+Construct and initialize a `JointLogEncoder` struct that defines an encoder
+network for a variational autoencoder.
+
+# Arguments
+- `n_input::Int`: The dimensionality of the input data.
+- `n_latent::Int`: The dimensionality of the latent space.
+- `encoder_neurons::Vector{<:Int}`: A vector specifying the number of neurons in
+  each layer of the encoder network.
+- `encoder_activation::Vector{<:Function}`: Activation functions corresponding
+  to each layer in the `encoder_neurons`.
+- `latent_activation::Vector{<:Function}`: Activation function for the latent
+  space layers. This vector must contain the activation for both µ and logσ.
+
+## Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: The initialization function used for the
+  neural network weights.
+
+# Returns
+- A `JointEncoder` struct initialized based on the provided arguments.
+
+# Examples
+```julia
+encoder = JointEncoder(784, 20, [400], [relu], [tanh, softplus])
+```
+
+# Notes
+The length of encoder_neurons should match the length of encoder_activation,
+ensuring that each layer in the encoder has a corresponding activation function.
+"""
+function JointEncoder(
+    n_input::Int,
+    n_latent::Int,
+    encoder_neurons::Vector{<:Int},
+    encoder_activation::Vector{<:Function},
+    latent_activation::Vector{<:Function};
+    init::Function=Flux.glorot_uniform
+)
+    # Check there's enough activation functions for all layers
+    if (length(encoder_activation) != length(encoder_neurons))
+        error("Each layer needs exactly one activation function")
+    end # if
+
+    # Initialize list with encoder layers
+    encoder_layers = Array{Flux.Dense}(undef, length(encoder_neurons))
+
+    # Loop through layers   
+    for i in eachindex(encoder_neurons)
+        # Check if it is the first layer
+        if i == 1
+            # Set first layer from input to encoder with activation
+            encoder_layers[i] = Flux.Dense(
+                n_input => encoder_neurons[i], encoder_activation[i]; init=init
+            )
+        else
+            # Set middle layers from input to encoder with activation
+            encoder_layers[i] = Flux.Dense(
+                encoder_neurons[i-1] => encoder_neurons[i],
+                encoder_activation[i];
+                init=init
+            )
+        end # if
+    end # for
+
+    # Define layer that maps from encoder to latent space with activation
+    µ_layer = Flux.Dense(
+        encoder_neurons[end] => n_latent, latent_activation[1]; init=init
+    )
+    logσ_layer = Flux.Dense(
+        encoder_neurons[end] => n_latent, latent_activation[2]; init=init
+    )
+
+    # Initialize decoder
+    return JointEncoder(Flux.Chain(encoder_layers...), µ_layer, logσ_layer)
+end # function
+
+@doc raw"""
+    (encoder::JointEncoder)(x)
+
+Forward propagate the input `x` through the `JointEncoder` to obtain the mean
+(`mu`) and standard deviation (`σ`) of the latent space.
+
+# Arguments
+- `x::Array{Float32}`: Input data to be encoded.
+
+# Returns
+- `mu`: Mean of the latent space after passing the input through the encoder and
+  subsequently through the `µ` layer.
+- `σ`: Standard deviation of the latent space after passing the input through
+  the encoder and subsequently through the `σ` layer.
+
+# Description
+This method allows for a direct call on an instance of `JointLogEncoder` with
+the input data `x`. It first runs the input through the encoder network, then
+maps the output of the last encoder layer to both the mean and standard
+deviation of the latent space.
+
+# Example
+```julia
+je = JointLogEncoder(...)
+mu, σ = je(some_input)
+```
+
+# Note
+Ensure that the input x matches the expected dimensionality of the encoder's
+input layer.
+"""
+function (encoder::JointEncoder)(x::AbstractVecOrMat{Float32})
+    # Run input to encoder network
+    h = encoder.encoder(x)
+    # Map from last encoder layer to latent space mean
+    µ = encoder.µ(h)
+    # Map from last encoder layer to latent space log standard deviation
+    σ = encoder.logσ(h)
+
+    # Return description of latent variables
+    return µ, σ
+end # function
+
+
+# ==============================================================================
+# Reparametrization trick
+# ==============================================================================
+
+@doc raw"""
+    reparameterize(µ, σ; prior=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
+    n_samples=1, log::Bool=true)
+
+Reparameterize the latent space using the given mean (`µ`) and (log) standard
+deviation (`σ` or `logσ`), employing the reparameterization trick. This function
+helps in sampling from the latent space in variational autoencoders (or similar
 models) while keeping the gradient flow intact.
 
 # Arguments
@@ -195,9 +435,9 @@ models) while keeping the gradient flow intact.
   vector, it represents the mean for a single data point. If it is a matrix,
   each column corresponds to the mean for a specific data point, and each row
   corresponds to a dimension of the latent space.
-- `logσ::AbstractVecOrMat{Float32}`: The log standard deviation of the latent
-  space. Like `µ`, if it's a vector, it represents the log standard deviation
-  for a single data point. If a matrix, each column corresponds to the log
+- `σ::AbstractVecOrMat{Float32}`: The (log )standard deviation of the latent
+  space. Like `µ`, if it's a vector, it represents the (log) standard deviation
+  for a single data point. If a matrix, each column corresponds to the (log)
   standard deviation for a specific data point.
 
 
@@ -206,6 +446,8 @@ models) while keeping the gradient flow intact.
   space. By default, this is a standard normal distribution.
 - `n_samples::Int=1`: The number of samples to draw using the reparametrization
   trick.
+- `log::Bool=true`: Boolean indicating whether the provided standard deviation
+  is in log scale or not. If `true` (default), then `σ = exp(logσ)` is computed.
 
 # Returns
 An array containing `n_samples` samples from the reparameterized latent space,
@@ -238,20 +480,34 @@ http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
     µ::T,
-    logσ::T;
+    σ::T;
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-    n_samples::Int=1
+    n_samples::Int=1,
+    log::Bool=true
 ) where {T<:AbstractVecOrMat{Float32}}
-
-    # Sample result depending on type of prior distribution
-    result = if typeof(prior) <: Distributions.UnivariateDistribution
-        # Sample n_samples random latent variable point estimates given the mean
-        # and standard deviation
-        µ .+ Random.rand(prior, size(µ)..., n_samples) .* exp.(logσ)
-    elseif typeof(prior) <: Distributions.MultivariateDistribution
-        # Sample n_samples random latent variable point estimates given the mean
-        # and standard deviation
-        µ .+ Random.rand(prior, n_samples) .* exp.(logσ)
+    # Check if logσ is provided
+    if log
+        # Sample result depending on type of prior distribution
+        result = if typeof(prior) <: Distributions.UnivariateDistribution
+            # Sample n_samples random latent variable point estimates given the
+            # mean and standard deviation
+            µ .+ Random.rand(prior, size(µ)..., n_samples) .* exp.(σ)
+        elseif typeof(prior) <: Distributions.MultivariateDistribution
+            # Sample n_samples random latent variable point estimates given the
+            # mean and standard deviation
+            µ .+ Random.rand(prior, n_samples) .* exp.(σ)
+        end # if
+    else
+        # Sample result depending on type of prior distribution
+        result = if typeof(prior) <: Distributions.UnivariateDistribution
+            # Sample n_samples random latent variable point estimates given the
+            # mean and standard deviation
+            µ .+ Random.rand(prior, size(µ)..., n_samples) .* σ
+        elseif typeof(prior) <: Distributions.MultivariateDistribution
+            # Sample n_samples random latent variable point estimates given the
+            # mean and standard deviation
+            µ .+ Random.rand(prior, n_samples) .* σ
+        end # if
     end # if
 
     # Remove dimensions of size 1 based on type of T and n_samples = 1
@@ -268,6 +524,8 @@ function reparameterize(
     return result
 end # function
 
+# ==============================================================================
+# struct SimpleDecoder <: AbstractVariationalDecoder
 # ==============================================================================
 
 @doc raw"""
@@ -429,6 +687,8 @@ function (decoder::SimpleDecoder)(
 end # function
 
 # ==============================================================================
+# struct JointLogDecoder <: AbstractVariationalDecoder
+# ==============================================================================
 
 @doc raw"""
     JointLogDecoder <: AbstractVariationalDecoder
@@ -500,9 +760,9 @@ n_input = 28*28
 n_latent = 64
 decoder_neurons = [128, 256]
 decoder_activation = [relu, relu]
-latent_activation = tanh
+output_activation = tanh
 decoder = JointLogDecoder(
-    n_input, n_latent, decoder_neurons, decoder_activation, latent_activation
+    n_input, n_latent, decoder_neurons, decoder_activation, output_activation
 )
 ```
 
@@ -559,6 +819,106 @@ function JointLogDecoder(
 end
 
 @doc raw"""
+    JointLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+                latent_activation; init=Flux.glorot_uniform)
+
+Constructs and initializes a `JointLogDecoder` object for variational
+autoencoders (VAEs). This function sets up a decoder network that first
+processes the latent space and then maps it separately to both its mean (`µ`)
+and log standard deviation (`logσ`).
+
+# Arguments
+- `n_input::Int`: Dimensionality of the output data (or the data to be
+  reconstructed).
+- `n_latent::Int`: Dimensionality of the latent space.
+- `decoder_neurons::Vector{<:Int}`: Vector of layer sizes for the primary
+  decoder network, not including the input latent layer.
+- `decoder_activation::Vector{<:Function}`: Activation functions for each
+  primary decoder layer.
+- `output_activation::Vector{<:Function}`: Activation functions for the mean
+  (`µ`) and log standard deviation (`logσ`) layers.
+
+# Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: Initialization function for the network
+  parameters.
+
+# Returns
+A `JointLogDecoder` object with the specified architecture and initialized
+weights.
+
+# Description
+This function constructs a `JointLogDecoder` object, setting up its primary
+decoder network based on the provided specifications. The architecture begins
+with a dense layer mapping from the latent space and goes through a sequence of
+middle layers if specified. After processing the latent space through the
+primary decoder, it then maps separately to both its mean (`µ`) and log standard
+deviation (`logσ`).
+
+# Example
+```julia
+n_input = 28*28
+n_latent = 64
+decoder_neurons = [128, 256]
+decoder_activation = [relu, relu]
+output_activation = [tanh, identity]
+decoder = JointLogDecoder(
+    n_input, n_latent, decoder_neurons, decoder_activation, latent_activation
+)
+```
+
+# Note
+Ensure that the lengths of decoder_neurons and decoder_activation match.
+"""
+function JointLogDecoder(
+    n_input::Int,
+    n_latent::Int,
+    decoder_neurons::Vector{<:Int},
+    decoder_activation::Vector{<:Function},
+    output_activation::Vector{<:Function};
+    init::Function=Flux.glorot_uniform
+)
+    # Check there's enough activation functions for all layers
+    if (length(decoder_activation) != length(decoder_neurons))
+        error("Each layer needs exactly one activation function")
+    end # if
+
+    # Initialize list with decoder layers
+    decoder_layers = Array{Flux.Dense}(undef, length(decoder_neurons))
+
+    # Add first layer from latent space to decoder
+    decoder_layers[1] = Flux.Dense(
+        n_latent => decoder_neurons[1], decoder_activation[1]; init=init
+    )
+
+    # Check if there are multiple middle layers
+    if length(decoder_neurons) > 1
+        # Loop through middle layers if they exist
+        for i = 2:length(decoder_neurons)
+            decoder_layers[i] = Flux.Dense(
+                decoder_neurons[i-1] => decoder_neurons[i],
+                decoder_activation[i];
+                init=init
+            )
+        end # for
+    end # if
+
+    # Construct the primary decoder
+    decoder_chain = Flux.Chain(decoder_layers...)
+
+    # Define layers that map from the last decoder layer to the mean and log
+    # standard deviation
+    µ_layer = Flux.Dense(
+        decoder_neurons[end] => n_input, output_activation[1]; init=init
+    )
+    logσ_layer = Flux.Dense(
+        decoder_neurons[end] => n_input, output_activation[2]; init=init
+    )
+
+    # Initialize joint decoder
+    return JointLogDecoder(decoder_chain, µ_layer, logσ_layer)
+end
+
+@doc raw"""
     (decoder::JointLogDecoder)(
         z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
     )
@@ -607,6 +967,189 @@ function (decoder::JointLogDecoder)(
     return µ, logσ
 end # function
 
+# ==============================================================================
+# struct JointDecoder <: AbstractVariationalDecoder
+# ==============================================================================
+
+@doc raw"""
+    JointDecoder <: AbstractVariationalDecoder
+
+An extended decoder structure for VAEs that incorporates separate layers for
+mapping from the latent space to both its mean (`µ`) and standard deviation
+(`σ`).
+
+# Fields
+- `decoder::Flux.Chain`: The primary neural network used to process the latent
+  space before determining its mean and log standard deviation.
+- `µ::Flux.Dense`: A dense layer that maps from the output of the `decoder` to
+  the mean of the latent space.
+- `σ::Flux.Dense`: A dense layer that maps from the output of the `decoder` to
+  the standard deviation of the latent space.
+
+# Description
+`JointDecoder` is tailored for VAE architectures where the same decoder network
+is used initially, and then splits into two separate paths for determining both
+the mean and standard deviation of the latent space.
+"""
+mutable struct JointDecoder <: AbstractVariationalDecoder
+    decoder::Flux.Chain
+    µ::Flux.Dense
+    σ::Flux.Dense
+end
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor JointDecoder
+
+@doc raw"""
+    JointDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+                latent_activation; init=Flux.glorot_uniform)
+
+Constructs and initializes a `JointDecoder` object for variational autoencoders
+(VAEs). This function sets up a decoder network that first processes the latent
+space and then maps it separately to both its mean (`µ`) and standard deviation
+(`σ`).
+
+# Arguments
+- `n_input::Int`: Dimensionality of the output data (or the data to be
+  reconstructed).
+- `n_latent::Int`: Dimensionality of the latent space.
+- `decoder_neurons::Vector{<:Int}`: Vector of layer sizes for the primary
+  decoder network, not including the input latent layer.
+- `decoder_activation::Vector{<:Function}`: Activation functions for each
+  primary decoder layer.
+- `output_activation::Function`: Activation function for the mean (`µ`) and
+  standard deviation (`σ`) layers.
+
+# Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: Initialization function for the network
+  parameters.
+
+# Returns
+A `JointDecoder` object with the specified architecture and initialized weights.
+
+# Description
+This function constructs a `JointDecoder` object, setting up its primary decoder
+network based on the provided specifications. The architecture begins with a
+dense layer mapping from the latent space and goes through a sequence of middle
+layers if specified. After processing the latent space through the primary
+decoder, it then maps separately to both its mean (`µ`) and standard deviation
+(`σ`).
+
+# Example
+```julia
+n_input = 28*28
+n_latent = 64
+decoder_neurons = [128, 256]
+decoder_activation = [relu, relu]
+latent_activation = [tanh, softplus]
+decoder = JointDecoder(
+    n_input, n_latent, decoder_neurons, decoder_activation, latent_activation
+)
+```
+
+# Note
+Ensure that the lengths of decoder_neurons and decoder_activation match.
+"""
+function JointDecoder(
+    n_input::Int,
+    n_latent::Int,
+    decoder_neurons::Vector{<:Int},
+    decoder_activation::Vector{<:Function},
+    output_activation::Vector{<:Function};
+    init::Function=Flux.glorot_uniform
+)
+    # Check there's enough activation functions for all layers
+    if (length(decoder_activation) != length(decoder_neurons))
+        error("Each layer needs exactly one activation function")
+    end # if
+
+    # Initialize list with decoder layers
+    decoder_layers = Array{Flux.Dense}(undef, length(decoder_neurons))
+
+    # Add first layer from latent space to decoder
+    decoder_layers[1] = Flux.Dense(
+        n_latent => decoder_neurons[1], decoder_activation[1]; init=init
+    )
+
+    # Check if there are multiple middle layers
+    if length(decoder_neurons) > 1
+        # Loop through middle layers if they exist
+        for i = 2:length(decoder_neurons)
+            decoder_layers[i] = Flux.Dense(
+                decoder_neurons[i-1] => decoder_neurons[i],
+                decoder_activation[i];
+                init=init
+            )
+        end # for
+    end # if
+
+    # Construct the primary decoder
+    decoder_chain = Flux.Chain(decoder_layers...)
+
+    # Define layers that map from the last decoder layer to the mean and log
+    # standard deviation
+    µ_layer = Flux.Dense(
+        decoder_neurons[end] => n_input, output_activation[1]; init=init
+    )
+    σ_layer = Flux.Dense(
+        decoder_neurons[end] => n_input, output_activation[2]; init=init
+    )
+
+    # Initialize joint decoder
+    return JointDecoder(decoder_chain, µ_layer, σ_layer)
+end
+
+@doc raw"""
+    (decoder::JointDecoder)(
+        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    )
+
+Maps the given latent representation `z` through the `JointLogDecoder` network
+to produce both the mean (`µ`) and standard deviation (`σ`).
+
+# Arguments
+- `z::Union{AbstractVector{Float32}, AbstractMatrix{Float32}, Array{Float32,
+  3}}`: The latent space representation to be decoded. This can be a vector (1D
+  tensor), a matrix (2D tensor), or a 3D tensor, where each column (or slice, in
+  the case of 3D tensor) represents a separate sample from the latent space of a
+  VAE.
+
+# Returns
+- `µ::Array{Float32}`: The mean representation obtained from the decoder.
+- `σ::Array{Float32}`: The standard deviation representation obtained from the
+  decoder.
+
+# Description
+This function processes the latent space representation `z` using the primary
+neural network of the `JointLogDecoder` struct. It then separately maps the
+output of this network to the mean and standard deviation using the `µ` and `σ`
+dense layers, respectively.
+
+# Example
+```julia
+decoder = JointDecoder(...)
+z = ... # some latent space representation
+µ, logσ = decoder(z)
+```
+
+# Note
+Ensure that the latent space representation z matches the expected input
+dimensionality for the JointDecoder.
+"""
+function (decoder::JointDecoder)(
+    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+)
+    # Run input through the primary decoder network
+    h = decoder.decoder(z)
+    # Map to mean
+    µ = decoder.µ(h)
+    # Map to standard deviation
+    σ = decoder.logσ(h)
+    return µ, σ
+end # function
+
+# ==============================================================================
+# struct SplitLogDecoder <: AbstractVariationalDecoder
 # ==============================================================================
 
 @doc raw"""
@@ -809,6 +1352,215 @@ function (decoder::SplitLogDecoder)(
     return µ, logσ
 end # function
 
+# ==============================================================================
+# struct SplitDecoder <: AbstractVariationalDecoder
+# ==============================================================================
+
+@doc raw"""
+    SplitDecoder <: AbstractVariationalDecoder
+
+A specialized decoder structure for VAEs that uses distinct neural networks for
+determining the mean (`µ`) and standard deviation (`logσ`) of the latent space.
+
+# Fields
+- `decoder_µ::Flux.Chain`: A neural network dedicated to processing the latent
+  space and mapping it to its mean.
+- `decoder_σ::Flux.Chain`: A neural network dedicated to processing the latent
+  space and mapping it to its standard deviation.
+
+# Description
+`SplitDecoder` is designed for VAE architectures where separate decoder
+networks are preferred for computing the mean and log standard deviation,
+ensuring that each has its own distinct set of parameters and transformation
+logic.
+"""
+mutable struct SplitDecoder <: AbstractVariationalDecoder
+    µ::Flux.Chain
+    σ::Flux.Chain
+end
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor SplitDecoder
+
+@doc raw"""
+    SplitDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
+                logσ_activation; init=Flux.glorot_uniform)
+
+Constructs and initializes a `SplitDecoder` object for variational autoencoders
+(VAEs). This function sets up two distinct decoder networks, one dedicated for
+determining the mean (`µ`) and the other for the standard deviation (`σ`) of the
+latent space.
+
+# Arguments
+- `n_input::Int`: Dimensionality of the output data (or the data to be
+  reconstructed).
+- `n_latent::Int`: Dimensionality of the latent space.
+- `µ_neurons::Vector{<:Int}`: Vector of layer sizes for the `µ` decoder network,
+  not including the input latent layer.
+- `µ_activation::Vector{<:Function}`: Activation functions for each `µ` decoder
+  layer.
+- `σ_neurons::Vector{<:Int}`: Vector of layer sizes for the `σ` decoder network,
+  not including the input latent layer.
+- `σ_activation::Vector{<:Function}`: Activation functions for each `σ` decoder
+  layer.
+
+# Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: Initialization function for the network
+  parameters.
+
+# Returns
+A `SplitDecoder` object with two distinct networks initialized with the
+specified architectures and weights.
+
+# Description
+This function constructs a `SplitDecoder` object, setting up two separate
+decoder networks based on the provided specifications. The first network,
+dedicated to determining the mean (`µ`), and the second for the standard
+deviation (`σ`), both begin with a dense layer mapping from the latent space and
+go through a sequence of middle layers if specified.
+
+# Example
+```julia
+n_latent = 64
+µ_neurons = [128, 256]
+µ_activation = [relu, relu]
+σ_neurons = [128, 256]
+σ_activation = [relu, relu]
+decoder = SplitDecoder(
+    n_latent, µ_neurons, µ_activation, σ_neurons, σ_activation
+)
+```
+
+# Notes
+- Ensure that the lengths of µ_neurons with µ_activation and σ_neurons with
+  σ_activation match respectively.
+- If µ_neurons[end] or σ_neurons[end] do not match n_input, the function
+  automatically changes this number to match the right dimensionality
+- Ensure that σ_neurons[end] maps to a **positive** value. Activation functions
+  such as `softplus` are needed to guarantee the positivity of the standard
+  deviation.
+"""
+function SplitDecoder(
+    n_input::Int,
+    n_latent::Int,
+    µ_neurons::Vector{<:Int},
+    µ_activation::Vector{<:Function},
+    σ_neurons::Vector{<:Int},
+    σ_activation::Vector{<:Function};
+    init::Function=Flux.glorot_uniform
+)
+    # Check for matching length between neurons and activations for µ
+    if (length(µ_activation) != length(µ_neurons))
+        error("Each layer of µ decoder needs exactly one activation function")
+    end # if
+
+    # Check for matching length between neurons and activations for logσ
+    if (length(σ_activation) != length(σ_neurons))
+        error("Each layer of logσ decoder needs exactly one activation function")
+    end # if
+
+    # Check that final number of neurons matches input dimension
+    if µ_neurons[end] ≠ n_input
+        println("We changed the last layer number of µ_neurons to match the " *
+                "input dimension")
+        µ_neurons[end] = n_input
+    end # if
+
+    # Check that final number of neurons matches input dimension
+    if σ_neurons[end] ≠ n_input
+        println("We changed the last layer number of σ_neurons to match " *
+                "the input dimension")
+        σ_neurons[end] = n_input
+    end # if
+
+
+    # Initialize µ decoder layers
+    µ_layers = Array{Flux.Dense}(undef, length(µ_neurons))
+
+    # Add first layer from latent space to decoder
+    µ_layers[1] = Flux.Dense(
+        n_latent => µ_neurons[1], µ_activation[1]; init=init
+    )
+
+    # Loop through rest of the layers
+    for i = 2:length(µ_neurons)
+        # Add next layer to list
+        µ_layers[i] = Flux.Dense(
+            µ_neurons[i-1] => µ_neurons[i], µ_activation[i]; init=init
+        )
+    end # for
+
+    # Initialize σ decoder layers
+    σ_layers = Array{Flux.Dense}(undef, length(σ_neurons))
+
+    # Add first layer from latent space to decoder
+    σ_layers[1] = Flux.Dense(
+        n_latent => σ_neurons[1], σ_activation[1]; init=init
+    )
+
+    # Loop through rest of the layers
+    for i = 2:length(σ_neurons)
+        # Add next layer to list
+        σ_layers[i] = Flux.Dense(
+            σ_neurons[i-1] => σ_neurons[i], σ_activation[i]; init=init
+        )
+    end # for
+
+    # Initialize split decoder
+    return SplitDecoder(Flux.Chain(µ_layers...), Flux.Chain(σ_layers...))
+end # function
+
+@doc raw"""
+    (decoder::SplitDecoder)(
+        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    )
+
+Maps the given latent representation `z` through the separate networks of the
+`SplitLogDecoder` to produce both the mean (`µ`) and standard deviation
+(`logσ`).
+
+# Arguments
+- `z::Union{AbstractVector{Float32}, AbstractMatrix{Float32}, Array{Float32,
+  3}}`: The latent space representation to be decoded. This can be a vector (1D
+  tensor), a matrix (2D tensor), or a 3D tensor, where each column (or slice, in
+  the case of 3D tensor) represents a separate sample from the latent space of a
+  VAE.
+
+# Returns
+- `µ::Array{Float32}`: The mean representation obtained using the dedicated
+  `decoder_µ` network.
+- `σ::Array{Float32}`: The standard deviation representation obtained using the
+  dedicated `decoder_σ` network.
+
+# Description
+This function processes the latent space representation `z` through two distinct
+neural networks within the `SplitDecoder` struct. The `decoder_µ` network is
+used to produce the mean representation, while the `decoder_σ` network is
+utilized for the standard deviation.
+
+# Example
+```julia
+decoder = SplitDecoder(...)
+z = ... # some latent space representation
+µ, σ = decoder(z)
+```
+
+# Note
+Ensure that the latent space representation z matches the expected input
+dimensionality for both networks in the SplitDecoder.
+"""
+function (decoder::SplitDecoder)(
+    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+)
+    # Map through the decoder dedicated to the mean
+    µ = decoder.µ(z)
+    # Map through the decoder dedicated to the standard deviation
+    σ = decoder.σ(z)
+    return µ, σ
+end # function
+
+# ==============================================================================
+# `struct VAE{E<:AbstractVariationalEncoder, D<:AbstractVariationalDecoder}`
 # ==============================================================================
 
 @doc raw"""
