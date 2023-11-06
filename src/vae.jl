@@ -723,10 +723,10 @@ Flux.@functor JointLogDecoder
     JointLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 latent_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `JointLogDecoder` object for variational autoencoders
-(VAEs). This function sets up a decoder network that first processes the latent
-space and then maps it separately to both its mean (`µ`) and log standard
-deviation (`logσ`).
+Constructs and initializes a `JointLogDecoder` object for variational
+autoencoders (VAEs). This function sets up a decoder network that first
+processes the latent space and then maps it separately to both its mean (`µ`)
+and log standard deviation (`logσ`).
 
 # Arguments
 - `n_input::Int`: Dimensionality of the output data (or the data to be
@@ -744,14 +744,15 @@ deviation (`logσ`).
   parameters.
 
 # Returns
-A `JointLogDecoder` object with the specified architecture and initialized weights.
+A `JointLogDecoder` object with the specified architecture and initialized
+weights.
 
 # Description
-This function constructs a `JointLogDecoder` object, setting up its primary decoder
-network based on the provided specifications. The architecture begins with a
-dense layer mapping from the latent space and goes through a sequence of middle
-layers if specified. After processing the latent space through the primary
-decoder, it then maps separately to both its mean (`µ`) and log standard
+This function constructs a `JointLogDecoder` object, setting up its primary
+decoder network based on the provided specifications. The architecture begins
+with a dense layer mapping from the latent space and goes through a sequence of
+middle layers if specified. After processing the latent space through the
+primary decoder, it then maps separately to both its mean (`µ`) and log standard
 deviation (`logσ`).
 
 # Example
@@ -923,8 +924,8 @@ end
         z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
     )
 
-Maps the given latent representation `z` through the `JointLogDecoder` network to
-produce both the mean (`µ`) and log standard deviation (`logσ`).
+Maps the given latent representation `z` through the `JointLogDecoder` network
+to produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Arguments
 - `z::Union{AbstractVector{Float32}, AbstractMatrix{Float32}, Array{Float32,
@@ -940,9 +941,9 @@ produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Description
 This function processes the latent space representation `z` using the primary
-neural network of the `JointLogDecoder` struct. It then separately maps the output
-of this network to the mean and log standard deviation using the `µ` and `logσ`
-dense layers, respectively.
+neural network of the `JointLogDecoder` struct. It then separately maps the
+output of this network to the mean and log standard deviation using the `µ` and
+`logσ` dense layers, respectively.
 
 # Example
 ```julia
@@ -1166,9 +1167,10 @@ space.
   latent space and mapping it to its log standard deviation.
 
 # Description
-`SplitLogDecoder` is designed for VAE architectures where separate decoder networks
-are preferred for computing the mean and log standard deviation, ensuring that
-each has its own distinct set of parameters and transformation logic.
+`SplitLogDecoder` is designed for VAE architectures where separate decoder
+networks are preferred for computing the mean and log standard deviation,
+ensuring that each has its own distinct set of parameters and transformation
+logic.
 """
 mutable struct SplitLogDecoder <: AbstractVariationalDecoder
     µ::Flux.Chain
@@ -1182,10 +1184,10 @@ Flux.@functor SplitLogDecoder
     SplitLogDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
                 logσ_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `SplitLogDecoder` object for variational autoencoders
-(VAEs). This function sets up two distinct decoder networks, one dedicated for
-determining the mean (`µ`) and the other for the log standard deviation (`logσ`)
-of the latent space.
+Constructs and initializes a `SplitLogDecoder` object for variational
+autoencoders (VAEs). This function sets up two distinct decoder networks, one
+dedicated for determining the mean (`µ`) and the other for the log standard
+deviation (`logσ`) of the latent space.
 
 # Arguments
 - `n_input::Int`: Dimensionality of the output data (or the data to be
@@ -1456,7 +1458,9 @@ function SplitDecoder(
 
     # Check for matching length between neurons and activations for logσ
     if (length(σ_activation) != length(σ_neurons))
-        error("Each layer of logσ decoder needs exactly one activation function")
+        error(
+            "Each layer of logσ decoder needs exactly one activation function"
+        )
     end # if
 
     # Check that final number of neurons matches input dimension
@@ -1661,7 +1665,7 @@ function (vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder})(
 end # function
 
 @doc raw"""
-    (vae::VAE{<:AbstractVariationalEncoder,T})(
+    (vae::VAE{JointLogEncoder,T})(
         x::AbstractVecOrMat{Float32}; 
         prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
         latent::Bool=false, n_samples::Int=1) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
@@ -1699,7 +1703,7 @@ from this distribution, which is then decoded.
 Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the VAE.
 """
-function (vae::VAE{<:AbstractVariationalEncoder,T})(
+function (vae::VAE{JointLogEncoder,T})(
     x::AbstractVecOrMat{Float32},
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
     latent::Bool=false,
@@ -1710,7 +1714,7 @@ function (vae::VAE{<:AbstractVariationalEncoder,T})(
 
     # Run reparametrization trick
     z_sample = reparameterize(
-        encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples
+        encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples, log=true
     )
 
     # Run input through decoder to optain mean and log std
@@ -1732,14 +1736,92 @@ function (vae::VAE{<:AbstractVariationalEncoder,T})(
     end # if
 end # function
 
+@doc raw"""
+    (vae::VAE{JointLogEncoder,T})(
+        x::AbstractVecOrMat{Float32}; 
+        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
+        latent::Bool=false, n_samples::Int=1) 
+        where {T<:Union{JointDecoder,SplitDecoder}}
+
+Processes the input data `x` through a VAE, consisting of an encoder and either
+a `JointDecoder` or a `SplitDecoder`.
+
+# Arguments
+- `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
+  or a matrix where each column represents a separate sample.
+
+# Optional Keyword Arguments
+- `prior::Distributions.Sampleable`: Specifies the prior distribution to be used
+  during the reparametrization trick. Defaults to a standard normal
+  distribution.
+- `latent::Bool`: If set to `true`, returns a dictionary containing the latent
+  variables (mean, log standard deviation, and the sampled latent
+  representation) as well as the mean and log standard deviation of the
+  reconstructed data. Defaults to `false`.
+- `n_samples::Int=1`: Number of samples to draw using the reparametrization
+  trick.
+
+# Returns
+- If `latent=false`: `Array{Float32}`, the reconstructed data after processing
+  through the encoder and decoder.
+- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
+  `:decoder_µ`, and `:decoder_logσ`, containing the corresponding values.
+
+# Description
+The function first encodes the input `x` to obtain the mean and log standard
+deviation of the latent space. Using the reparametrization trick, it samples
+from this distribution, which is then decoded.
+
+# Note
+Ensure the input data `x` matches the expected input dimensionality for the
+encoder in the VAE.
+"""
+function (vae::VAE{JointLogEncoder,T})(
+    x::AbstractVecOrMat{Float32},
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
+    latent::Bool=false,
+    n_samples::Int=1
+) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Run input through encoder to obtain mean and log std
+    encoder_µ, encoder_logσ = vae.encoder(x)
+
+    # Run reparametrization trick
+    z_sample = reparameterize(
+        encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples, log=true
+    )
+
+    # Run input through decoder to optain mean and log std
+    decoder_µ, decoder_σ = vae.decoder(z_sample)
+
+    # Check if latent variables should be returned
+    if latent
+        # Run latent sample through decoder
+        return Dict(
+            :encoder_µ => encoder_µ,
+            :encoder_logσ => encoder_logσ,
+            :z => z_sample,
+            :decoder_µ => decoder_µ,
+            :decoder_σ => decoder_σ
+        )
+    else
+        # Run latent sample through decoder
+        return vae.decoder(z_sample)
+    end # if
+end # function
+
+# ==============================================================================
+## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# VAE loss functions
+## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # ==============================================================================
 
-## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# VAE loss functions
-## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# ==============================================================================
+# Loss VAE{JointLogEncoder,SimpleDecoder}
+# ==============================================================================
 
 @doc raw"""
-    `loss(vae, x; σ=1.0f0, β=1.0f0, n_samples=1, regularization=nothing, reg_strength=1.0f0)`
+    `loss(vae, x; σ=1.0f0, β=1.0f0, n_samples=1, regularization=nothing, 
+        reg_strength=1.0f0)`
 
 Computes the loss for the variational autoencoder (VAE) by averaging over
 `n_samples` latent space samples.
@@ -1756,8 +1838,8 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 - g(x) and h(x) define the mean and covariance of the encoder respectively.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder}`: A VAE model with
-  encoder and decoder networks.
+- `vae::VAE{JointLogEncoder,SimpleDecoder}`: A VAE model with encoder and
+  decoder networks.
 - `x::AbstractVector{Float32}`: Input vector. For batch processing or evaluating
   the entire dataset, use: `sum(loss.(Ref(vae), eachcol(x)))`.
 
@@ -1783,7 +1865,7 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
   `sum(loss.(Ref(vae), eachcol(x)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder},
+    vae::VAE{JointLogEncoder,SimpleDecoder},
     x::AbstractVector{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
@@ -1837,8 +1919,8 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   respectively.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder}`: A VAE model with
-  encoder and decoder networks.
+- `vae::VAE{JointLogEncoder,SimpleDecoder}`: A VAE model with encoder and
+  decoder networks.
 - `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
 - `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
   error.
@@ -1866,7 +1948,7 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
     `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,SimpleDecoder},
+    vae::VAE{JointLogEncoder,SimpleDecoder},
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32};
     σ::Float32=1.0f0,
@@ -1904,9 +1986,11 @@ end
 
 
 # ==============================================================================
+# Loss VAE{JointLogEncoder, Union{JointLogDecoder,SplitLogDecoder}}
+# ==============================================================================
 
 @doc raw"""
-    loss(vae::VAE{<:AbstractVariationalEncoder,T}, 
+    loss(vae::VAE{JointLogEncoder,T}, 
         x::AbstractVector{Float32}; 
         β::Float32=1.0f0, 
         n_samples=1, 
@@ -1930,8 +2014,8 @@ Where:
   - g(x) and h(x) respectively define the mean and covariance of the encoder.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`:
-  A VAE model.
+- `vae::VAE{JointLogEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`: A VAE
+  model.
 - `x::AbstractVector{Float32}`: Input vector.
 
 # Optional Keyword Arguments
@@ -1940,7 +2024,7 @@ Where:
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
 - `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. If provided, it should 
+  the regularization term based on the VAE outputs. If provided, it should
   return a Float32. If not, no regularization will be applied.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
@@ -1955,7 +2039,7 @@ expected input in the VAE.
 `sum(loss.(Ref(vae), eachcol(x)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,T},
+    vae::VAE{JointLogEncoder,T},
     x::AbstractVector{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
@@ -2005,7 +2089,7 @@ end # function
 
 
 @doc raw"""
-    loss(vae::VAE{<:AbstractVariationalEncoder,T}, 
+    loss(vae::VAE{JointLogEncoder,T}, 
          x_in::AbstractVector{Float32}, x_out::AbstractVector{Float32};
          β::Float32=1.0f0, n_samples=1, 
          regularization::Union{Function, Nothing}=nothing, 
@@ -2029,8 +2113,8 @@ Where:
     encoder.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`:
-  A VAE model.
+- `vae::VAE{JointLogEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`: A VAE
+  model.
 - `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
 - `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
   error.
@@ -2041,7 +2125,7 @@ Where:
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
 - `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. If provided, it should 
+  the regularization term based on the VAE outputs. If provided, it should
   return a Float32. If not, no regularization will be applied.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
@@ -2056,7 +2140,7 @@ encoder's expected input in the VAE.
 `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
 """
 function loss(
-    vae::VAE{<:AbstractVariationalEncoder,T},
+    vae::VAE{JointLogEncoder,T},
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32};
     β::Float32=1.0f0,
@@ -2083,8 +2167,209 @@ function loss(
                1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
                                              exp.(2 * decoder_logσ))
 
-    # Compute Kullback-Leibler divergence between approximated encoder qᵩ(z|x_in)
+    # Compute Kullback-Leibler divergence between approximated encoder
+    # qᵩ(z|x_in) and latent prior distribution π(z)
+    kl_qᵩ_π = 1 / 2.0f0 * sum(
+        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
+           2.0f0 * encoder_logσ
+    )
+
+    # Compute ELBO
+    total_loss = -logπ_x_z + β * kl_qᵩ_π
+
+    # Add regularization term if provided
+    if regularization !== nothing
+        # Compute regularization term
+        reg_term = regularization(outputs)
+        # Add regularization to total loss
+        total_loss += reg_strength * reg_term
+    end # if
+
+    return total_loss
+end
+
+# ==============================================================================
+# Loss VAE{JointLogEncoder, Union{JointDecoder,SplitDecoder}}
+# ==============================================================================
+
+@doc raw"""
+    loss(vae::VAE{JointLogEncoder,T}, 
+        x::AbstractVector{Float32}; 
+        β::Float32=1.0f0, 
+        n_samples=1, 
+        regularization=nothing, 
+        reg_strength=1.0f0) where {T<:Union{JointDecoder,SplitDecoder}}
+
+Calculate the loss for a variational autoencoder (VAE) by combining the
+reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
+regularization term, averaged over `n_samples` latent space samples.
+
+The VAE loss is given by: loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)] +
+reg_strength × reg_term
+
+Where:
+- π(x|z) is the probabilistic decoder represented by a Gaussian distribution:
+  π(x|z) = N(µ(z), exp(logσ(z))²I).
+  - µ(z) is the mean derived from the decoder.
+  - logσ(z) is the log standard deviation, also derived from the decoder.
+- qᵨ(z|x) is the approximated encoder with Gaussian distribution: qᵨ(z|x) =
+  N(g(x), h(x)).
+  - g(x) and h(x) respectively define the mean and covariance of the encoder.
+
+# Arguments
+- `vae::VAE{JointLogEncoder, <:Union{JointDecoder,SplitDecoder}}`: A VAE
+  model.
+- `x::AbstractVector{Float32}`: Input vector.
+
+# Optional Keyword Arguments
+- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
+  balance between reconstruction and regularization.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the VAE outputs. If provided, it should
+  return a Float32. If not, no regularization will be applied.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+
+# Returns
+- `loss::Float32`: The computed average VAE loss value for the given input `x`
+  over `n_samples` samples, including possible regularization terms.
+
+# Notes
+- Ensure that the dimensionality of the input data `x` aligns with the encoder's
+expected input in the VAE.
+- For batch processing or evaluating an entire dataset, use:
+`sum(loss.(Ref(vae), eachcol(x)))`.
+"""
+function loss(
+    vae::VAE{JointLogEncoder,T},
+    x::AbstractVector{Float32};
+    β::Float32=1.0f0,
+    n_samples::Int=1,
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Run input through reconstruct function with n_samples
+    outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
+    encoder_µ, encoder_logσ, z_samples = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
+    )
+
+    # Extract decoder-related terms
+    decoder_µ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
+
+    # Compute average reconstruction loss for a Gaussian decoder over all
+    # samples
+    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
+               1 / n_samples * sum(log.(decoder_σ)) -
+               1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
+                                             decoder_σ .^ 2)
+
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
+    kl_qᵩ_π = 1 / 2.0f0 * sum(
+        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
+           2.0f0 * encoder_logσ
+    )
+
+    # Compute ELBO
+    total_loss = -logπ_x_z + β * kl_qᵩ_π
+
+    # Add regularization term if provided
+    if regularization !== nothing
+        # Compute regularization term
+        reg_term = regularization(outputs)
+        # Add regularization to total loss
+        total_loss += reg_strength * reg_term
+    end
+
+    return total_loss
+end # function
+
+@doc raw"""
+    loss(vae::VAE{JointLogEncoder,T}, 
+         x_in::AbstractVector{Float32}, x_out::AbstractVector{Float32};
+         β::Float32=1.0f0, n_samples=1, 
+         regularization::Union{Function, Nothing}=nothing, 
+         reg_strength::Float32=1.0f0)
+
+Calculate the loss for a variational autoencoder (VAE) by combining the
+reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
+regularization term.
+
+The VAE loss is given by: loss = -⟨logπ(x_out|z)⟩ + β × Dₖₗ[qᵨ(z|x_in) ‖ π(z)] +
+reg_strength × reg_term
+
+Where:
+- π(x_out|z) is the probabilistic decoder represented by a Gaussian
+  distribution: π(x_out|z) = N(µ(z), exp(logσ(z))²I).
+  - µ(z) is the mean derived from the decoder.
+  - logσ(z) is the log standard deviation, also derived from the decoder.
+- qᵨ(z|x_in) is the approximated encoder with Gaussian distribution: qᵨ(z|x_in)
+  = N(g(x_in), h(x_in)).
+  - g(x_in) and h(x_in) respectively define the mean and covariance of the
+    encoder.
+
+# Arguments
+- `vae::VAE{JointLogEncoder, <:Union{JointDecoder,SplitDecoder}}`: A VAE model.
+- `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
+- `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
+  error.
+
+# Optional Keyword Arguments
+- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
+  balance between reconstruction and regularization.
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the VAE outputs. If provided, it should
+  return a Float32. If not, no regularization will be applied.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+
+# Returns
+- `loss::Float32`: The computed VAE loss value between `x_out` and its
+  reconstructed counterpart from `x_in`.
+
+# Notes
+- Ensure that the dimensionality of the input data `x_in` aligns with the
+encoder's expected input in the VAE.
+- For batch processing or evaluating an entire dataset, use:
+`sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
+"""
+function loss(
+    vae::VAE{JointLogEncoder,T},
+    x_in::AbstractVector{Float32},
+    x_out::AbstractVector{Float32};
+    β::Float32=1.0f0,
+    n_samples::Int=1,
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Run input x_in through the VAE
+    outputs = vae(x_in; latent=true, n_samples=n_samples)
+
+    # Extract encoder-related terms
+    encoder_μ, encoder_logσ, z_samples = (
+        outputs[:encoder_µ],
+        outputs[:encoder_logσ],
+        outputs[:z]
+    )
+    # Extract decoder-related terms
+    decoder_μ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
+
+    # Compute average reconstruction loss for a Gaussian decoder over all
+    # samples
+    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
+               1 / n_samples * sum(log.(decoder_σ)) -
+               1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
+                                             decoder_σ .^ 2)
+
+    # Compute Kullback-Leibler divergence between approximated encoder
+    # qᵩ(z|x_in) and latent prior distribution π(z)
     kl_qᵩ_π = 1 / 2.0f0 * sum(
         @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
            2.0f0 * encoder_logσ
@@ -2105,6 +2390,8 @@ function loss(
 end
 
 
+# ==============================================================================
+# ==============================================================================
 # ==============================================================================
 
 @doc raw"""
@@ -2391,8 +2678,8 @@ Customized training function to update parameters of a variational autoencoder
 given a specified loss function.
 
 # Arguments
-- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
-  elements of a variational autoencoder.
+- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
+  struct containing the elements of a variational autoencoder.
 - `x::AbstractVector{Float32}`: Data on which to evaluate the loss function.
   Columns represent individual samples.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
@@ -2419,7 +2706,7 @@ end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
     x::AbstractVector{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
@@ -2440,8 +2727,8 @@ Customized training function to update parameters of a variational autoencoder
 when provided with matrix data.
 
 # Arguments
-- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
-  elements of a variational autoencoder.
+- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
+  struct containing the elements of a variational autoencoder.
 - `x::AbstractMatrix{Float32}`: Matrix of data samples on which to evaluate the
   loss function. Each column represents an individual sample.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
@@ -2474,7 +2761,7 @@ end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
     x::AbstractMatrix{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
@@ -2506,8 +2793,8 @@ Customized training function to update parameters of a variational autoencoder
 when provided with 3D tensor data.
 
 # Arguments
-- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
-  elements of a variational autoencoder.
+- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
+  struct containing the elements of a variational autoencoder.
 - `x::Array{Float32, 3}`: 3D tensor of data samples on which to evaluate the
   loss function. Each slice represents a matrix, and within each matrix, each
   column represents an individual sample.
@@ -2539,7 +2826,7 @@ end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
     x::Array{Float32,3},
     opt::NamedTuple;
     loss_function::Function=loss,
@@ -2583,8 +2870,8 @@ Customized training function to update parameters of a variational autoencoder
 given a loss function.
 
 # Arguments
-- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
-  elements of a variational autoencoder.
+- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
+  struct containing the elements of a variational autoencoder.
 - `x_in::AbstractVector{Float32}`: Input data for the loss function. Represents
   an individual sample.
 - `x_out::AbstractVector{Float32}`: Target output data for the loss function.
@@ -2613,7 +2900,7 @@ end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
     x_in::AbstractVector{Float32},
     x_out::AbstractVector{Float32},
     opt::NamedTuple;
@@ -2635,8 +2922,8 @@ Customized training function to update parameters of a variational autoencoder
 when provided with matrix data.
 
 # Arguments
-- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
-  elements of a variational autoencoder.
+- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
+  struct containing the elements of a variational autoencoder.
 - `x_in::AbstractMatrix{Float32}`: Matrix of input data samples on which to
   evaluate the loss function. Each column represents an individual sample.
 - `x_out::AbstractMatrix{Float32}`: Matrix of target output data samples. Each
@@ -2663,13 +2950,14 @@ Trains the VAE on matrix data by:
 # Examples
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
-for (x_in_batch, x_out_batch) in dataloader # assuming dataloader yields matrices
+# assuming dataloader yields matrices
+for (x_in_batch, x_out_batch) in dataloader 
     train!(vae, x_in_batch, x_out_batch, opt) 
 end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
     x_in::AbstractMatrix{Float32},
     x_out::AbstractMatrix{Float32},
     opt::NamedTuple;
@@ -2709,8 +2997,8 @@ Customized training function to update parameters of a variational autoencoder
 when provided with 3D tensor data.
 
 # Arguments
-- `vae::VAE{<:AbstractEncoder,<:AbstractDecoder}`: A struct containing the
-  elements of a variational autoencoder.
+- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
+  struct containing the elements of a variational autoencoder.
 - `x_in::Array{Float32, 3}`: 3D tensor of input data samples on which to
   evaluate the loss function. Each slice represents a matrix, and within each
   matrix, each column represents an individual sample.
@@ -2739,13 +3027,14 @@ Trains the VAE on 3D tensor data by:
 # Examples
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
-for (x_in_batch, x_out_batch) in dataloader # assuming dataloader yields 3D tensors
+# assuming dataloader yields 3D tensors
+for (x_in_batch, x_out_batch) in dataloader 
     train!(vae, x_in_batch, x_out_batch, opt; β=1.0f0, n_samples=5) 
 end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractEncoder,<:AbstractDecoder},
+    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
     x_in::Array{Float32,3},
     x_out::Array{Float32,3},
     opt::NamedTuple;
