@@ -18,8 +18,6 @@ using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
 
 using ..VAEs: reparameterize
 
-using ..utils: shuffle_data
-
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # InfoMax-VAE
 # Rezaabad, A. L. & Vishwanath, S. Learning Representations by Maximizing Mutual
@@ -246,6 +244,62 @@ end # function
 # ==============================================================================
 
 # ==============================================================================
+# Shuffle latent codes between data samples
+# ==============================================================================
+
+"""
+    shuffle_z(data::AbstractMatrix{T}) where T <: Number
+
+Shuffle the elements of the second dimension of a matrix.
+
+# Arguments
+- `z::AbstractMatrix{T}`: A matrix representing latent codes. Each column
+  corresponds to a single latent code.
+
+# Returns
+- `AbstractMatrix{T}`: A new matrix with the second dimension shuffled.
+
+# Examples
+```julia
+matrix = [1 2 3; 4 5 6; 7 8 9]
+shuffled = shuffle_z(matrix)
+```
+"""
+function shuffle_z(z::AbstractMatrix{T}) where {T<:Number}
+    # Define shuffle indexes
+    shuffled_indices = Random.shuffle(1:size(z, 2))
+    # Return shiffled data
+    return z[:, shuffled_indices]
+end # function
+
+"""
+    `shuffle_z(data::AbstractArray{T, 3}) where T <: Number`
+
+Shuffle the elements of the second dimension of a 3D tensor.
+
+# Arguments
+- `z::AbstractArray{T,3}`: A 3D representing latent codes. Each column in the
+  2nd dimension corresponds to a single latent code. Each slice in the 3rd
+  dimension corresponds to a sample from the resulting latent representation.
+
+# Returns
+- `AbstractArray{T, 3}`: A new 3D tensor with the second dimension shuffled.
+
+# Examples
+
+```julia
+tensor = cat(1:9, 1:9, 1:9, dims = (1, 3, 3))
+shuffled = shuffle_z(tensor)
+```
+"""
+function shuffle_z(z::AbstractArray{T,3}) where {T<:Number}
+    # Define shuffle indexes
+    shuffled_indices = Random.shuffle(1:size(z, 2))
+    # Return shiffled data
+    return z[:, shuffled_indices, :]
+end
+
+# ==============================================================================
 # Variational Mutual information
 # ==============================================================================
 
@@ -414,7 +468,7 @@ function loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_data(z)
+        shuffle_z(z)
     end # do block
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
@@ -523,7 +577,7 @@ function loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_data(z)
+        shuffle_z(z)
     end # do block
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
@@ -630,7 +684,7 @@ function loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_data(z)
+        shuffle_z(z)
     end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
@@ -740,7 +794,7 @@ function loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_data(z)
+        shuffle_z(z)
     end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
@@ -853,7 +907,7 @@ function loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_data(z)
+        shuffle_z(z)
     end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
@@ -963,7 +1017,7 @@ function loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_data(z)
+        shuffle_z(z)
     end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
@@ -1065,7 +1119,7 @@ function mlp_loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_data(z)
+        shuffle_z(z)
     end # do block
 
     # Compute variational mutual information
