@@ -303,7 +303,7 @@ Where:
 function loss(
     vae::VAE{JointLogEncoder,SimpleDecoder},
     mlp::Flux.Chain,
-    x::AbstractMatrix{Float32},
+    x::AbstractMatrix{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
     α::Float32=1.0f0,
@@ -429,7 +429,7 @@ function loss(
     vae::VAE{JointLogEncoder,SimpleDecoder},
     mlp::Flux.Chain,
     x_in::AbstractMatrix{Float32},
-    x_out::AbstractMatrix{Float32},
+    x_out::AbstractMatrix{Float32};
     σ::Float32=1.0f0,
     β::Float32=1.0f0,
     α::Float32=1.0f0,
@@ -552,7 +552,7 @@ where:
 function loss(
     vae::VAE{JointLogEncoder,T},
     mlp::Flux.Chain,
-    x::AbstractMatrix{Float32},
+    x::AbstractMatrix{Float32};
     β::Float32=1.0f0,
     α::Float32=1.0f0,
     n_samples::Int=1,
@@ -680,7 +680,7 @@ function loss(
     vae::VAE{JointLogEncoder,T},
     mlp::Flux.Chain,
     x_in::AbstractMatrix{Float32},
-    x_out::AbstractMatrix{Float32},
+    x_out::AbstractMatrix{Float32};
     β::Float32=1.0f0,
     α::Float32=1.0f0,
     n_samples::Int=1,
@@ -809,7 +809,7 @@ where:
 function loss(
     vae::VAE{<:AbstractVariationalEncoder,T},
     mlp::Flux.Chain,
-    x::AbstractMatrix{Float32},
+    x::AbstractMatrix{Float32};
     β::Float32=1.0f0,
     α::Float32=1.0f0,
     n_samples::Int=1,
@@ -937,7 +937,7 @@ function loss(
     vae::VAE{<:AbstractVariationalEncoder,T},
     mlp::Flux.Chain,
     x_in::AbstractMatrix{Float32},
-    x_out::AbstractMatrix{Float32},
+    x_out::AbstractMatrix{Float32};
     β::Float32=1.0f0,
     α::Float32=1.0f0,
     n_samples::Int=1,
