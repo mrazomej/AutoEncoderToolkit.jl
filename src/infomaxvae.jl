@@ -337,10 +337,10 @@ function variational_mutual_info(
     # Run input and real latent code through MPL
     I_xz = StatsBase.mean(mlp([x; z]))
     # Run input and shuffled latent code through MPL
-    I_xz_perm = StatsBase.mean(mlp([x; z_shuffle]))
+    I_xz_perm = StatsBase.mean(exp.(mlp([x; z_shuffle]) .- 1))
 
     # Compute variational mutual information
-    return I_xz - exp(I_xz_perm - 1)
+    return I_xz - I_xz_perm
 end # function
 
 """
@@ -378,10 +378,12 @@ function variational_mutual_info(
     # Run input and real latent code through MPL
     I_xz = StatsBase.mean(mlp.([Ref(x); eachslice(z, dims=3)]))
     # Run input and shuffled latent code through MPL
-    I_xz_perm = StatsBase.mean(mlp.([Ref(x); eachslice(z_shuffle, dims=2)]))
+    I_xz_perm = StatsBase.mean(
+        exp.(mlp.([Ref(x); eachslice(z_shuffle, dims=2)]) .- 1)
+    )
 
     # Compute variational mutual information
-    return I_xz - exp(I_xz_perm - 1)
+    return I_xz - I_xz_perm
 end # function
 
 # ==============================================================================
@@ -1140,7 +1142,7 @@ end #function
 
 """
     `train!(infomaxvae, x, opt_vae, opt_mlp; loss_function=loss, loss_kwargs,
-            mlp_loss_function, mpl_loss_kwargs)`
+            mlp_loss_function, mlp_loss_kwargs)`
 
 Customized training function to update parameters of an InfoMax variational
 autoencoder (VAE) given a loss function of the specified form.
