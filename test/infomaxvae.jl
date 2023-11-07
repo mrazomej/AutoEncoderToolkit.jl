@@ -122,29 +122,14 @@ infomaxvae = InfoMaxVAEs.InfoMaxVAE(
 # Test that reconstruction works
 @test isa(infomaxvae(data; latent=false), AbstractVecOrMat)
 
-# Generate list of permutated data
-data_shuffle = data[:, Random.shuffle(1:end)]
-
 #  Test loss functions
 @test isa(
-    InfoMaxVAEs.loss(
-        infomaxvae.vae, infomaxvae.mlp, data[:, 1], data_shuffle[:, 1]
-    ),
+    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data),
     AbstractFloat
 )
 
 @test isa(
-    InfoMaxVAEs.loss(
-        infomaxvae.vae, infomaxvae.mlp,
-        data[:, 1], data[:, 1], data_shuffle[:, 1]
-    ),
-    AbstractFloat
-)
-
-@test isa(
-    InfoMaxVAEs.mlp_loss(
-        infomaxvae.vae, infomaxvae.mlp, data[:, 1], data_shuffle[:, 1]
-    ),
+    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data, data),
     AbstractFloat
 )
 
@@ -172,13 +157,7 @@ for epoch = 1:10
     InfoMaxVAEs.train!(infomaxvae, data, vae_opt, mlp_opt)
 
     # Compute average loss
-    push!(
-        losses,
-        StatsBase.mean(InfoMaxVAEs.loss.(
-            Ref(infomaxvae.vae), Ref(infomaxvae.mlp),
-            eachcol(data), eachcol(data_shuffle)
-        ))
-    )
+    push!(losses, InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data))
 end # for
 
 # Check if loss is decreasing
