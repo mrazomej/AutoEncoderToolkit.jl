@@ -1057,9 +1057,6 @@ function mlp_loss(
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
 )
-    # Extract batch size
-    batch_size = size(x, 2)
-
     # Forward Pass (run input through reconstruct function with n_samples)
     outputs = vae(x; latent=true, n_samples=n_samples)
 
@@ -1071,23 +1068,8 @@ function mlp_loss(
         shuffle_data(z)
     end # do block
 
-    # Mutual Information Calculation
-    if n_samples == 1
-        # Compute mutual information for real input
-        I_xz = sum(mlp([x; z]))
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp([x; z_shuffle]))
-    else
-        # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x); eachslice(z, dims=2)])) / n_samples
-
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x); eachslice(z_shuffle, dims=2)])) /
-                    n_samples
-    end # if
-
     # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1)) / batch_size
+    info_x_z = variational_mutual_info(mlp, x, z, z_shuffle)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
