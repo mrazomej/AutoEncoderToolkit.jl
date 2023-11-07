@@ -66,14 +66,18 @@ annealing strategy.
 
 # Returns
 - `β::Float32`: Value of the annealing parameter.
+
+# Citation
+> Fu, H. et al. Cyclical Annealing Schedule: A Simple Approach to Mitigating KL
+> Vanishing. Preprint at http://arxiv.org/abs/1903.10145 (2019).
 """
 function cycle_anneal(
     epoch::Int,
     n_epoch::Int,
     n_cycles::Int;
-    frac::T=0.5,
-    βmax::T=1.0,
-    βmin::T=0.0
+    frac::T=0.5f0,
+    βmax::T=1.0f0,
+    βmin::T=0.0f0
 ) where {T<:AbstractFloat}
     # Define variable τ that will serve to define the value of β
     τ = mod(epoch - 1, ceil(n_epoch / n_cycles)) / (n_epoch / n_cycles)
