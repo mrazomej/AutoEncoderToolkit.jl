@@ -246,6 +246,91 @@ end # function
 # ==============================================================================
 
 # ==============================================================================
+# Variational Mutual information
+# ==============================================================================
+
+"""
+    variational_mutual_info(mpl, x, z, z_shuffle)
+
+Compute a variational approximation of the mutual information between the input
+`x` and the latent code `z` using a multilayer perceptron (MLP).
+
+# Arguments
+- `mlp::Flux.Chain`: A multilayer pereceptron, which is a neural network used
+  to estimate mutual information.
+- `x::AbstractMatrix{Float32}`: Matrix of input data where each column
+  represents a data sample.
+- `z::AbstractMatrix{Float32}`: Matrix of corresponding latent representations
+  of the input data.
+- `z_shuffle::AbstractMatrix{Float32}`: Matrix of latent representations where
+  the second dimension has been shuffled.
+
+# Returns
+- `Float32`: An approximation of the mutual information between the input data
+  and its corresponding latent representation.
+
+# References
+> Rezaabad, A. L. & Vishwanath, S. Learning Representations by Maximizing Mutual
+> Information in Variational Autoencoders. Preprint at
+> http://arxiv.org/abs/1912.13361 (2020).
+"""
+function variational_mutual_info(
+    mlp::Flux.Chain,
+    x::AbstractMatrix{Float32},
+    z::AbstractMatrix{Float32},
+    z_shuffle::AbstractMatrix{Float32},
+)
+    # Run input and real latent code through MPL
+    I_xz = StatsBase.mean(mlp([x; z]))
+    # Run input and shuffled latent code through MPL
+    I_xz_perm = StatsBase.mean(mlp([x; z_shuffle]))
+
+    # Compute variational mutual information
+    return I_xz - exp(I_xz_perm - 1)
+end # function
+
+"""
+    variational_mutual_info(mpl, x, z, z_shuffle)
+
+Compute a variational approximation of the mutual information between the input
+`x` and the latent code `z` using a multilayer perceptron (MLP).
+
+# Arguments
+- `mlp::Flux.Chain`: A multilayer pereceptron, which is a neural network used to
+  estimate mutual information.
+- `x::AbstractMatrix{Float32}`: Matrix of input data where each column
+  represents a data sample.
+- `z::AbstractArray{Float32,3}`: 3D tensor of latent representations where each
+  "slice" along the third dimension corresponds to a different sample.  
+- `z_shuffle::AbstractArray{Float32,3}`: 3D tensor of shuffled latent
+  representations along the second dimension.
+  
+
+# Returns
+- `Float32`: An approximation of the mutual information between the input data
+  and its corresponding latent representation.
+
+# References
+> Rezaabad, A. L. & Vishwanath, S. Learning Representations by Maximizing Mutual
+> Information in Variational Autoencoders. Preprint at
+> http://arxiv.org/abs/1912.13361 (2020).
+"""
+function variational_mutual_info(
+    mlp::Flux.Chain,
+    x::AbstractMatrix{Float32},
+    z::AbstractArray{Float32,3},
+    z_shuffle::AbstractArray{Float32,3},
+)
+    # Run input and real latent code through MPL
+    I_xz = StatsBase.mean(mlp.([Ref(x); eachslice(z, dims=3)]))
+    # Run input and shuffled latent code through MPL
+    I_xz_perm = StatsBase.mean(mlp.([Ref(x); eachslice(z_shuffle, dims=2)]))
+
+    # Compute variational mutual information
+    return I_xz - exp(I_xz_perm - 1)
+end # function
+
+# ==============================================================================
 # Loss InfoMax.VAE{JointLogEncoder,SimpleDecoder}
 # ==============================================================================
 
@@ -335,23 +420,8 @@ function loss(
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     logπ_x_z = -1 / (2 * σ^2 * batch_size * n_samples) * sum((x .- x̂) .^ 2)
 
-    # Mutual Information Calculation
-    if n_samples == 1
-        # Compute mutual information for real input
-        I_xz = sum(mlp([x; z]))
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp([x; z_shuffle]))
-    else
-        # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x); eachslice(z, dims=3)])) / n_samples
-
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x); eachslice(z_shuffle, dims=3)])) /
-                    n_samples
-    end # if
-
     # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1)) / batch_size
+    info_x_z = variational_mutual_info(mlp, x, z, z_shuffle)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
@@ -459,23 +529,8 @@ function loss(
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     logπ_x_z = -1 / (2 * σ^2 * n_samples * batch_size) * sum((x_out .- x̂) .^ 2)
 
-    # Mutual Information Calculation
-    if n_samples == 1
-        # Compute mutual information for real input
-        I_xz = sum(mlp([x_in; z]))
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp([x_in; z_shuffle]))
-    else
-        # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x_in); eachslice(z, dims=3)])) / n_samples
-
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x_in); eachslice(z_shuffle, dims=3)])) /
-                    n_samples
-    end # if
-
     # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1)) / batch_size
+    info_x_z = variational_mutual_info(mlp, x_in, z, z_shuffle)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
@@ -586,23 +641,8 @@ function loss(
         sum((x .- decoder_µ) .^ 2 ./ exp.(2 * decoder_logσ))
     )
 
-    # Mutual Information Calculation
-    if n_samples == 1
-        # Compute mutual information for real input
-        I_xz = sum(mlp([x; z]))
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp([x; z_shuffle]))
-    else
-        # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x); eachslice(z, dims=3)])) / n_samples
-
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x); eachslice(z_shuffle, dims=3)])) /
-                    n_samples
-    end # if
-
     # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1)) / batch_size
+    info_x_z = variational_mutual_info(mlp, x, z, z_shuffle)
 
     # Compute Kullback-Leibler divergence between approximated encoder qᵩ(z|x_in)
     # and latent prior distribution π(z)
@@ -711,23 +751,8 @@ function loss(
         sum((x_out .- decoder_µ) .^ 2 ./ exp.(2 * decoder_logσ))
     )
 
-    # Mutual Information Calculation
-    if n_samples == 1
-        # Compute mutual information for real input
-        I_xz = sum(mlp([x_in; z]))
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp([x_in; z_shuffle]))
-    else
-        # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x_in); eachslice(z, dims=3)])) / n_samples
-
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x_in); eachslice(z_shuffle, dims=3)])) /
-                    n_samples
-    end # if
-
     # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1)) / batch_size
+    info_x_z = variational_mutual_info(mlp, x_in, z, z_shuffle)
 
     # Compute Kullback-Leibler divergence between approximated encoder qᵩ(z|x_in)
     # and latent prior distribution π(z)
@@ -839,23 +864,8 @@ function loss(
         sum((x .- decoder_µ) .^ 2 ./ decoder_σ .^ 2)
     )
 
-    # Mutual Information Calculation
-    if n_samples == 1
-        # Compute mutual information for real input
-        I_xz = sum(mlp([x; z]))
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp([x; z_shuffle]))
-    else
-        # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x); eachslice(z, dims=3)])) / n_samples
-
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x); eachslice(z_shuffle, dims=3)])) /
-                    n_samples
-    end # if
-
     # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1)) / batch_size
+    info_x_z = variational_mutual_info(mlp, x, z, z_shuffle)
 
     # Compute Kullback-Leibler divergence between approximated encoder
     # qᵩ(z|x_in) and latent prior distribution π(z)
@@ -964,23 +974,8 @@ function loss(
         sum((x_out .- decoder_µ) .^ 2 ./ decoder_σ .^ 2)
     )
 
-    # Mutual Information Calculation
-    if n_samples == 1
-        # Compute mutual information for real input
-        I_xz = sum(mlp([x_in; z]))
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp([x_in; z_shuffle]))
-    else
-        # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x_in); eachslice(z, dims=3)])) / n_samples
-
-        # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x_in); eachslice(z_shuffle, dims=3)])) /
-                    n_samples
-    end # if
-
     # Compute variational mutual information
-    info_x_z = sum(@. I_xz - exp(I_xz_perm - 1)) / batch_size
+    info_x_z = variational_mutual_info(mlp, x_in, z, z_shuffle)
 
     # Compute Kullback-Leibler divergence between approximated encoder
     # qᵩ(z|x_in) and latent prior distribution π(z)
@@ -1084,10 +1079,10 @@ function mlp_loss(
         I_xz_perm = sum(mlp([x; z_shuffle]))
     else
         # Compute mutual information for real input
-        I_xz = sum(mlp.([Ref(x); eachslice(z, dims=3)])) / n_samples
+        I_xz = sum(mlp.([Ref(x); eachslice(z, dims=2)])) / n_samples
 
         # Compute mutual information for shuffled input
-        I_xz_perm = sum(mlp.([Ref(x); eachslice(z_shuffle, dims=3)])) /
+        I_xz_perm = sum(mlp.([Ref(x); eachslice(z_shuffle, dims=2)])) /
                     n_samples
     end # if
 
