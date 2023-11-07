@@ -1137,8 +1137,8 @@ input and latent variables.
 
 # Arguments
 - `infomaxvae::InfoMaxVAE`: Struct containing the elements of an InfoMax VAE.
-- `x::AbstractVector{Float32}`: Vector containing the data on which to evaluate
-  the loss function. Each element should represent a single input.
+- `x::AbstractMatrix{Float32}`: Matrix containing the data on which to evaluate
+  the loss function. Each column represents a single data point.
 - `opt_vae::Flux.Optimise.Optimiser`: Optimizing algorithm to be used for
   updating the VAE parameters.
 - `opt_mlp::Flux.Optimise.Optimiser`: Optimizing algorithm to be used for
@@ -1171,86 +1171,13 @@ for x in dataloader
     train!(infomaxvae, x, opt_vae, opt_mlp, α=100.0)
 end
 ```
-"""
-function train!(
-    infomaxvae::InfoMaxVAE,
-    x::AbstractVector{Float32},
-    opt_vae::NamedTuple,
-    opt_mlp::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    mlp_loss_function::Function=mlp_loss,
-    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict()
-)
-    # Permute data for computation of mutual information
-    x_shuffle = @view x[Random.shuffle(1:end)]
 
-    # == VAE == #
-    # Compute gradient
-    ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
-        loss_function(vae, infomaxvae.mlp, x, x_shuffle; loss_kwargs...)
-    end # do
-
-    # Update the VAE network parameters averaging gradient from all datasets
-    Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
-
-    # == MLP == #
-    # Compute gradient
-    ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-        mlp_loss_function(infomaxvae.vae, mlp, x, x_shuffle; mlp_loss_kwargs...)
-    end # do
-
-    # Update the MLP network parameters averaging gradient from all datasets
-    Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
-end # function
-
-@doc raw"""
-    `train!(infomaxvae, x, opt_vae, opt_mlp; loss_function=loss, loss_kwargs,
-            mpl_loss_function, mpl_loss_kwargs, average=true)`
-
-Trains an InfoMax Variational Autoencoder (VAE) on a batch of data represented
-as a matrix, with optional averaging of gradients across data points.
-
-# Arguments
-- `infomaxvae::InfoMaxVAE`: The InfoMax VAE model to be trained.
-- `x::AbstractMatrix{Float32}`: A matrix of training data where each column
-  represents a single data sample.
-- `opt_vae::Flux.Optimise.Optimiser`: The optimizer to use for the VAE
-  parameters.
-- `opt_mlp::Flux.Optimise.Optimiser`: The optimizer to use for the MLP
-  parameters.
-
-
-# Optional Keyword Arguments
-- `loss_function::Function`: The loss function to be used for training. Defaults
-  to a predefined `loss` function.
-- `loss_kwargs::Union{NamedTuple,Dict}`: Keyword arguments to pass to the loss
-  function.
-- `mlp_loss_function::Function`: The loss function to be used during training
-for the MLP computing the variational free energy, defaulting to `mlp_loss`.
-- `mlp_loss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be
-    passed to the MLP loss function.
-- `average::Bool`: A boolean flag to determine if gradients should be averaged
-  across all data points. If `true`, gradients are averaged. If `false`,
-  `train!` is called on each data point separately.
-
-# Description
-This function can either average the gradients across all the data points before
-updating the parameters (`average=true`) or update the parameters for each data
-point separately (`average=false`). When `average` is set to `true`, it computes
-the gradients by averaging the loss over all columns of the input data matrix
-`x` and applies the updates to the VAE and MLP parameters accordingly. When
-`average` is set to `false`, it loops over each column and applies updates
-individually.
-
-# Examples
-```julia
-opt_vae = Flux.Optimise.ADAM(1e-3)
-opt_mlp = Flux.Optimise.ADAM(1e-3)
-x = rand(Float32, 784, 100) # 100 samples of 784-dimensional data
-
-train!(infomaxvae, x, opt_vae, opt_mlp, average=false)
-```
+# Notes
+- Ensure that the dimensionality of the input data `x` aligns with the encoder's
+  expected input in the VAE.
+- InfoMaxVAEs fully depend on batch training as the estimation of mutual
+  information depends on shuffling the latent codes. This method works for large
+  enough batches (≥ 64 samples).
 """
 function train!(
     infomaxvae::InfoMaxVAE,
@@ -1260,173 +1187,25 @@ function train!(
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     mlp_loss_function::Function=mlp_loss,
-    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
+    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict()
 )
-    # Permute data for computation of mutual information
-    x_shuffle = @view x[:, Random.shuffle(1:end)]
+    # == VAE == #
+    # Compute gradient
+    ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
+        loss_function(vae, infomaxvae.mlp, x; loss_kwargs...)
+    end # do
 
-    # Decide on training approach based on 'average'
-    if average
-        # == VAE == #
-        # Compute gradient
-        ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
-            StatsBase.mean(
-                loss_function.(
-                    Ref(vae),
-                    Ref(infomaxvae.mlp),
-                    eachcol(x),
-                    eachcol(x_shuffle);
-                    loss_kwargs...
-                )
-            )
-        end # do
+    # Update the VAE network parameters averaging gradient from all datasets
+    Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
 
-        # Update the VAE network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
+    # == MLP == #
+    # Compute gradient
+    ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
+        mlp_loss_function(infomaxvae.vae, mlp, x; mlp_loss_kwargs...)
+    end # do
 
-        # == MLP == #
-        # Compute gradient
-        ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-            StatsBase.mean(
-                mlp_loss_function.(
-                    Ref(infomaxvae.vae),
-                    Ref(mlp),
-                    eachcol(x),
-                    eachcol(x_shuffle);
-                    mlp_loss_kwargs...
-                )
-            )
-        end # do
-
-        # Update the MLP network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
-    else
-        foreach(
-            col -> train!(
-                infomaxvae, col, opt_vae, opt_mlp;
-                loss_function=loss_function,
-                loss_kwargs=loss_kwargs,
-                mlp_loss_function=mlp_loss_function,
-                mlp_loss_kwargs=mlp_loss_kwargs
-            ),
-            eachcol(x)
-        )
-    end # if
-end # function
-
-@doc raw"""
-        train!(infomaxvae, x, opt_vae, opt_mlp; loss_function=loss, 
-        loss_kwargs, mlp_loss_function=mlp_loss, mlp_loss_kwargs, 
-        average=true)
-
-Trains an InfoMax Variational Autoencoder (VAE) on a batch of 3D data, with
-optional averaging of gradients across the tensor slices.
-
-# Arguments
-
-# Arguments
-- `infomaxvae::InfoMaxVAE`: The InfoMax VAE model to be trained.
-- `x::AbstractArray{Float32,3}`: A 3D tensor of training data where the first
-  dimension corresponds to features, the second to time or sequence, and the
-  third to different samples or batch items.
-- `opt_vae::Flux.Optimise.Optimiser`: The optimizer to use for the VAE
-  parameters.
-- `opt_mlp::Flux.Optimise.Optimiser`: The optimizer to use for the MLP
-  parameters.
-
-
-# Optional Keyword Arguments
-- `loss_function::Function`: The loss function to be used for training. Defaults
-  to a predefined `loss` function.
-- `loss_kwargs::Union{NamedTuple,Dict}`: Keyword arguments to pass to the loss
-  function.
-- `mlp_loss_function::Function`: The loss function to be used during training
-for the MLP computing the variational free energy, defaulting to `mlp_loss`.
-- `mlp_loss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be
-    passed to the MLP loss function.
-- `average::Bool`: A boolean flag to determine if gradients should be averaged
-  across all data points. If `true`, gradients are averaged. If `false`,
-  `train!` is called on each data point separately.
-
-# Description
-
-This function allows training on 3D data by handling each slice along the third
-dimension either in an averaged manner or individually. If `average=true`, the
-function computes the gradients by averaging the loss across all slices of the
-3D tensor `x` and updates the VAE and MLP parameters accordingly. If
-`average=false`, it loops over each slice of x and applies updates individually
-to each column of the slice.
-
-# Examples
-
-```julia
-code opt_vae = (...) opt_mlp = (...) x = rand(Float32, 10, 100, 5) 
-# 5 samples of 100 timesteps with 10 features each
-
-train!(infomaxvae, x, opt_vae, opt_mlp, average=true)
-```
-"""
-function train!(
-    infomaxvae::InfoMaxVAE,
-    x::AbstractArray{Float32,3},
-    opt_vae::NamedTuple,
-    opt_mlp::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    mlp_loss_function::Function=mlp_loss,
-    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
-)
-    # Permute the data for each slice to compute the mutual information
-    x_shuffled = map(eachslice(x, dims=3)) do slice
-        # Shuffling needs to be done along the second dimension for each slice
-        slice[:, Random.shuffle(1:size(slice, 2)), :]
-    end
-
-    # Decide on the training approach based on 'average'
-    if average
-        # Compute the averaged gradient across all slices of the tensor
-        ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae_model
-            StatsBase.mean([
-                StatsBase.mean(
-                    loss_function.(
-                        Ref(vae_model), eachcol(slice), Ref(loss_kwargs)...
-                    )
-                )
-                for (slice, slice_shuffled) in
-                zip(eachslice(x, dims=3), eachslice(x_shuffled, dims=3))
-            ])
-        end # do block
-        # Update the VAE network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
-
-        # Compute the averaged gradient across all slices of the tensor
-        ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-            StatsBase.mean([
-                StatsBase.mean(
-                    mlp_loss_function.(
-                        Ref(mlp), eachcol(slice), Ref(mlp_loss_kwargs)...
-                    )
-                )
-                for slice in eachslice(x, dims=3)
-            ])
-        end # do block
-        # Update the VAE network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
-    else
-        foreach(
-            slice -> foreach(
-                col -> train!(
-                    infomax, col, opt_vae, opt_mlp;
-                    loss_function, loss_kwargs,
-                    mlp_loss_function, mlp_loss_kwargs
-                ),
-                eachcol(slice)
-            ),
-            eachslice(x, dims=3)
-        )
-    end # if
+    # Update the MLP network parameters averaging gradient from all datasets
+    Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
 end # function
 
 # ==============================================================================
@@ -1485,93 +1264,13 @@ for x in dataloader
     train!(infomaxvae, x, opt_vae, opt_mlp, α=100.0)
 end
 ```
-"""
-function train!(
-    infomaxvae::InfoMaxVAE,
-    x_in::AbstractVector{Float32},
-    x_out::AbstractVector{Float32},
-    opt_vae::NamedTuple,
-    opt_mlp::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    mlp_loss_function::Function=mlp_loss,
-    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict()
-)
-    # Permute data for computation of mutual information
-    x_shuffle = @view x_in[Random.shuffle(1:end)]
 
-    # == VAE == #
-    # Compute gradient
-    ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
-        loss_function(
-            vae, infomaxvae.mlp, x_in, x_out, x_shuffle; loss_kwargs...
-        )
-    end # do
-
-    # Update the VAE network parameters averaging gradient from all datasets
-    Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
-
-    # == MLP == #
-    # Compute gradient
-    ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-        mlp_loss_function(
-            infomaxvae.vae, mlp, x_in, x_shuffle; mlp_loss_kwargs...
-        )
-    end # do
-
-    # Update the MLP network parameters averaging gradient from all datasets
-    Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
-end # function
-
-@doc raw"""
-    `train!(infomaxvae, x_in, x_out,  opt_vae, opt_mlp; loss_function=loss, 
-    loss_kwargs, mlp_loss_function=mlp_loss, mlp_loss_kwargs, average=true)`
-
-Trains an InfoMax Variational Autoencoder (VAE) on a batch of data represented
-as a matrix, with optional averaging of gradients across data points.
-
-# Arguments
-- `infomaxvae::InfoMaxVAE`: The InfoMax VAE model to be trained.
-- `x_in::AbstractMatrix{Float32}`: Matrix of input data samples on which to
-  evaluate the loss function. Each column represents an individual sample.
-- `x_out::AbstractMatrix{Float32}`: Matrix of target output data samples. Each
-  column represents the corresponding output for an individual sample in `x_in`.
-- `opt_vae::Flux.Optimise.Optimiser`: The optimizer to use for the VAE
-  parameters.
-- `opt_mlp::Flux.Optimise.Optimiser`: The optimizer to use for the MLP
-  parameters.
-
-
-# Optional Keyword Arguments
-- `loss_function::Function`: The loss function to be used for training. Defaults
-  to a predefined `loss` function.
-- `loss_kwargs::Union{NamedTuple,Dict}`: Keyword arguments to pass to the loss
-  function.
-- `mlp_loss_function::Function`: The loss function to be used during training
-for the MLP computing the variational free energy, defaulting to `mlp_loss`.
-- `mlp_loss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be
-    passed to the MLP loss function.
-- `average::Bool`: A boolean flag to determine if gradients should be averaged
-  across all data points. If `true`, gradients are averaged. If `false`,
-  `train!` is called on each data point separately.
-
-# Description
-This function can either average the gradients across all the data points before
-updating the parameters (`average=true`) or update the parameters for each data
-point separately (`average=false`). When `average` is set to `true`, it computes
-the gradients by averaging the loss over all columns of the input data matrix
-`x` and applies the updates to the VAE and MLP parameters accordingly. When
-`average` is set to `false`, it loops over each column and applies updates
-individually.
-
-# Examples
-```julia
-opt_vae = Flux.Optimise.ADAM(1e-3)
-opt_mlp = Flux.Optimise.ADAM(1e-3)
-x = rand(Float32, 784, 100) # 100 samples of 784-dimensional data
-
-train!(infomaxvae, x, opt_vae, opt_mlp, average=false)
-```
+# Notes
+- Ensure that the dimensionality of the input data `x_in` and `x_out` aligns
+  with the encoder's expected input in the VAE.
+- InfoMaxVAEs fully depend on batch training as the estimation of mutual
+  information depends on shuffling the latent codes. This method works for large
+  enough batches (≥ 64 samples).
 """
 function train!(
     infomaxvae::InfoMaxVAE,
@@ -1582,191 +1281,27 @@ function train!(
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     mlp_loss_function::Function=mlp_loss,
-    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
+    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict()
 )
-    # Permute data for computation of mutual information
-    x_shuffle = @view x_in[:, Random.shuffle(1:end)]
-
-    # Decide on training approach based on 'average'
-    if average
-        # == VAE == #
-        # Compute gradient
-        ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
-            StatsBase.mean(
-                loss_function.(
-                    Ref(vae),
-                    Ref(infomaxvae.mlp),
-                    eachcol(x_in),
-                    eachcol(x_out),
-                    eachcol(x_shuffle);
-                    loss_kwargs...
-                )
-            )
-        end # do
-
-        # Update the VAE network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
-
-        # == MLP == #
-        # Compute gradient
-        ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-            StatsBase.mean(
-                mlp_loss_function.(
-                    Ref(infomaxvae.vae),
-                    Ref(mlp),
-                    eachcol(x_in),
-                    eachcol(x_out),
-                    eachcol(x_shuffle);
-                    mlp_loss_kwargs...
-                )
-            )
-        end # do
-        # Update the MLP network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
-    else
-        foreach(
-            (col_in, col_out) -> train!(
-                infomaxvae, col_in, col_out, opt_vae, opt_mlp;
-                loss_function=loss_function,
-                loss_kwargs=loss_kwargs,
-                mlp_loss_function=mlp_loss_function,
-                mlp_loss_kwargs=mlp_loss_kwargs
-            ),
-            zip(eachcol(x_in), eachcol(x_out))
+    # == VAE == #
+    # Compute gradient
+    ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae
+        loss_function(
+            vae, infomaxvae.mlp, x_in, x_out; loss_kwargs...
         )
-    end # if
-end # function
+    end # do
 
-@doc raw"""
-        train!(infomaxvae, x_in, x_out, opt_vae, opt_mlp; loss_function=loss, 
-        loss_kwargs, mlp_loss_function=mlp_loss, mlp_loss_kwargs, 
-        average=true)
+    # Update the VAE network parameters averaging gradient from all datasets
+    Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
 
-Trains an InfoMax Variational Autoencoder (VAE) on a batch of 3D data, with
-optional averaging of gradients across the tensor slices.
-
-# Arguments
-
-# Arguments
-- `infomaxvae::InfoMaxVAE`: The InfoMax VAE model to be trained.
-- `x_in::AbstractArray{Float32,3}`: A 3D tensor of training data where the first
-  dimension corresponds to features, the second to time or sequence, and the
-  third to different samples or batch items.
-- `x_out::AbstractArray{Float32,3}`: A 3D tensor of training data where the
-  first dimension corresponds to features, the second to time or sequence, and
-  the third to different samples or batch items.
-- `opt_vae::Flux.Optimise.Optimiser`: The optimizer to use for the VAE
-  parameters.
-- `opt_mlp::Flux.Optimise.Optimiser`: The optimizer to use for the MLP
-  parameters.
-
-
-# Optional Keyword Arguments
-- `loss_function::Function`: The loss function to be used for training. Defaults
-  to a predefined `loss` function.
-- `loss_kwargs::Union{NamedTuple,Dict}`: Keyword arguments to pass to the loss
-  function.
-- `mlp_loss_function::Function`: The loss function to be used during training
-for the MLP computing the variational free energy, defaulting to `mlp_loss`.
-- `mlp_loss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be
-    passed to the MLP loss function.
-- `average::Bool`: A boolean flag to determine if gradients should be averaged
-  across all data points. If `true`, gradients are averaged. If `false`,
-  `train!` is called on each data point separately.
-
-# Description
-
-This function allows training on 3D data by handling each slice along the third
-dimension either in an averaged manner or individually. If `average=true`, the
-function computes the gradients by averaging the loss across all slices of the
-3D tensor `x_in` and updates the VAE and MLP parameters accordingly. If
-`average=false`, it loops over each slice of x and applies updates individually
-to each column of the slice.
-
-# Examples
-
-```julia
-# Assuming the existence of a predefined loss function `loss` and `mlp_loss`
-infomaxvae = InfoMaxVAE(...)  # Instantiate the model
-opt_vae = ADAM(...)  # Set up the optimizer for VAE
-opt_mlp = ADAM(...)  # Set up the optimizer for MLP
-x_in = rand(Float32, 10, 100, 5)
-x_out = rand(Float32, 10, 100, 5)  # Corresponding target data
-
-train!(infomaxvae, x_in, x_out, opt_vae, opt_mlp, average=true)
-```
-"""
-function train!(
-    infomaxvae::InfoMaxVAE,
-    x_in::AbstractArray{Float32,3},
-    x_out::AbstractArray{Float32,3},
-    opt_vae::NamedTuple,
-    opt_mlp::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    mlp_loss_function::Function=mlp_loss,
-    mlp_loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
-)
-    # Permute the data for each slice to compute the mutual information
-    x_shuffled = map(eachslice(x_in, dims=3)) do slice
-        # Shuffling needs to be done along the second dimension for each slice
-        slice[:, Random.shuffle(1:size(slice, 2)), :]
-    end
-
-    # Decide on the training approach based on 'average'
-    if average
-        # Compute the averaged gradient across all slices of the tensor
-        ∇vae_loss_ = Flux.gradient(infomaxvae.vae) do vae_model
-            StatsBase.mean([
-                StatsBase.mean(
-                    loss_function.(
-                        Ref(vae_model),
-                        eachcol(slice_in),
-                        eachcol(slice_out),
-                        eachcol(slice_shuffled),
-                        Ref(loss_kwargs)...
-                    )
-                )
-                for (slice_in, slice_out, slice_shuffled) in
-                zip(
-                    eachslice(x_in, dims=3),
-                    eachslice(x_out, dims=3),
-                    eachslice(x_shuffled, dims=3)
-                )
-            ])
-        end # do block
-        # Update the VAE network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_vae, infomaxvae.vae, ∇vae_loss_[1])
-
-        # Compute the averaged gradient across all slices of the tensor
-        ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
-            StatsBase.mean([
-                StatsBase.mean(
-                    mlp_loss_function.(
-                        Ref(mlp), eachcol(slice_in), Ref(mlp_loss_kwargs)...
-                    )
-                )
-                for slice in eachslice(x_in, dims=3)
-            ])
-        end # do block
-        # Update the VAE network parameters averaging gradient from all datasets
-        Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
-    else
-        foreach(
-            ((slice_in, slice_out) -> foreach(
-                (col_in, col_out) -> train!(
-                    infomax, col_in, col_out, opt_vae, opt_mlp;
-                    loss_function=loss_function,
-                    loss_kwargs=loss_kwargs,
-                    mlp_loss_function=mlp_loss_function,
-                    mlp_loss_kwargs=mlp_loss_kwargs
-                ),
-                zip(eachcol(slice_in), eachcol(slice_out))
-            ),
-            zip(eachslice(x_in, dims=3), eachslice(x_out, dims=3))
+    # == MLP == #
+    # Compute gradient
+    ∇mlp_loss_ = Flux.gradient(infomaxvae.mlp) do mlp
+        mlp_loss_function(
+            infomaxvae.vae, mlp, x_in; mlp_loss_kwargs...
         )
-        )
-    end # if
+    end # do
+
+    # Update the MLP network parameters averaging gradient from all datasets
+    Flux.Optimisers.update!(opt_mlp, infomaxvae.mlp, ∇mlp_loss_[1])
 end # function
