@@ -3,6 +3,10 @@ import NearestNeighbors
 
 # Import library for random sampling
 import StatsBase
+import Random
+
+# Export functions
+export shuffle_data, cycle_anneal, locality_sampler
 
 @doc raw"""
     `step_scheduler(epoch, epoch_change, learning_rates)`
@@ -175,3 +179,52 @@ function locality_sampler(
         return @view data[:, [idx_primary; idx_secondary]]
     end # if
 end # function
+
+"""
+    shuffle_data(data::AbstractMatrix{T}) where T <: Number
+
+Shuffle the elements of the second dimension of a matrix.
+
+# Arguments
+- `data::AbstractMatrix{T}`: A matrix of numerical values.
+
+# Returns
+- `AbstractMatrix{T}`: A new matrix with the second dimension shuffled.
+
+# Examples
+```julia
+matrix = [1 2 3; 4 5 6; 7 8 9]
+shuffled = shuffle_data(matrix)
+```
+"""
+function shuffle_data(data::AbstractMatrix{T}) where {T<:Number}
+    # Define shuffle indexes
+    shuffled_indices = Random.shuffle(1:size(data, 2))
+    # Return shiffled data
+    return data[:, shuffled_indices]
+end # function
+
+"""
+    `shuffle_data(data::AbstractArray{T, 3}) where T <: Number`
+
+Shuffle the elements of the second dimension of a 3D tensor.
+
+# Arguments
+- `data::AbstractArray{T, 3}`: A 3D tensor of numerical values.
+
+# Returns
+- `AbstractArray{T, 3}`: A new 3D tensor with the second dimension shuffled.
+
+# Examples
+
+```julia
+tensor = cat(1:9, 1:9, 1:9, dims = (1, 3, 3))
+shuffled = shuffle_data(tensor)
+```
+"""
+function shuffle_data(data::AbstractArray{T,3}) where {T<:Number}
+    # Define shuffle indexes
+    shuffled_indices = Random.shuffle(1:size(data, 2))
+    # Return shiffled data
+    return data[:, shuffled_indices, :]
+end
