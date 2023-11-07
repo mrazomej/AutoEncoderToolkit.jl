@@ -18,6 +18,8 @@ using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
 
 using ..VAEs: reparameterize
 
+using ..utils: shuffle_data
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # InfoMax-VAE
 # Rezaabad, A. L. & Vishwanath, S. Learning Representations by Maximizing Mutual
@@ -326,11 +328,9 @@ function loss(
     )
 
     # Permute latent codes for computation of mutual information
-    if n_samples == 1
-        z_shuffle = @view z[:, Random.shuffle(1:end)]
-    else
-        z_shuffle = @view z[:, Random.shuffle(1:end), :]
-    end # if
+    z_shuffle = Zygote.ignore() do
+        shuffle_data(z)
+    end # do block
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     logπ_x_z = -1 / (2 * σ^2 * batch_size * n_samples) * sum((x .- x̂) .^ 2)
@@ -452,11 +452,9 @@ function loss(
     )
 
     # Permute latent codes for computation of mutual information
-    if n_samples == 1
-        z_shuffle = @view z[:, Random.shuffle(1:end)]
-    else
-        z_shuffle = @view z[:, Random.shuffle(1:end), :]
-    end # if
+    z_shuffle = Zygote.ignore() do
+        shuffle_data(z)
+    end # do block
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     logπ_x_z = -1 / (2 * σ^2 * n_samples * batch_size) * sum((x_out .- x̂) .^ 2)
@@ -576,11 +574,9 @@ function loss(
     decoder_µ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
     # Permute latent codes for computation of mutual information
-    if n_samples == 1
-        z_shuffle = @view z[:, Random.shuffle(1:end)]
-    else
-        z_shuffle = @view z[:, Random.shuffle(1:end), :]
-    end # if
+    z_shuffle = Zygote.ignore() do
+        shuffle_data(z)
+    end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
     # averaged over all samples
@@ -703,11 +699,9 @@ function loss(
     decoder_µ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
 
     # Permute latent codes for computation of mutual information
-    if n_samples == 1
-        z_shuffle = @view z[:, Random.shuffle(1:end)]
-    else
-        z_shuffle = @view z[:, Random.shuffle(1:end), :]
-    end # if
+    z_shuffle = Zygote.ignore() do
+        shuffle_data(z)
+    end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
     # averaged over all samples
@@ -833,11 +827,9 @@ function loss(
     decoder_µ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
 
     # Permute latent codes for computation of mutual information
-    if n_samples == 1
-        z_shuffle = @view z[:, Random.shuffle(1:end)]
-    else
-        z_shuffle = @view z[:, Random.shuffle(1:end), :]
-    end # if
+    z_shuffle = Zygote.ignore() do
+        shuffle_data(z)
+    end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
     # averaged over all samples
@@ -960,11 +952,9 @@ function loss(
     decoder_µ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
 
     # Permute latent codes for computation of mutual information
-    if n_samples == 1
-        z_shuffle = @view z[:, Random.shuffle(1:end)]
-    else
-        z_shuffle = @view z[:, Random.shuffle(1:end), :]
-    end # if
+    z_shuffle = Zygote.ignore() do
+        shuffle_data(z)
+    end # do block
 
     # Compute average reconstruction loss ⟨log π(x|z)⟩ for a Gaussian decoder
     # averaged over all samples
@@ -1082,11 +1072,9 @@ function mlp_loss(
     z = outputs[:z]
 
     # Permute latent codes for computation of mutual information
-    if n_samples == 1
-        z_shuffle = @view z[:, Random.shuffle(1:end)]
-    else
-        z_shuffle = @view z[:, Random.shuffle(1:end), :]
-    end # if
+    z_shuffle = Zygote.ignore() do
+        shuffle_data(z)
+    end # do block
 
     # Mutual Information Calculation
     if n_samples == 1
