@@ -19,7 +19,7 @@ using ..AutoEncode: AbstractAutoEncoder, AbstractVariationalAutoEncoder,
     AbstractVariationalDecoder
 
 # Export functions to use elsewhere
-export reparameterize
+export reparameterize, reconstruction_gaussian_decoder, kl_gaussian_encoder
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
@@ -1836,7 +1836,7 @@ the specified `decoder`.
 - `decoder::T`: Decoder network of type `SimpleDecoder`, which is assumed to
   have already mapped the latent variables to the parameters of the Gaussian
   distribution.
-- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
 - `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
@@ -1859,7 +1859,7 @@ the specified `decoder`.
 """
 function reconstruction_gaussian_decoder(
     decoder::SimpleDecoder,
-    x::AbstractArray{Float32},
+    x::AbstractVecOrMat{Float32},
     vae_outputs::Dict;
     n_samples::Int=1
 )
@@ -1886,7 +1886,7 @@ function reconstruction_gaussian_decoder(
     # Compute average reconstruction loss
     neg_log_likelihood = -0.5f0 * (
         log(2.0f0π) * length(decoder_µ) +
-        sum((x .- decoder_µ) .^ 2 ./ (decoder_σ^2))
+        sum((x .- decoder_µ) .^ 2)
     )
 
     # Average over the number of samples and batch size
@@ -1910,7 +1910,7 @@ the specified `decoder`.
 - `decoder::T`: Decoder network of type `JointDecoder` or `SplitDecoder`, which
   is assumed to have already mapped the latent variables to the parameters of
   the Gaussian distribution.
-- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
 - `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
@@ -1932,7 +1932,7 @@ the specified `decoder`.
 """
 function reconstruction_gaussian_decoder(
     decoder::T,
-    x::AbstractArray{Float32},
+    x::AbstractVecOrMat{Float32},
     vae_outputs::Dict;
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
@@ -1979,7 +1979,9 @@ standard deviations.
 # Arguments
 - `decoder::T`: Decoder network of type `JointLogDecoder` or `SplitLogDecoder`,
   which outputs the log of the standard deviation of the Gaussian distribution.
-- `x::AbstractArray{Float32}`: The original input data to the encoder.
+- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. Each column
+  represents a separate data sample.
 - `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
@@ -1998,7 +2000,7 @@ standard deviations.
 """
 function reconstruction_log_gaussian_decoder(
     decoder::T,
-    x::AbstractArray{Float32},
+    x::AbstractVecOrMat{Float32},
     vae_outputs::Dict;
     n_samples::Int=1
 ) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
@@ -2104,8 +2106,8 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x::AbstractVector{Float32}`: Input vector. For batch processing or evaluating
-  the entire dataset, use: `sum(loss.(Ref(vae), eachcol(x)))`.
+- `x::AbstractVecOrMat{Float32}`: Input data. Each column represents a single
+  data point.
 
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
@@ -2124,12 +2126,10 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 # Note
 - Ensure that the input data `x` matches the expected input dimensionality for
   the encoder in the VAE.
-- For batch processing or evaluating an entire dataset, use:
-  `sum(loss.(Ref(vae), eachcol(x)))`.
 """
 function loss(
     vae::VAE,
-    x::AbstractArray{Float32};
+    x::AbstractVecOrMat{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
@@ -2177,8 +2177,9 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
-- `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
+- `x_in::AbstractVecOrMat{Float32}`: Input data to the VAE encoder. Each column
+  represents a single data point.
+- `x_out::AbstractVecOrMat{Float32}`: Target data to compute the reconstruction
   error.
 
 # Optional Keyword Arguments
@@ -2196,15 +2197,13 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   terms.
 
 # Note
-- Ensure that the input data `x_in` matches the expected input dimensionality
-  for the encoder in the VAE.
-- For batch processing or evaluating an entire dataset, use:
-    `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
+- Ensure that the input data `x_in` and `x_out` match the expected input
+  dimensionality for the encoder in the VAE.
 """
 function loss(
     vae::VAE,
-    x_in::AbstractArray{Float32},
-    x_out::AbstractArray{Float32};
+    x_in::AbstractVecOrMat{Float32},
+    x_out::AbstractVecOrMat{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
@@ -2245,9 +2244,8 @@ Customized training function to update parameters of a variational autoencoder
 given a specified loss function.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
-  struct containing the elements of a variational autoencoder.
-- `x::AbstractVector{Float32}`: Data on which to evaluate the loss function.
+- `vae::VAE`: A struct containing the elements of a variational autoencoder.
+- `x::AbstractVecOrMat{Float32}`: Data on which to evaluate the loss function.
   Columns represent individual samples.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
   initialized using `Flux.Train.setup`.
@@ -2273,8 +2271,8 @@ end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x::AbstractVector{Float32},
+    vae::VAE,
+    x::AbstractVecOrMat{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict()
@@ -2285,147 +2283,6 @@ function train!(
     end # do block
     # Update parameters
     Flux.Optimisers.update!(opt, vae, ∇loss_[1])
-end # function
-
-@doc raw"""
-    `train!(vae, x, opt; loss_function, loss_kwargs, average)`
-
-Customized training function to update parameters of a variational autoencoder
-when provided with matrix data.
-
-# Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
-  struct containing the elements of a variational autoencoder.
-- `x::AbstractMatrix{Float32}`: Matrix of data samples on which to evaluate the
-  loss function. Each column represents an individual sample.
-- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
-  initialized using `Flux.Train.setup`.
-
-# Optional Keyword Arguments
-- `loss_function::Function=VAEs.loss`: The loss function used for training. It
-  should accept the VAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
-  function. These might include parameters like `σ`, `β`, or `n_samples`,
-  depending on the specific loss function in use.
-- `average::Bool = true`: If `true`, computes and averages the gradient for all
-  samples in `x` before updating parameters. If `false`, updates parameters
-  after computing the gradient for each sample.
-
-# Description
-Trains the VAE on matrix data by:
-1. Computing the gradient of the loss w.r.t the VAE parameters, either for each
-   sample individually or averaged across all samples.
-2. Updating the VAE parameters using the optimizer.
-
-# Examples
-```julia
-opt = Flux.setup(Optax.adam(1e-3), vae)
-# You can replace this with your custom loss function
-loss_fn = custom_loss_function   
-for x in dataloader
-    train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0, :n_samples => 5))
-end
-```
-"""
-function train!(
-    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x::AbstractMatrix{Float32},
-    opt::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
-)
-    # Decide on training approach based on 'average'
-    if average
-        # Compute the averaged gradient across all samples
-        ∇loss_ = Flux.gradient(vae) do vae_model
-            StatsBase.mean(
-                loss_function.(Ref(vae_model), eachcol(x); loss_kwargs...)
-            )
-        end # do block
-        # Update parameters using the optimizer
-        Flux.Optimisers.update!(opt, vae, ∇loss_[1])
-    else
-        foreach(
-            col -> train!(vae, col, opt; loss_function, loss_kwargs...),
-            eachcol(x)
-        )
-    end # if
-end # function
-
-@doc raw"""
-    `train!(vae, x, opt; loss_function, loss_kwargs...)`
-
-Customized training function to update parameters of a variational autoencoder
-when provided with 3D tensor data.
-
-# Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
-  struct containing the elements of a variational autoencoder.
-- `x::Array{Float32, 3}`: 3D tensor of data samples on which to evaluate the
-  loss function. Each slice represents a matrix, and within each matrix, each
-  column represents an individual sample.
-- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
-  initialized using `Flux.Train.setup`.
-
-# Optional Keyword Arguments
-- `loss_function::Function=VAEs.loss`: The loss function used for training. It
-  should accept the VAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
-  function. These might include parameters like `σ`, `β`, or `n_samples`,
-  depending on the specific loss function in use.
-- `average::Bool = true`: If `true`, computes and averages the gradient for all
-  samples in `x` before updating parameters. If `false`, updates parameters
-  after computing the gradient for each sample.
-
-# Description
-Trains the VAE on 3D tensor data by:
-1. Computing the gradient of the loss w.r.t the VAE parameters, either for each
-   sample individually or averaged across all samples within a slice.
-2. Updating the VAE parameters using the optimizer.
-
-# Examples
-```julia
-opt = Flux.setup(Optax.adam(1e-3), vae)
-for x in dataloader # assuming dataloader yields 3D tensors
-    train!(vae, x, opt; β=1.0f0, n_samples=5) 
-end
-```
-"""
-function train!(
-    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x::Array{Float32,3},
-    opt::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
-)
-    # Decide on training approach based on 'average'
-    if average
-        # Compute the averaged gradient across all slices of the tensor
-        ∇loss_ = Flux.gradient(vae) do vae_model
-            StatsBase.mean([
-                StatsBase.mean(
-                    loss_function.(
-                        Ref(vae_model), eachcol(slice), Ref(loss_kwargs)...
-                    )
-                )
-                for slice in eachslice(x, dims=3)
-            ])
-        end # do block
-        # Update parameters using the optimizer
-        Flux.Optimisers.update!(opt, vae, ∇loss_[1])
-    else
-        foreach(
-            slice -> foreach(
-                col -> train!(
-                    vae, col, opt; loss_function, loss_kwargs...
-                ),
-                eachcol(slice)
-            ),
-            eachslice(x, dims=3)
-        )
-    end # if
 end # function
 
 # ==============================================================================
@@ -2439,9 +2296,9 @@ given a loss function.
 # Arguments
 - `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
   struct containing the elements of a variational autoencoder.
-- `x_in::AbstractVector{Float32}`: Input data for the loss function. Represents
-  an individual sample.
-- `x_out::AbstractVector{Float32}`: Target output data for the loss function.
+- `x_in::AbstractVecOrMat{Float32}`: Input data for the loss function.
+  Represents an individual sample.
+- `x_out::AbstractVecOrMat{Float32}`: Target output data for the loss function.
   Represents the corresponding output for the `x_in` sample.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
   initialized using `Flux.Train.setup`.
@@ -2468,8 +2325,8 @@ end
 """
 function train!(
     vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x_in::AbstractVector{Float32},
-    x_out::AbstractVector{Float32},
+    x_in::AbstractVecOrMat{Float32},
+    x_out::AbstractVecOrMat{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict()
@@ -2480,164 +2337,4 @@ function train!(
     end # do block
     # Update parameters
     Flux.Optimisers.update!(opt, vae, ∇loss_[1])
-end # function
-
-@doc raw"""
-    `train!(vae, x_in, x_out, opt; loss_function, loss_kwargs, average)`
-
-Customized training function to update parameters of a variational autoencoder
-when provided with matrix data.
-
-# Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
-  struct containing the elements of a variational autoencoder.
-- `x_in::AbstractMatrix{Float32}`: Matrix of input data samples on which to
-  evaluate the loss function. Each column represents an individual sample.
-- `x_out::AbstractMatrix{Float32}`: Matrix of target output data samples. Each
-  column represents the corresponding output for an individual sample in `x_in`.
-- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
-  initialized using `Flux.Train.setup`.
-
-# Optional Keyword Arguments
-- `loss_function::Function=VAEs.loss`: The loss function used for training. It
-  should accept the VAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
-  function. These might include parameters like `σ`, `β`, or `n_samples`,
-  depending on the specific loss function in use.
-- `average::Bool = true`: If `true`, computes and averages the gradient for all
-  samples in `x_in` before updating parameters. If `false`, updates parameters
-  after computing the gradient for each sample.
-
-# Description
-Trains the VAE on matrix data by:
-1. Computing the gradient of the loss w.r.t the VAE parameters, either for each
-   sample individually or averaged across all samples.
-2. Updating the VAE parameters using the optimizer.
-
-# Examples
-```julia
-opt = Flux.setup(Optax.adam(1e-3), vae)
-# assuming dataloader yields matrices
-for (x_in_batch, x_out_batch) in dataloader 
-    train!(vae, x_in_batch, x_out_batch, opt) 
-end
-```
-"""
-function train!(
-    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x_in::AbstractMatrix{Float32},
-    x_out::AbstractMatrix{Float32},
-    opt::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
-)
-    # Decide on training approach based on 'average'
-    if average
-        # Compute the averaged gradient across all samples
-        ∇loss_ = Flux.gradient(vae) do vae_model
-            StatsBase.mean(
-                loss_function.(
-                    Ref(vae_model),
-                    eachcol(x_in),
-                    eachcol(x_out);
-                    loss_kwargs...
-                )
-            )
-        end
-        # Update parameters using the optimizer
-        Flux.Optimisers.update!(opt, vae, ∇loss_[1])
-    else
-        foreach(
-            (col_in, col_out) -> train!(
-                vae, col_in, col_out, opt; loss_function, loss_kwargs...
-            ), zip(eachcol(x_in), eachcol(x_out)
-            )
-        )
-    end # for
-end # function
-
-@doc raw"""
-    `train!(vae, x_in, x_out, opt; loss_function, loss_kwargs, average)`
-
-Customized training function to update parameters of a variational autoencoder
-when provided with 3D tensor data.
-
-# Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
-  struct containing the elements of a variational autoencoder.
-- `x_in::Array{Float32, 3}`: 3D tensor of input data samples on which to
-  evaluate the loss function. Each slice represents a matrix, and within each
-  matrix, each column represents an individual sample.
-- `x_out::Array{Float32, 3}`: 3D tensor of target output data samples. Each
-  slice represents a matrix, and within each matrix, each column represents the
-  corresponding output for an individual sample in `x_in`.
-- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
-  initialized using `Flux.Train.setup`.
-
-# Optional Keyword Arguments
-- `loss_function::Function=VAEs.loss`: The loss function used for training. It
-  should accept the VAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
-  function. These might include parameters like `σ`, `β`, or `n_samples`,
-  depending on the specific loss function in use.
-- `average::Bool = true`: If `true`, computes and averages the gradient for all
-  samples in `x_in` before updating parameters. If `false`, updates parameters
-  after computing the gradient for each sample.
-
-# Description
-Trains the VAE on 3D tensor data by:
-1. Computing the gradient of the loss w.r.t the VAE parameters, either for each
-   sample individually or averaged across all samples within a slice.
-2. Updating the VAE parameters using the optimizer.
-
-# Examples
-```julia
-opt = Flux.setup(Optax.adam(1e-3), vae)
-# assuming dataloader yields 3D tensors
-for (x_in_batch, x_out_batch) in dataloader 
-    train!(vae, x_in_batch, x_out_batch, opt; β=1.0f0, n_samples=5) 
-end
-```
-"""
-function train!(
-    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x_in::Array{Float32,3},
-    x_out::Array{Float32,3},
-    opt::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    average=true
-)
-    # Decide on training approach based on 'average'
-    if average
-        # Compute the averaged gradient across all slices of the tensor
-        ∇loss_ = Flux.gradient(vae) do vae_model
-            StatsBase.mean([
-                StatsBase.mean(
-                    loss_function.(
-                        Ref(vae_model),
-                        eachcol(slice_in),
-                        eachcol(slice_out);
-                        loss_kwargs...
-                    )
-                )
-                for (slice_in, slice_out) in zip(
-                    eachslice(x_in, dims=3), eachslice(x_out, dims=3)
-                )
-            ])
-        end
-        # Update parameters using the optimizer
-        Flux.Optimisers.update!(opt, vae, ∇loss_[1])
-    else
-        foreach(
-            (slice_in, slice_out) -> foreach(
-                (col_in, col_out) -> train!(
-                    vae, col_in, col_out, opt; loss_function, loss_kwargs...
-                ),
-                zip(eachcol(slice_in), eachcol(slice_out))
-            ),
-            zip(eachslice(x_in, dims=3), eachslice(x_out, dims=3))
-        )
-    end # if
 end # function
