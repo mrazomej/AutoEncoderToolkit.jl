@@ -2052,7 +2052,14 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 
 # Arguments
 - `encoder::JointLogEncoder`: Encoder network.
+- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. Each column
+  represents a separate data sample.
 - `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
+
+## Optional Keyword Arguments
+- `n_samples::Int=1`: The number of latent samples to average over when
+  computing the KL divergence loss.
 
 # Returns
 - `Float32`: The KL divergence for the entire batch of data points.
@@ -2065,8 +2072,13 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 """
 function kl_gaussian_encoder(
     encoder::JointLogEncoder,
-    vae_outputs::Dict,
+    x::AbstractVecOrMat{Float32},
+    vae_outputs::Dict;
+    n_samples::Int=1
 )
+    # Compute batch size
+    batch_size = size(x, 2)
+
     # Unpack needed ouput
     encoder_μ = vae_outputs[:encoder_μ]
     encoder_logσ = vae_outputs[:encoder_logσ]
@@ -2075,7 +2087,7 @@ function kl_gaussian_encoder(
     return 0.5f0 * sum(
         @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
            2.0f0 * encoder_logσ
-    )
+    ) / (n_samples * batch_size)
 end # function
 
 
@@ -2137,15 +2149,14 @@ function loss(
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     logπ_x_z = reconstruction_gaussian_decoder(
-        vae.decoder,
-        x,
-        vae_outputs;
-        n_samples=n_samples
+        vae.decoder, x, vae_outputs; n_samples=n_samples
     )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_gaussian_encoder(vae.encoder, vae_outputs)
+    kl_qᵩ_π = kl_gaussian_encoder(
+        vae.encoder, x, vae_outputs; n_samples=n_samples
+    )
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
@@ -2211,15 +2222,14 @@ function loss(
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     logπ_x_z = reconstruction_gaussian_decoder(
-        vae.decoder,
-        x_out,
-        vae_outputs;
-        n_samples=n_samples
+        vae.decoder, x_out, vae_outputs; n_samples=n_samples
     )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_gaussian_encoder(vae.encoder, vae_outputs)
+    kl_qᵩ_π = kl_gaussian_encoder(
+        vae.encoder, x, vae_outputs; n_samples=n_samples
+    )
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
