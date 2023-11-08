@@ -1863,6 +1863,12 @@ function reconstruction_gaussian_decoder(
     vae_outputs::Dict;
     n_samples::Int=1
 )
+    # Compute batch size
+    batch_size = size(x, 2)
+
+    # Unpack needed outputs
+    decoder_µ = vae_outputs[:decoder_µ]
+
     # Validate input dimensions
     if size(x) ≠ size(decoder_µ)
         throw(
@@ -1876,12 +1882,6 @@ function reconstruction_gaussian_decoder(
     if n_samples < 1
         throw(ArgumentError("Number of samples must be at least 1"))
     end # if
-
-    # Compute batch size
-    batch_size = size(x, 2)
-
-    # Unpack needed outputs
-    decoder_µ = vae_outputs[:decoder_µ]
 
     # Compute average reconstruction loss
     neg_log_likelihood = -0.5f0 * (
@@ -1936,6 +1936,13 @@ function reconstruction_gaussian_decoder(
     vae_outputs::Dict;
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Compute batch size
+    batch_size = size(x, 2)
+
+    # Unpack needed ouput
+    decoder_µ = vae_outputs[:decoder_µ]
+    decoder_σ = vae_outputs[:decoder_σ]
+
     # Validate input dimensions
     if size(x) != size(decoder_µ) || size(x) != size(decoder_σ)
         throw(
@@ -1949,13 +1956,6 @@ function reconstruction_gaussian_decoder(
     if n_samples < 1
         throw(ArgumentError("Number of samples must be at least 1"))
     end
-
-    # Compute batch size
-    batch_size = size(x, 2)
-
-    # Unpack needed ouput
-    decoder_µ = vae_outputs[:decoder_µ]
-    decoder_σ = vae_outputs[:decoder_σ]
 
     # Compute average reconstruction loss
     neg_log_likelihood = -0.5f0 * (
@@ -1998,12 +1998,22 @@ standard deviations.
   function. The `decoder` argument is provided to indicate the type of decoder
   network used, but it is not used within the function itself.
 """
-function reconstruction_log_gaussian_decoder(
+function reconstruction_gaussian_decoder(
     decoder::T,
     x::AbstractVecOrMat{Float32},
     vae_outputs::Dict;
     n_samples::Int=1
 ) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
+    # Compute batch size
+    batch_size = size(x, 2)
+
+    # Unpack needed ouput
+    decoder_µ = vae_outputs[:decoder_µ]
+    decoder_logσ = vae_outputs[:decoder_logσ]
+
+    # Convert log standard deviation to standard deviation
+    decoder_σ = exp.(decoder_logσ)
+
     # Validate input dimensions
     if size(x) != size(decoder_µ) || size(x) != size(decoder_logσ)
         throw(
@@ -2017,16 +2027,6 @@ function reconstruction_log_gaussian_decoder(
     if n_samples < 1
         throw(ArgumentError("Number of samples must be at least 1"))
     end
-
-    # Compute batch size
-    batch_size = size(x, 2)
-
-    # Unpack needed ouput
-    decoder_µ = vae_outputs[:decoder_µ]
-    decoder_logσ = vae_outputs[:decoder_logσ]
-
-    # Convert log standard deviation to standard deviation
-    decoder_σ = exp.(decoder_logσ)
 
     # Compute average reconstruction loss
     neg_log_likelihood = -0.5f0 * (
