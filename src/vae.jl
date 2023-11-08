@@ -1815,7 +1815,6 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # ==============================================================================
 
-
 # ==============================================================================
 # Gaussian decoder reconstruction loss
 # ==============================================================================
@@ -1840,13 +1839,9 @@ the specified `decoder`.
 - `x::AbstractArray{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `decoder_µ::AbstractArray{Float32}`: The mean output of the decoder,
-  corresponding to the center of the Gaussian distribution used in the
-  reconstruction probability density function.
+- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
-- `decoder_σ::Float32=1.0f0`: Standard deviation for the probabilistic decoder
-  π(x|z).
 - `n_samples::Int=1`: The number of latent samples to average over when
   computing the reconstruction loss. More samples provide a better approximation
   of the expected reconstruction log likelihood.
@@ -1860,12 +1855,12 @@ the specified `decoder`.
   (`decoder_µ`) has been performed prior to calling this function. The `decoder`
   argument is provided to indicate the type of decoder network used, but it is
   not used within the function itself.
+- The reconstruction assumes a constant variance for the decoder of σ=1.
 """
 function reconstruction_gaussian_decoder(
     decoder::SimpleDecoder,
     x::AbstractArray{Float32},
-    decoder_µ::AbstractArray{Float32};
-    decoder_σ::Float32=1.0f0,
+    vae_outputs::Dict;
     n_samples::Int=1
 )
     # Validate input dimensions
@@ -1885,10 +1880,12 @@ function reconstruction_gaussian_decoder(
     # Compute batch size
     batch_size = size(x, 2)
 
+    # Unpack needed outputs
+    decoder_µ = vae_outputs[:decoder_µ]
+
     # Compute average reconstruction loss
     neg_log_likelihood = -0.5f0 * (
         log(2.0f0π) * length(decoder_µ) +
-        2.0f0 * log(σ) * length(decoder_µ) +
         sum((x .- decoder_µ) .^ 2 ./ (decoder_σ^2))
     )
 
@@ -1916,12 +1913,7 @@ the specified `decoder`.
 - `x::AbstractArray{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `decoder_µ::AbstractArray{Float32}`: The mean output of the decoder,
-  corresponding to the center of the Gaussian distribution used in the
-  reconstruction probability density function.
-- `decoder_σ::AbstractArray{Float32}`: The standard deviation output of the
-  decoder, corresponding to the spread of the Gaussian distribution used in the
-  reconstruction probability density function.
+- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
 - `n_samples::Int=1`: The number of latent samples to average over when
@@ -1941,8 +1933,7 @@ the specified `decoder`.
 function reconstruction_gaussian_decoder(
     decoder::T,
     x::AbstractArray{Float32},
-    decoder_µ::AbstractArray{Float32},
-    decoder_σ::AbstractArray{Float32};
+    vae_outputs::Dict;
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Validate input dimensions
@@ -1961,6 +1952,10 @@ function reconstruction_gaussian_decoder(
 
     # Compute batch size
     batch_size = size(x, 2)
+
+    # Unpack needed ouput
+    decoder_µ = vae_outputs[:decoder_µ]
+    decoder_σ = vae_outputs[:decoder_σ]
 
     # Compute average reconstruction loss
     neg_log_likelihood = -0.5f0 * (
@@ -1985,9 +1980,7 @@ standard deviations.
 - `decoder::T`: Decoder network of type `JointLogDecoder` or `SplitLogDecoder`,
   which outputs the log of the standard deviation of the Gaussian distribution.
 - `x::AbstractArray{Float32}`: The original input data to the encoder.
-- `decoder_µ::AbstractArray{Float32}`: The mean output of the decoder.
-- `decoder_logσ::AbstractArray{Float32}`: The log standard deviation output of
-  the decoder.
+- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
 - `n_samples::Int=1`: The number of latent samples to average over when
@@ -2006,8 +1999,7 @@ standard deviations.
 function reconstruction_log_gaussian_decoder(
     decoder::T,
     x::AbstractArray{Float32},
-    decoder_µ::AbstractArray{Float32},
-    decoder_logσ::AbstractArray{Float32};
+    vae_outputs::Dict;
     n_samples::Int=1
 ) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Validate input dimensions
@@ -2027,6 +2019,10 @@ function reconstruction_log_gaussian_decoder(
     # Compute batch size
     batch_size = size(x, 2)
 
+    # Unpack needed ouput
+    decoder_µ = vae_outputs[:decoder_µ]
+    decoder_logσ = vae_outputs[:decoder_logσ]
+
     # Convert log standard deviation to standard deviation
     decoder_σ = exp.(decoder_logσ)
 
@@ -2041,6 +2037,47 @@ function reconstruction_log_gaussian_decoder(
     return neg_log_likelihood / (n_samples * batch_size)
 end # function
 
+# ==============================================================================
+# Gaussian encoder KL loss
+# ==============================================================================
+
+@doc raw"""
+    kl_gaussian_encoder(encoder, vae_outputs)
+
+Calculate the Kullback-Leibler (KL) divergence between the approximate posterior
+distribution and the prior distribution in a variational autoencoder with a
+Gaussian encoder.
+
+The KL divergence for a Gaussian encoder with mean `encoder_µ` and log standard
+deviation `encoder_logσ` is computed against a standard Gaussian prior.
+
+# Arguments
+- `encoder::JointLogEncoder`: Encoder network.
+- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
+
+# Returns
+- `Float32`: The KL divergence for the entire batch of data points.
+
+# Note
+- It is assumed that the mapping from data space to laten parameters
+  (`encoder_µ` and `encoder_logσ`) has been performed prior to calling this
+  function. The `encoder` argument is provided to indicate the type of decoder
+  network used, but it is not used within the function itself.
+"""
+function kl_gaussian_encoder(
+    encoder::JointLogEncoder,
+    vae_outputs::Dict,
+)
+    # Unpack needed ouput
+    encoder_μ = vae_outputs[:encoder_μ]
+    encoder_logσ = vae_outputs[:encoder_logσ]
+
+    # Compute KL divergence
+    return 0.5f0 * sum(
+        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
+           2.0f0 * encoder_logσ
+    )
+end # function
 
 
 # ==============================================================================
@@ -2066,13 +2103,11 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 - g(x) and h(x) define the mean and covariance of the encoder respectively.
 
 # Arguments
-- `vae::VAE{JointLogEncoder,SimpleDecoder}`: A VAE model with encoder and
-  decoder networks.
+- `vae::VAE`: A VAE model with encoder and decoder networks.
 - `x::AbstractVector{Float32}`: Input vector. For batch processing or evaluating
   the entire dataset, use: `sum(loss.(Ref(vae), eachcol(x)))`.
 
 # Optional Keyword Arguments
-- `σ::Float32=1.0f0`: Standard deviation for the probabilistic decoder π(x|z).
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
@@ -2093,33 +2128,27 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
   `sum(loss.(Ref(vae), eachcol(x)))`.
 """
 function loss(
-    vae::VAE{JointLogEncoder,SimpleDecoder},
-    x::AbstractVector{Float32};
-    σ::Float32=1.0f0,
+    vae::VAE,
+    x::AbstractArray{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input through reconstruct function with n_samples)
-    outputs = vae(x; latent=true, n_samples=n_samples)
-
-    # Unpack outputs
-    µ, logσ, _, x̂ = (
-        outputs[:encoder_µ],
-        outputs[:encoder_logσ],
-        outputs[:z],
-        outputs[:decoder_µ]
-    )
+    vae_outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    logπ_x_z = -1 / (2 * σ^2 * n_samples) * sum((x .- x̂) .^ 2)
+    logπ_x_z = reconstruction_gaussian_decoder(
+        vae.decoder,
+        x,
+        vae_outputs;
+        n_samples=n_samples
+    )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. exp(2.0f0 * logσ) + µ^2 - 1.0f0 - 2.0f0 * logσ
-    )
+    kl_qᵩ_π = kl_gaussian_encoder(vae.encoder, vae_outputs)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
@@ -2147,15 +2176,12 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   respectively.
 
 # Arguments
-- `vae::VAE{JointLogEncoder,SimpleDecoder}`: A VAE model with encoder and
-  decoder networks.
+- `vae::VAE`: A VAE model with encoder and decoder networks.
 - `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
 - `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
   error.
 
 # Optional Keyword Arguments
-- `σ::Float32=1.0f0`: Standard deviation for the probabilistic decoder
-  π(x_out|z).
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
@@ -2176,446 +2202,35 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
     `sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
 """
 function loss(
-    vae::VAE{JointLogEncoder,SimpleDecoder},
-    x_in::AbstractVector{Float32},
-    x_out::AbstractVector{Float32};
-    σ::Float32=1.0f0,
+    vae::VAE,
+    x_in::AbstractArray{Float32},
+    x_out::AbstractArray{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
 )
-    # Forward Pass (run input x_in through reconstruct function)
-    outputs = vae(x_in; latent=true, n_samples=n_samples)
+    # Forward Pass (run input through reconstruct function with n_samples)
+    vae_outputs = vae(x_in; latent=true, n_samples=n_samples)
 
-    # Unpack outputs
-    µ, logσ, _, x̂ = (
-        outputs[:encoder_µ],
-        outputs[:encoder_logσ],
-        outputs[:z],
-        outputs[:decoder_µ]
+    # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
+    logπ_x_z = reconstruction_gaussian_decoder(
+        vae.decoder,
+        x_out,
+        vae_outputs;
+        n_samples=n_samples
     )
 
-    # Compute ⟨log π(x_out|z)⟩ for a Gaussian decoder
-    logπ_x_z = -1 / (2 * σ^2 * n_samples) * sum((x_out .- x̂) .^ 2)
-
-    # Compute Kullback-Leibler divergence between approximated decoder
-    # qᵩ(z|x_in) and latent prior distribution π(z)
-    kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. exp(2.0f0 * logσ) + µ^2 - 1.0f0 - 2.0f0 * logσ
-    )
+    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
+    # and latent prior distribution π(z)
+    kl_qᵩ_π = kl_gaussian_encoder(vae.encoder, vae_outputs)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
 
     # Compute loss function
     return -logπ_x_z + β * kl_qᵩ_π + reg_strength * reg_term
-end
-
-
-# ==============================================================================
-# Loss VAE{JointLogEncoder, Union{JointLogDecoder,SplitLogDecoder}}
-# ==============================================================================
-
-@doc raw"""
-    loss(vae::VAE{JointLogEncoder,T}, 
-        x::AbstractVector{Float32}; 
-        β::Float32=1.0f0, 
-        n_samples=1, 
-        regularization=nothing, 
-        reg_strength=1.0f0) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
-
-Calculate the loss for a variational autoencoder (VAE) by combining the
-reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
-regularization term, averaged over `n_samples` latent space samples.
-
-The VAE loss is given by: loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)] +
-reg_strength × reg_term
-
-Where:
-- π(x|z) is the probabilistic decoder represented by a Gaussian distribution:
-  π(x|z) = N(µ(z), exp(logσ(z))²I).
-  - µ(z) is the mean derived from the decoder.
-  - logσ(z) is the log standard deviation, also derived from the decoder.
-- qᵨ(z|x) is the approximated encoder with Gaussian distribution: qᵨ(z|x) =
-  N(g(x), h(x)).
-  - g(x) and h(x) respectively define the mean and covariance of the encoder.
-
-# Arguments
-- `vae::VAE{JointLogEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`: A VAE
-  model.
-- `x::AbstractVector{Float32}`: Input vector.
-
-# Optional Keyword Arguments
-- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
-  balance between reconstruction and regularization.
-- `n_samples::Int=1`: The number of samples to draw from the latent space when
-  computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. If provided, it should
-  return a Float32. If not, no regularization will be applied.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
-
-# Returns
-- `loss::Float32`: The computed average VAE loss value for the given input `x`
-  over `n_samples` samples, including possible regularization terms.
-
-# Notes
-- Ensure that the dimensionality of the input data `x` aligns with the encoder's
-expected input in the VAE.
-- For batch processing or evaluating an entire dataset, use:
-`sum(loss.(Ref(vae), eachcol(x)))`.
-"""
-function loss(
-    vae::VAE{JointLogEncoder,T},
-    x::AbstractVector{Float32};
-    β::Float32=1.0f0,
-    n_samples::Int=1,
-    regularization::Union{Function,Nothing}=nothing,
-    reg_strength::Float32=1.0f0
-) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
-    # Run input through reconstruct function with n_samples
-    outputs = vae(x; latent=true, n_samples=n_samples)
-
-    # Extract encoder-related terms
-    encoder_µ, encoder_logσ, z_samples = (
-        outputs[:encoder_µ],
-        outputs[:encoder_logσ],
-        outputs[:z]
-    )
-
-    # Extract decoder-related terms
-    decoder_µ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
-
-    # Compute average reconstruction loss for a Gaussian decoder over all
-    # samples
-    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
-               1 / n_samples * sum(decoder_logσ) -
-               1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
-                                             exp.(2 * decoder_logσ))
-
-    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
-    # and latent prior distribution π(z)
-    kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
-           2.0f0 * encoder_logσ
-    )
-
-    # Compute ELBO
-    total_loss = -logπ_x_z + β * kl_qᵩ_π
-
-    # Add regularization term if provided
-    if regularization !== nothing
-        # Compute regularization term
-        reg_term = regularization(outputs)
-        # Add regularization to total loss
-        total_loss += reg_strength * reg_term
-    end
-
-    return total_loss
 end # function
-
-
-@doc raw"""
-    loss(vae::VAE{JointLogEncoder,T}, 
-         x_in::AbstractVector{Float32}, x_out::AbstractVector{Float32};
-         β::Float32=1.0f0, n_samples=1, 
-         regularization::Union{Function, Nothing}=nothing, 
-         reg_strength::Float32=1.0f0)
-
-Calculate the loss for a variational autoencoder (VAE) by combining the
-reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
-regularization term.
-
-The VAE loss is given by: loss = -⟨logπ(x_out|z)⟩ + β × Dₖₗ[qᵨ(z|x_in) ‖ π(z)] +
-reg_strength × reg_term
-
-Where:
-- π(x_out|z) is the probabilistic decoder represented by a Gaussian
-  distribution: π(x_out|z) = N(µ(z), exp(logσ(z))²I).
-  - µ(z) is the mean derived from the decoder.
-  - logσ(z) is the log standard deviation, also derived from the decoder.
-- qᵨ(z|x_in) is the approximated encoder with Gaussian distribution: qᵨ(z|x_in)
-  = N(g(x_in), h(x_in)).
-  - g(x_in) and h(x_in) respectively define the mean and covariance of the
-    encoder.
-
-# Arguments
-- `vae::VAE{JointLogEncoder, <:Union{JointLogDecoder,SplitLogDecoder}}`: A VAE
-  model.
-- `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
-- `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
-  error.
-
-# Optional Keyword Arguments
-- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
-  balance between reconstruction and regularization.
-- `n_samples::Int=1`: The number of samples to draw from the latent space when
-  computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. If provided, it should
-  return a Float32. If not, no regularization will be applied.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
-
-# Returns
-- `loss::Float32`: The computed VAE loss value between `x_out` and its
-  reconstructed counterpart from `x_in`.
-
-# Notes
-- Ensure that the dimensionality of the input data `x_in` aligns with the
-encoder's expected input in the VAE.
-- For batch processing or evaluating an entire dataset, use:
-`sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
-"""
-function loss(
-    vae::VAE{JointLogEncoder,T},
-    x_in::AbstractVector{Float32},
-    x_out::AbstractVector{Float32};
-    β::Float32=1.0f0,
-    n_samples::Int=1,
-    regularization::Union{Function,Nothing}=nothing,
-    reg_strength::Float32=1.0f0
-) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
-    # Run input x_in through the VAE
-    outputs = vae(x_in; latent=true, n_samples=n_samples)
-
-    # Extract encoder-related terms
-    encoder_μ, encoder_logσ, z_samples = (
-        outputs[:encoder_µ],
-        outputs[:encoder_logσ],
-        outputs[:z]
-    )
-    # Extract decoder-related terms
-    decoder_μ, decoder_logσ = outputs[:decoder_µ], outputs[:decoder_logσ]
-
-    # Compute average reconstruction loss for a Gaussian decoder over all
-    # samples
-    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
-               1 / n_samples * sum(decoder_logσ) -
-               1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
-                                             exp.(2 * decoder_logσ))
-
-    # Compute Kullback-Leibler divergence between approximated encoder
-    # qᵩ(z|x_in) and latent prior distribution π(z)
-    kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
-           2.0f0 * encoder_logσ
-    )
-
-    # Compute ELBO
-    total_loss = -logπ_x_z + β * kl_qᵩ_π
-
-    # Add regularization term if provided
-    if regularization !== nothing
-        # Compute regularization term
-        reg_term = regularization(outputs)
-        # Add regularization to total loss
-        total_loss += reg_strength * reg_term
-    end # if
-
-    return total_loss
-end
-
-# ==============================================================================
-# Loss VAE{JointLogEncoder, Union{JointDecoder,SplitDecoder}}
-# ==============================================================================
-
-@doc raw"""
-    loss(vae::VAE{JointLogEncoder,T}, 
-        x::AbstractVector{Float32}; 
-        β::Float32=1.0f0, 
-        n_samples=1, 
-        regularization=nothing, 
-        reg_strength=1.0f0) where {T<:Union{JointDecoder,SplitDecoder}}
-
-Calculate the loss for a variational autoencoder (VAE) by combining the
-reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
-regularization term, averaged over `n_samples` latent space samples.
-
-The VAE loss is given by: loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵨ(z|x) ‖ π(z)] +
-reg_strength × reg_term
-
-Where:
-- π(x|z) is the probabilistic decoder represented by a Gaussian distribution:
-  π(x|z) = N(µ(z), exp(logσ(z))²I).
-  - µ(z) is the mean derived from the decoder.
-  - logσ(z) is the log standard deviation, also derived from the decoder.
-- qᵨ(z|x) is the approximated encoder with Gaussian distribution: qᵨ(z|x) =
-  N(g(x), h(x)).
-  - g(x) and h(x) respectively define the mean and covariance of the encoder.
-
-# Arguments
-- `vae::VAE{JointLogEncoder, <:Union{JointDecoder,SplitDecoder}}`: A VAE
-  model.
-- `x::AbstractVector{Float32}`: Input vector.
-
-# Optional Keyword Arguments
-- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
-  balance between reconstruction and regularization.
-- `n_samples::Int=1`: The number of samples to draw from the latent space when
-  computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. If provided, it should
-  return a Float32. If not, no regularization will be applied.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
-
-# Returns
-- `loss::Float32`: The computed average VAE loss value for the given input `x`
-  over `n_samples` samples, including possible regularization terms.
-
-# Notes
-- Ensure that the dimensionality of the input data `x` aligns with the encoder's
-expected input in the VAE.
-- For batch processing or evaluating an entire dataset, use:
-`sum(loss.(Ref(vae), eachcol(x)))`.
-"""
-function loss(
-    vae::VAE{JointLogEncoder,T},
-    x::AbstractVector{Float32};
-    β::Float32=1.0f0,
-    n_samples::Int=1,
-    regularization::Union{Function,Nothing}=nothing,
-    reg_strength::Float32=1.0f0
-) where {T<:Union{JointDecoder,SplitDecoder}}
-    # Run input through reconstruct function with n_samples
-    outputs = vae(x; latent=true, n_samples=n_samples)
-
-    # Extract encoder-related terms
-    encoder_µ, encoder_logσ, z_samples = (
-        outputs[:encoder_µ],
-        outputs[:encoder_logσ],
-        outputs[:z]
-    )
-
-    # Extract decoder-related terms
-    decoder_µ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
-
-    # Compute average reconstruction loss for a Gaussian decoder over all
-    # samples
-    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_µ) * log(2 * π) -
-               1 / n_samples * sum(log.(decoder_σ)) -
-               1 / (2.0f0 * n_samples) * sum((x .- decoder_µ) .^ 2 ./
-                                             decoder_σ .^ 2)
-
-    # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
-    # and latent prior distribution π(z)
-    kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
-           2.0f0 * encoder_logσ
-    )
-
-    # Compute ELBO
-    total_loss = -logπ_x_z + β * kl_qᵩ_π
-
-    # Add regularization term if provided
-    if regularization !== nothing
-        # Compute regularization term
-        reg_term = regularization(outputs)
-        # Add regularization to total loss
-        total_loss += reg_strength * reg_term
-    end
-
-    return total_loss
-end # function
-
-@doc raw"""
-    loss(vae::VAE{JointLogEncoder,T}, 
-         x_in::AbstractVector{Float32}, x_out::AbstractVector{Float32};
-         β::Float32=1.0f0, n_samples=1, 
-         regularization::Union{Function, Nothing}=nothing, 
-         reg_strength::Float32=1.0f0)
-
-Calculate the loss for a variational autoencoder (VAE) by combining the
-reconstruction loss, the Kullback-Leibler (KL) divergence, and a possible
-regularization term.
-
-The VAE loss is given by: loss = -⟨logπ(x_out|z)⟩ + β × Dₖₗ[qᵨ(z|x_in) ‖ π(z)] +
-reg_strength × reg_term
-
-Where:
-- π(x_out|z) is the probabilistic decoder represented by a Gaussian
-  distribution: π(x_out|z) = N(µ(z), exp(logσ(z))²I).
-  - µ(z) is the mean derived from the decoder.
-  - logσ(z) is the log standard deviation, also derived from the decoder.
-- qᵨ(z|x_in) is the approximated encoder with Gaussian distribution: qᵨ(z|x_in)
-  = N(g(x_in), h(x_in)).
-  - g(x_in) and h(x_in) respectively define the mean and covariance of the
-    encoder.
-
-# Arguments
-- `vae::VAE{JointLogEncoder, <:Union{JointDecoder,SplitDecoder}}`: A VAE model.
-- `x_in::AbstractVector{Float32}`: Input vector to the VAE encoder.
-- `x_out::AbstractVector{Float32}`: Target vector to compute the reconstruction
-  error.
-
-# Optional Keyword Arguments
-- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, adjusting the
-  balance between reconstruction and regularization.
-- `n_samples::Int=1`: The number of samples to draw from the latent space when
-  computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. If provided, it should
-  return a Float32. If not, no regularization will be applied.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
-
-# Returns
-- `loss::Float32`: The computed VAE loss value between `x_out` and its
-  reconstructed counterpart from `x_in`.
-
-# Notes
-- Ensure that the dimensionality of the input data `x_in` aligns with the
-encoder's expected input in the VAE.
-- For batch processing or evaluating an entire dataset, use:
-`sum(loss.(Ref(vae), eachcol(x_in), eachcol(x_out)))`.
-"""
-function loss(
-    vae::VAE{JointLogEncoder,T},
-    x_in::AbstractVector{Float32},
-    x_out::AbstractVector{Float32};
-    β::Float32=1.0f0,
-    n_samples::Int=1,
-    regularization::Union{Function,Nothing}=nothing,
-    reg_strength::Float32=1.0f0
-) where {T<:Union{JointDecoder,SplitDecoder}}
-    # Run input x_in through the VAE
-    outputs = vae(x_in; latent=true, n_samples=n_samples)
-
-    # Extract encoder-related terms
-    encoder_μ, encoder_logσ, z_samples = (
-        outputs[:encoder_µ],
-        outputs[:encoder_logσ],
-        outputs[:z]
-    )
-    # Extract decoder-related terms
-    decoder_μ, decoder_σ = outputs[:decoder_µ], outputs[:decoder_σ]
-
-    # Compute average reconstruction loss for a Gaussian decoder over all
-    # samples
-    logπ_x_z = -1 / (2.0f0 * n_samples) * length(decoder_μ) * log(2 * π) -
-               1 / n_samples * sum(log.(decoder_σ)) -
-               1 / (2.0f0 * n_samples) * sum((x_out .- decoder_μ) .^ 2 ./
-                                             decoder_σ .^ 2)
-
-    # Compute Kullback-Leibler divergence between approximated encoder
-    # qᵩ(z|x_in) and latent prior distribution π(z)
-    kl_qᵩ_π = 1 / 2.0f0 * sum(
-        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
-           2.0f0 * encoder_logσ
-    )
-
-    # Compute ELBO
-    total_loss = -logπ_x_z + β * kl_qᵩ_π
-
-    # Add regularization term if provided
-    if regularization !== nothing
-        # Compute regularization term
-        reg_term = regularization(outputs)
-        # Add regularization to total loss
-        total_loss += reg_strength * reg_term
-    end # if
-
-    return total_loss
-end
 
 # ==============================================================================
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
