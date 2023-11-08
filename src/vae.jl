@@ -1820,8 +1820,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    reconstruction_gaussian_decoder(decoder, x, decoder_µ, decoder_σ; 
-        n_samples=1)
+    reconstruction_log_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder.
@@ -1870,13 +1869,13 @@ function reconstruction_gaussian_decoder(
     decoder_µ = vae_outputs[:decoder_µ]
 
     # Validate input dimensions
-    if size(x) ≠ size(decoder_µ)
+    if size(x, 2) ≠ size(decoder_µ, 2)
         throw(
             DimensionMismatch(
                 "Input data and decoder outputs must have the same dimensions"
             )
         )
-    end # if
+    end
 
     # Validate n_samples
     if n_samples < 1
@@ -1894,8 +1893,7 @@ function reconstruction_gaussian_decoder(
 end # function
 
 @doc raw"""
-    reconstruction_gaussian_decoder(decoder, x, decoder_µ, decoder_σ; 
-        n_samples=1)
+    reconstruction_log_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder.
@@ -1944,7 +1942,7 @@ function reconstruction_gaussian_decoder(
     decoder_σ = vae_outputs[:decoder_σ]
 
     # Validate input dimensions
-    if size(x) != size(decoder_µ) || size(x) != size(decoder_σ)
+    if size(x, 2) ≠ size(decoder_µ, 2) || size(x, 2) ≠ size(decoder_logσ, 2)
         throw(
             DimensionMismatch(
                 "Input data and decoder outputs must have the same dimensions"
@@ -1969,8 +1967,7 @@ function reconstruction_gaussian_decoder(
 end # function
 
 """
-    reconstruction_log_gaussian_decoder(decoder, x, decoder_µ, decoder_logσ; 
-    n_samples=1)
+    reconstruction_log_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder, where the decoder outputs log standard deviations instead of
@@ -2015,7 +2012,7 @@ function reconstruction_gaussian_decoder(
     decoder_σ = exp.(decoder_logσ)
 
     # Validate input dimensions
-    if size(x) != size(decoder_µ) || size(x) != size(decoder_logσ)
+    if size(x, 2) ≠ size(decoder_µ, 2) || size(x, 2) ≠ size(decoder_logσ, 2)
         throw(
             DimensionMismatch(
                 "Input data and decoder outputs must have the same dimensions"
@@ -2083,7 +2080,7 @@ end # function
 
 
 # ==============================================================================
-# Loss VAE{JointLogEncoder,SimpleDecoder}
+# Loss VAE
 # ==============================================================================
 
 @doc raw"""
@@ -2096,7 +2093,7 @@ Computes the loss for the variational autoencoder (VAE) by averaging over
 The loss function combines the reconstruction loss with the Kullback-Leibler
 (KL) divergence, and possibly a regularization term, defined as:
 
-loss = -⟨π(x|z)⟩ + β × Dₖₗ[qᵩ(z|x) || π(z)] + reg_strength × reg_term
+loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵩ(z|x) || π(z)] + reg_strength × reg_term
 
 Where:
 - π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲)) - f(z) is the
@@ -2166,7 +2163,7 @@ Computes the loss for the variational autoencoder (VAE).
 The loss function combines the reconstruction loss with the Kullback-Leibler
 (KL) divergence and possibly a regularization term, defined as:
 
-loss = -⟨π(x_out|z)⟩ + β × Dₖₗ[qᵩ(z|x_in) || π(z)] + reg_strength × reg_term
+loss = -⟨logπ(x_out|z)⟩ + β × Dₖₗ[qᵩ(z|x_in) || π(z)] + reg_strength × reg_term
 
 Where:
 - π(x_out|z) is a probabilistic decoder: π(x_out|z) = N(f(z), σ² I̲̲)) - f(z) is

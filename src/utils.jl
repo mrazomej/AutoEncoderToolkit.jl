@@ -79,18 +79,23 @@ function cycle_anneal(
     epoch::Int,
     n_epoch::Int,
     n_cycles::Int;
-    frac::T=0.5f0,
-    βmax::T=1.0f0,
-    βmin::T=0.0f0
-) where {T<:AbstractFloat}
+    frac::AbstractFloat=0.5f0,
+    βmax::AbstractFloat=1.0f0,
+    βmin::AbstractFloat=0.0f0
+)
+    # Validate frac
+    if !(0 ≤ frac ≤ 1)
+        throw(ArgumentError("Frac must be between 0 and 1"))
+    end # if
+
     # Define variable τ that will serve to define the value of β
     τ = mod(epoch - 1, ceil(n_epoch / n_cycles)) / (n_epoch / n_cycles)
 
     # Compute and return the value of β
     if τ ≤ frac
-        return convert(T, (βmax - βmin) * τ / frac + βmin)
+        return convert(Float32, (βmax - βmin) * τ / frac + βmin)
     else
-        return convert(T, βmax)
+        return convert(Float32, βmax)
     end # if
 end # function
 
