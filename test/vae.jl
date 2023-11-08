@@ -126,7 +126,7 @@ for epoch = 1:10
     Random.seed!(42)
     # Test training function
     VAEs.train!(vae, data, opt_state)
-    push!(losses, StatsBase.mean(VAEs.loss.(Ref(vae), eachcol(data))))
+    push!(losses, VAEs.loss(vae, data))
 end
 
 # Check if loss is decreasing
@@ -210,7 +210,7 @@ for epoch = 1:10
     Random.seed!(42)
     # Test training function
     VAEs.train!(vae, data, opt_state)
-    push!(losses, StatsBase.mean(VAEs.loss.(Ref(vae), eachcol(data))))
+    push!(losses, VAEs.loss(vae, data))
 end
 
 # Check if loss is decreasing
@@ -294,9 +294,8 @@ losses = Float64[]  # Track the loss
 for epoch = 1:10
     Random.seed!(42)
     # Test training function
-    VAEs.train!(vae, data, opt_state; average=false)
-    # VAEs.train!(vae, data[:, 1], opt_state)
-    push!(losses, StatsBase.mean(VAEs.loss.(Ref(vae), eachcol(data))))
+    VAEs.train!(vae, data, opt_state)
+    push!(losses, VAEs.loss(vae, data))
 end
 
 # Check if loss is decreasing
