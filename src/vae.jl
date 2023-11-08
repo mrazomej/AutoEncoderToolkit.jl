@@ -1815,6 +1815,234 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # ==============================================================================
 
+
+# ==============================================================================
+# Gaussian decoder reconstruction loss
+# ==============================================================================
+
+@doc raw"""
+    reconstruction_gaussian_decoder(decoder, x, decoder_µ, decoder_σ; 
+        n_samples=1)
+
+Calculate the reconstruction loss for a Gaussian decoder in a variational
+autoencoder.
+
+This function computes the negative log-likelihood of the input data `x` given
+the Gaussian distribution parameters `decoder_µ` (mean) and `decoder_σ`
+(standard deviation) provided by the decoder. It assumes that the actual mapping
+from the latent space to the parameters (`decoder_µ`, `decoder_σ`) is done by
+the specified `decoder`.
+
+# Arguments
+- `decoder::T`: Decoder network of type `SimpleDecoder`, which is assumed to
+  have already mapped the latent variables to the parameters of the Gaussian
+  distribution.
+- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. Each column
+  represents a separate data sample.
+- `decoder_µ::AbstractArray{Float32}`: The mean output of the decoder,
+  corresponding to the center of the Gaussian distribution used in the
+  reconstruction probability density function.
+
+## Optional Keyword Arguments
+- `decoder_σ::Float32=1.0f0`: Standard deviation for the probabilistic decoder
+  π(x|z).
+- `n_samples::Int=1`: The number of latent samples to average over when
+  computing the reconstruction loss. More samples provide a better approximation
+  of the expected reconstruction log likelihood.
+
+# Returns
+- `Float32`: The average reconstruction loss computed across all provided
+  samples and data points.
+
+# Note
+- It is assumed that the mapping from latent space to decoder parameters
+  (`decoder_µ`) has been performed prior to calling this function. The `decoder`
+  argument is provided to indicate the type of decoder network used, but it is
+  not used within the function itself.
+"""
+function reconstruction_gaussian_decoder(
+    decoder::SimpleDecoder,
+    x::AbstractArray{Float32},
+    decoder_µ::AbstractArray{Float32};
+    decoder_σ::Float32=1.0f0,
+    n_samples::Int=1
+)
+    # Validate input dimensions
+    if size(x) ≠ size(decoder_µ)
+        throw(
+            DimensionMismatch(
+                "Input data and decoder outputs must have the same dimensions"
+            )
+        )
+    end # if
+
+    # Validate n_samples
+    if n_samples < 1
+        throw(ArgumentError("Number of samples must be at least 1"))
+    end # if
+
+    # Compute batch size
+    batch_size = size(x, 2)
+
+    # Compute average reconstruction loss
+    neg_log_likelihood = -0.5f0 * (
+        log(2.0f0π) * length(decoder_µ) +
+        2.0f0 * log(σ) * length(decoder_µ) +
+        sum((x .- decoder_µ) .^ 2 ./ (decoder_σ^2))
+    )
+
+    # Average over the number of samples and batch size
+    return neg_log_likelihood / (n_samples * batch_size)
+end # function
+
+@doc raw"""
+    reconstruction_gaussian_decoder(decoder, x, decoder_µ, decoder_σ; 
+        n_samples=1)
+
+Calculate the reconstruction loss for a Gaussian decoder in a variational
+autoencoder.
+
+This function computes the negative log-likelihood of the input data `x` given
+the Gaussian distribution parameters `decoder_µ` (mean) and `decoder_σ`
+(standard deviation) provided by the decoder. It assumes that the actual mapping
+from the latent space to the parameters (`decoder_µ`, `decoder_σ`) is done by
+the specified `decoder`.
+
+# Arguments
+- `decoder::T`: Decoder network of type `JointDecoder` or `SplitDecoder`, which
+  is assumed to have already mapped the latent variables to the parameters of
+  the Gaussian distribution.
+- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. Each column
+  represents a separate data sample.
+- `decoder_µ::AbstractArray{Float32}`: The mean output of the decoder,
+  corresponding to the center of the Gaussian distribution used in the
+  reconstruction probability density function.
+- `decoder_σ::AbstractArray{Float32}`: The standard deviation output of the
+  decoder, corresponding to the spread of the Gaussian distribution used in the
+  reconstruction probability density function.
+
+## Optional Keyword Arguments
+- `n_samples::Int=1`: The number of latent samples to average over when
+  computing the reconstruction loss. More samples provide a better approximation
+  of the expected reconstruction log likelihood.
+
+# Returns
+- `Float32`: The average reconstruction loss computed across all provided
+  samples and data points.
+
+# Note
+- It is assumed that the mapping from latent space to decoder parameters
+  (`decoder_µ` and `decoder_σ`) has been performed prior to calling this
+  function. The `decoder` argument is provided to indicate the type of decoder
+  network used, but it is not used within the function itself.
+"""
+function reconstruction_gaussian_decoder(
+    decoder::T,
+    x::AbstractArray{Float32},
+    decoder_µ::AbstractArray{Float32},
+    decoder_σ::AbstractArray{Float32};
+    n_samples::Int=1
+) where {T<:Union{JointDecoder,SplitDecoder}}
+    # Validate input dimensions
+    if size(x) != size(decoder_µ) || size(x) != size(decoder_σ)
+        throw(
+            DimensionMismatch(
+                "Input data and decoder outputs must have the same dimensions"
+            )
+        )
+    end
+
+    # Validate n_samples
+    if n_samples < 1
+        throw(ArgumentError("Number of samples must be at least 1"))
+    end
+
+    # Compute batch size
+    batch_size = size(x, 2)
+
+    # Compute average reconstruction loss
+    neg_log_likelihood = -0.5f0 * (
+        log(2.0f0π) * length(decoder_µ) +
+        2.0f0 * sum(log, decoder_σ) +
+        sum((x .- decoder_µ) .^ 2 ./ (decoder_σ .^ 2))
+    )
+
+    # Average over the number of samples and batch size
+    return neg_log_likelihood / (n_samples * batch_size)
+end # function
+
+"""
+    reconstruction_log_gaussian_decoder(decoder, x, decoder_µ, decoder_logσ; 
+    n_samples=1)
+
+Calculate the reconstruction loss for a Gaussian decoder in a variational
+autoencoder, where the decoder outputs log standard deviations instead of
+standard deviations.
+
+# Arguments
+- `decoder::T`: Decoder network of type `JointLogDecoder` or `SplitLogDecoder`,
+  which outputs the log of the standard deviation of the Gaussian distribution.
+- `x::AbstractArray{Float32}`: The original input data to the encoder.
+- `decoder_µ::AbstractArray{Float32}`: The mean output of the decoder.
+- `decoder_logσ::AbstractArray{Float32}`: The log standard deviation output of
+  the decoder.
+
+## Optional Keyword Arguments
+- `n_samples::Int=1`: The number of latent samples to average over when
+  computing the reconstruction loss.
+
+# Returns
+- `Float32`: The average reconstruction loss computed across all provided
+  samples and data points.
+
+# Note
+- It is assumed that the mapping from latent space to decoder parameters
+  (`decoder_µ` and `decoder_logσ`) has been performed prior to calling this
+  function. The `decoder` argument is provided to indicate the type of decoder
+  network used, but it is not used within the function itself.
+"""
+function reconstruction_log_gaussian_decoder(
+    decoder::T,
+    x::AbstractArray{Float32},
+    decoder_µ::AbstractArray{Float32},
+    decoder_logσ::AbstractArray{Float32};
+    n_samples::Int=1
+) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
+    # Validate input dimensions
+    if size(x) != size(decoder_µ) || size(x) != size(decoder_logσ)
+        throw(
+            DimensionMismatch(
+                "Input data and decoder outputs must have the same dimensions"
+            )
+        )
+    end
+
+    # Validate n_samples
+    if n_samples < 1
+        throw(ArgumentError("Number of samples must be at least 1"))
+    end
+
+    # Compute batch size
+    batch_size = size(x, 2)
+
+    # Convert log standard deviation to standard deviation
+    decoder_σ = exp.(decoder_logσ)
+
+    # Compute average reconstruction loss
+    neg_log_likelihood = -0.5f0 * (
+        log(2.0f0π) * length(decoder_µ) +
+        2.0f0 * sum(decoder_logσ) +
+        sum((x .- decoder_µ) .^ 2 ./ decoder_σ .^ 2)
+    )
+
+    # Average over the number of samples and batch size
+    return neg_log_likelihood / (n_samples * batch_size)
+end # function
+
+
+
 # ==============================================================================
 # Loss VAE{JointLogEncoder,SimpleDecoder}
 # ==============================================================================
@@ -2388,7 +2616,6 @@ function loss(
 
     return total_loss
 end
-
 
 # ==============================================================================
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
