@@ -6,7 +6,6 @@ import Zygote
 import Random
 import StatsBase
 import Distributions
-import Distances
 
 ##
 
