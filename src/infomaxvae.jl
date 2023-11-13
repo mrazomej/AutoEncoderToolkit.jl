@@ -465,7 +465,9 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_gaussian_encoder(vae.encoder, vae_outputs)
+    kl_qᵩ_π = kl_gaussian_encoder(
+        vae.encoder, x, vae_outputs; n_samples=n_samples
+    )
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
@@ -562,7 +564,9 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_gaussian_encoder(vae.encoder, vae_outputs)
+    kl_qᵩ_π = kl_qᵩ_π = kl_gaussian_encoder(
+        vae.encoder, x, vae_outputs; n_samples=n_samples
+    )
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
