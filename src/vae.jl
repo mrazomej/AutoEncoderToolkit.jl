@@ -1859,7 +1859,7 @@ the specified `decoder`.
 function reconstruction_gaussian_decoder(
     decoder::SimpleDecoder,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict;
+    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
     n_samples::Int=1
 )
     # Compute batch size
@@ -1931,7 +1931,7 @@ the specified `decoder`.
 function reconstruction_gaussian_decoder(
     decoder::T,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict;
+    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Compute batch size
@@ -1998,7 +1998,7 @@ standard deviations.
 function reconstruction_gaussian_decoder(
     decoder::T,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict;
+    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
     n_samples::Int=1
 ) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Compute batch size
@@ -2073,7 +2073,7 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 function kl_gaussian_encoder(
     encoder::JointLogEncoder,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict;
+    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
     n_samples::Int=1
 )
     # Compute batch size
