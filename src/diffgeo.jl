@@ -1,5 +1,6 @@
 # Import basic math
 import LinearAlgebra
+import Distances
 
 # Import library to perform Einstein summation
 using TensorOperations: @tensor
@@ -12,19 +13,19 @@ import Flux
 
 # Import Abstract Types
 
-using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder,
-    AbstractDeterministicDecoder
+using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder,
+    SplitLogDecoder, AbstractDeterministicDecoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Differential Geometry on Riemmanian Manifolds
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
 @doc raw"""
-    riemannian_metric(manifold, val)
+    pullback_metric(manifold, val)
 
-Compute the Riemannian metric `M = JᵀJ` of a manifold using numerical
-differentiation with `Zygote.jl`. The metric is computed at a specific point on
-the manifold.
+Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold using
+numerical differentiation with `Zygote.jl`. The metric is computed at a specific
+point on the manifold.
 
 # Arguments
 - `manifold::Function`: A function defining the manifold.
@@ -38,10 +39,10 @@ the manifold.
 ```julia-repl
 manifold(x) = [x[1]^2 + x[2], x[1]*x[2]]
 val = [1.0, 2.0]
-M = riemannian_metric(manifold, val)
+M = pullback_metric(manifold, val)
 ```
 """
-function riemannian_metric(
+function pullback_metric(
     manifold::Function, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian
@@ -51,11 +52,12 @@ function riemannian_metric(
 end # function
 
 @doc raw"""
-    riemannian_metric(manifold, val)
+    pullback_metric(manifold, val)
 
-Compute the Riemannian metric `M = JᵀJ` of a manifold defined by a neural
-network using numerical differentiation with `Zygote.jl`. The metric is
-evaluated based on the outputs of the network with respect to its inputs.
+Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold defined
+by a decoder neural network using numerical differentiation with `Zygote.jl`.
+The metric is evaluated based on the outputs of the network with respect to its
+inputs.
 
 # Arguments
 - `manifold::Flux.Chain`: A neural network model (as a chain) defining the
@@ -70,10 +72,10 @@ evaluated based on the outputs of the network with respect to its inputs.
 ```julia-repl
 model = Chain(Dense(2, 3, relu), Dense(3, 2))
 val = [1.0, 2.0]
-M = riemannian_metric(model, val)
+M = pullback_metric(model, val)
 ```
 """
-function riemannian_metric(
+function pullback_metric(
     manifold::Flux.Chain, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input
@@ -83,13 +85,14 @@ function riemannian_metric(
 end # function
 
 @doc raw"""
-    riemannian_metric(manifold::AbstractDeterministicDecoder, 
+    pullback_metric(manifold::AbstractDeterministicDecoder, 
     val::Vector{T})::Matrix{T} where {T<:AbstractFloat}
 
-Compute the Riemannian metric `M = JᵀJ` of a manifold defined by the decoder
-structure of a variational autoencoder (VAE) using numerical differentiation
-with `Zygote.jl`. The metric is the squared Jacobian matrix, representing the
-local geometry of the decoder's output space in relation to its input space.
+Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold defined
+by the decoder structure of a variational autoencoder (VAE) using numerical
+differentiation with `Zygote.jl`. The metric is the squared Jacobian matrix,
+representing the local geometry of the decoder's output space in relation to its
+input space.
 
 # Arguments
 - `manifold::AbstractDeterministicDecoder`: A VAE decoder structure containing a
@@ -108,10 +111,10 @@ local geometry of the decoder's output space in relation to its input space.
 decoder_model = Chain(Dense(2, 3, relu), Dense(3, 2))
 decoder = SimpleDecoder(decoder_model)
 val = [1.0, 2.0]
-M = riemannian_metric(decoder, val)
+M = pullback_metric(decoder, val)
 ```
 """
-function riemannian_metric(
+function pullback_metric(
     manifold::AbstractDeterministicDecoder, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input
@@ -121,12 +124,12 @@ function riemannian_metric(
 end # function
 
 @doc raw"""
-    riemannian_metric(manifold, val)
+    pullback_metric(manifold, val)
 
-Compute the Riemannian metric `M = JᵀJ` of a manifold defined by the decoder
-structure of a variational autoencoder (VAE) using numerical differentiation
-with `Zygote.jl`. The metric is evaluated based on the outputs of the decoder
-with respect to its inputs.
+Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold defined
+by the decoder structure of a variational autoencoder (VAE) using numerical
+differentiation with `Zygote.jl`. The metric is evaluated based on the outputs
+of the decoder with respect to its inputs.
 
 # Arguments
 - `manifold::SimpleDecoder`: A VAE decoder structure containing a neural network
@@ -142,10 +145,10 @@ with respect to its inputs.
 decoder_model = Chain(Dense(2, 3, relu), Dense(3, 2))
 decoder = SimpleDecoder(decoder_model)
 val = [1.0, 2.0]
-M = riemannian_metric(decoder, val)
+M = pullback_metric(decoder, val)
 ```
 """
-function riemannian_metric(
+function pullback_metric(
     manifold::SimpleDecoder, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input
@@ -155,11 +158,13 @@ function riemannian_metric(
 end # function
 
 @doc raw"""
-    riemannian_metric(manifold::JointLogDecoder, val::Vector{T}) where {T<:AbstractFloat}
+    pullback_metric(manifold::JointLogDecoder, val::Vector{T}) 
+        where {T<:AbstractFloat}
 
-Compute the Riemannian metric `M̲̲` for a stochastic manifold defined by a
-`JointLogDecoder` using numerical differentiation with `Zygote.jl`. The metric is
-evaluated based on the outputs of the neural network with respect to its inputs.
+Compute the Riemannian metric (pull-back metric) `M̲̲` for a stochastic manifold
+defined by a `JointLogDecoder` using numerical differentiation with `Zygote.jl`.
+The metric is evaluated based on the outputs of the neural network with respect
+to its inputs.
 
 The Riemannian metric of a stochastic manifold with a mean `µ` and standard
 deviation `σ` is given by: M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ Where J̲̲_µ and
@@ -168,8 +173,8 @@ Given that we compute the Jacobian of `logσ` directly, the Jacobian of `σ` is
 obtained using the chain rule.
 
 # Arguments
-- `manifold::JointLogDecoder`: A VAE decoder structure that has separate paths for
-  determining both the mean and log standard deviation of the latent space.
+- `manifold::JointLogDecoder`: A VAE decoder structure that has separate paths
+  for determining both the mean and log standard deviation of the latent space.
 - `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
   (neural network) where the metric should be evaluated.
 
@@ -185,10 +190,10 @@ model = JointLogDecoder(
     Dense(2, 1)
 )
 val = [1.0, 2.0]
-M = riemannian_metric(model, val)
+M = pullback_metric(model, val)
 ```
 """
-function riemannian_metric(
+function pullback_metric(
     manifold::JointLogDecoder, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input for the mean µ
@@ -212,12 +217,12 @@ function riemannian_metric(
 end # function
 
 @doc raw"""
-    riemannian_metric(manifold::SplitLogDecoder, val::Vector{T}) where {T<:AbstractFloat}
+    pullback_metric(manifold::SplitLogDecoder, val::Vector{T}) where {T<:AbstractFloat}
 
-Compute the Riemannian metric `M̲̲` for a stochastic manifold defined by a
-`SplitLogDecoder` using numerical differentiation with `Zygote.jl`. The metric is
-evaluated based on the outputs of the individual neural networks with respect to
-their inputs.
+Compute the Riemannian metric (pull-back metric) `M̲̲` for a stochastic manifold
+defined by a `SplitLogDecoder` using numerical differentiation with `Zygote.jl`.
+The metric is evaluated based on the outputs of the individual neural networks
+with respect to their inputs.
 
 The Riemannian metric of a stochastic manifold with a mean `µ` and standard
 deviation `σ` is given by: M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ Where J̲̲_µ and
@@ -243,10 +248,10 @@ model = SplitLogDecoder(
     Chain(Dense(2, 3, relu), Dense(3, 1))
 )
 val = [1.0, 2.0]
-M = riemannian_metric(model, val)
+M = pullback_metric(model, val)
 ```
 """
-function riemannian_metric(
+function pullback_metric(
     manifold::SplitLogDecoder, val::Vector{T}
 )::Matrix{T} where {T<:AbstractFloat}
     # Compute Jacobian with respect to the input for the mean µ
@@ -440,7 +445,7 @@ function christoffel_symbols(
     manifold::Flux.Chain, val::Vector{T}, out_dim::Int
 )::Array{T} where {T<:AbstractFloat}
     # Compute the inverse of the Riemannian metric
-    M̲̲⁻¹ = LinearAlgebra.inv(riemannian_metric(manifold, val))
+    M̲̲⁻¹ = LinearAlgebra.inv(pullback_metric(manifold, val))
 
     # Compute the derivative of the Riemannian metric
     ∂M̲̲ = ∂M̲̲∂γ̲(manifold, val, out_dim)
@@ -805,4 +810,310 @@ function curve_lengths(γ::AbstractMatrix{T}, manifold::Function) where {T<:Real
         )
         for i = 1:size(Δγ, 2)
     ]
+end # function
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Encoder Riemmanian metric
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+# Reference
+# > Chadebec, C. & Allassonnière, S. A Geometric Perspective on Variational 
+# > Autoencoders. Preprint at http://arxiv.org/abs/2209.07370 (2022).
+
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
+    `exponential_mahalanobis_kernel(x, y, Σ; ρ=1.0f0)`
+
+Compute the exponential Mahalanobis Kernel between two matrices `x` and `y`,
+defined as 
+
+ω(x, y) = exp(-(x - y)ᵀ Σ⁻¹ (x - y) / ρ²)
+
+# Arguments
+- `x::AbstractVector{Float32}`: First input vector for the kernel.
+- `y::AbstractVector{Float32}`: Second input vector for the kernel.
+- `Σ::AbstractMatrix{Float32}`: The covariance matrix used in the Mahalanobis
+  distance.
+
+# Keyword Arguments
+- `ρ::Float32=1.0f0`: Kernel width parameter. Larger ρ values lead to a wider
+  spread of the kernel.
+
+# Returns
+- `k::AbstractMatrix{Float32}`: Kernel matrix 
+
+# Examples
+```julia
+x = rand(10, 2) 
+y = rand(20, 2)
+Σ = I(2)
+K = exponential_mahalanobis_kernel(x, y, Σ) # 10x20 kernel matrix
+```
+"""
+function exponential_mahalanobis_kernel(
+    x::AbstractVector{Float32},
+    y::AbstractVector{Float32},
+    Σ::AbstractMatrix;
+    ρ::Float32=1.0f0,
+)
+    # return Gaussian kernel
+    return exp.(-Distances.sqmahalanobis(x, y, Σ) / ρ^2)
+end # function
+
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
+    `exponential_mahalanobis_kernel(x, y, Σ; ρ=1.0f0)`
+
+Compute the exponential Mahalanobis Kernel between two matrices `x` and `y`,
+defined as 
+
+ω(x, y) = exp(-(x - y)ᵀ Σ⁻¹ (x - y) / ρ²)
+
+# Arguments
+- `x::AbstractVector{Float32}`: First input vector for the kernel.
+- `y::AbstractMatrix{Float32}`: Second input matrix for the kernel. Each column
+  represents an individual data point to be compared with `x`.
+- `Σ::AbstractMatrix{Float32}`: The covariance matrix used in the Mahalanobis
+  distance.
+
+# Optional Keyword Arguments
+- `ρ::Float32=1.0f0`: Kernel width parameter. Larger ρ values lead to a wider
+  spread of the kernel.
+
+# Returns
+- `k::AbstractMatrix{Float32}`: Kernel matrix 
+
+# Examples
+```julia
+x = rand(10, 2) 
+y = rand(20, 2)
+Σ = I(2)
+K = exponential_mahalanobis_kernel(x, y, Σ) # 10x20 kernel matrix
+```
+"""
+function exponential_mahalanobis_kernel(
+    x::AbstractMatrix{Float32},
+    y::AbstractVector{Float32},
+    Σ::AbstractMatrix;
+    ρ::Float32=1.0f0,
+    dims::Int=2
+)
+    # return Gaussian kernel
+    return exp.(
+        -Distances.pairwise(
+            Distances.SqMahalanobis(Σ), x, reshape(y, :, 1); dims=dims
+        ) ./ ρ^2
+    )
+end # function
+
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
+    `exponential_mahalanobis_kernel(x, y, Σ; ρ=1.0f0)`
+
+Compute the exponential Mahalanobis Kernel between two matrices `x` and `y`,
+defined as 
+
+ω(x, y) = exp(-(x - y)ᵀ Σ⁻¹ (x - y) / ρ²)
+
+# Arguments
+- `x::AbstractVector{Float32}`: First input vector for the kernel.
+- `y::AbstractMatrix{Float32}`: Second input matrix for the kernel. Each column
+  represents an individual data point to be compared with `x`.
+- `Σ::AbstractMatrix{Float32}`: The covariance matrix used in the Mahalanobis
+  distance.
+
+# Optional Keyword Arguments
+- `ρ::Float32=1.0f0`: Kernel width parameter. Larger ρ values lead to a wider
+  spread of the kernel.
+
+# Returns
+- `k::AbstractMatrix{Float32}`: Kernel matrix 
+
+# Examples
+```julia
+x = rand(10, 2) 
+y = rand(20, 2)
+Σ = I(2)
+K = exponential_mahalanobis_kernel(x, y, Σ) # 10x20 kernel matrix
+```
+"""
+function exponential_mahalanobis_kernel(
+    x::AbstractVector{Float32},
+    y::AbstractMatrix{Float32},
+    Σ::AbstractMatrix;
+    ρ::Float32=1.0f0,
+    dims::Int=2
+)
+    # return Gaussian kernel
+    return exp.(
+        -Distances.pairwise(
+            Distances.SqMahalanobis(Σ), reshape(x, :, 1), y; dims=dims
+        ) ./ ρ^2
+    )
+end # function
+
+# ------------------------------------------------------------------------------ 
+@doc raw"""
+    `exponential_mahalanobis_kernel(x, y, Σ; ρ=1.0f0)`
+
+Compute the exponential Mahalanobis Kernel between two matrices `x` and `y`,
+defined as 
+
+ω(x, y) = exp(-(x - y)ᵀ Σ⁻¹ (x - y) / ρ²)
+
+# Arguments
+- `x::AbstractMatrix{Float32}`: First input matrix for the kernel.
+- `y::AbstractMatrix{Float32}`: Second input matrix for the kernel.
+- `Σ::AbstractMatrix{Float32}`: The covariance matrix used in the Mahalanobis
+  distance.
+
+# Optional Keyword Arguments
+- `ρ::Float32=1.0f0`: Kernel width parameter. Larger ρ values lead to a wider
+  spread of the kernel.
+- `dims::Int=2`: Whether the rows (1) or the columns (2) represent individual
+  data points.
+
+# Returns
+- `k::AbstractMatrix{Float32}`: Kernel matrix 
+
+
+# Examples
+```julia
+x = rand(10, 2) 
+y = rand(20, 2)
+Σ = I(2)
+K = exponential_mahalanobis_kernel(x, y, Σ) # 10x20 kernel matrix
+```
+"""
+function exponential_mahalanobis_kernel(
+    x::AbstractMatrix{Float32},
+    y::AbstractMatrix{Float32},
+    Σ::AbstractMatrix;
+    ρ::Float32=1.0f0,
+    dims::Int=2
+)
+    # return Gaussian kernel
+    return exp.(
+        -Distances.pairwise(
+            Distances.SqMahalanobis(Σ), x, y; dims=dims
+        ) ./ ρ^2
+    )
+end # function
+
+# ------------------------------------------------------------------------------ 
+
+"""
+    encoder_metric_builder(encoder::JointLogEncoder, 
+    data::AbstractMatrix{Float32}; λ::AbstractFloat=0.0001f0, 
+    τ::AbstractFloat=eps(Float32)) -> Function
+
+Build a metric function G(z) using a trained variational autoencoder (VAE)
+model's encoder.
+
+The metric G(z) is defined as a weighted sum of precision matrices Σ⁻¹, each
+associated with a data point in the latent space, and a regularization term. The
+weights are determined by the exponential Mahalanobis kernel between z and each
+data point's latent mean.
+
+# Arguments
+- `encoder::JointLogEncoder`: A VAE model encoder that maps data to the latent
+  space.
+- `data`: The dataset in the form of a matrix, with each column representing a
+  data point.
+
+# Optional Keyword Arguments
+- `λ`: A regularization parameter that controls the strength of the
+  regularization term.
+- `τ`: A small positive value to ensure numerical stability.
+
+# Returns
+- A function G that takes a vector z and returns the metric matrix.
+
+## Mathematical Definition
+
+For each data point i, the encoder provides the mean μᵢ and log variance logσᵢ
+in the latent space. The precision matrix for each data point is given by 
+
+Σ⁻¹ᵢ = Diagonal(1 ./ exp.(logσᵢ)). 
+
+The metric is then constructed as follows:
+
+G(z) = ∑ᵢ (Σ⁻¹ᵢ .* exp.(-||z - μᵢ||²_Σ⁻¹ᵢ / ρ²)) + λ * exp(-τ * ||z||²) * Iₙ
+
+where:
+- ρ is the maximum Euclidean distance between any two closest neighbors in the
+  latent space.
+- Iₙ is the identity matrix of size n, where n is the number of dimensions in
+  the latent space.
+- ||⋅||²_Σ⁻¹ᵢ denotes the squared Mahalanobis distance with respect to Σ⁻¹ᵢ.
+
+# Examples
+```julia
+# Assuming `encoder` is a pre-trained JointLogEncoder and `data` is your 
+# dataset:
+G = encoder_metric_builder(encoder, data)
+# Compute the metric for a given latent vector
+metric_matrix = G(some_latent_vector)  
+```
+
+# Reference
+> Chadebec, C. & Allassonnière, S. A Geometric Perspective on Variational
+> Autoencoders. Preprint at http://arxiv.org/abs/2209.07370 (2022).
+"""
+function encoder_metric_builder(
+    encoder::JointLogEncoder,
+    data::AbstractMatrix{Float32};
+    λ::AbstractFloat=0.0001f0,
+    τ::AbstractFloat=eps(Float32))
+    # Map data to latent space to get the mean (µ) and log variance (logσ)
+    latent_µ, latent_logσ = encoder(data)
+
+    # Generate all inverse covariance matrices (Σ⁻¹) from logσ
+    Σ_inv_array = [
+        LinearAlgebra.Diagonal(1 ./ exp.(latent_logσ[:, i]))
+        for i in 1:size(latent_logσ, 2)
+    ]
+
+    # Compute Euclidean pairwise distance between points in latent space
+    latent_euclid_dist = Distances.pairwise(
+        Distances.SqEuclidean(), latent_µ, dims=2
+    )
+
+    # Define ρ as the maximum distance between two closest neighbors
+    ρ = maximum([
+        minimum(distances[distances.>0])
+        for distances in eachrow(latent_euclid_dist)
+    ])
+
+    # Identity matrix for regularization term, should match the dimensionality
+    # of z
+    I_d = LinearAlgebra.I(size(latent_µ, 1))
+
+    # Build metric G(z) as a function
+    function G(z::AbstractVector{Float32})
+        # Initialize metric to zero matrix of appropriate size
+        metric = zeros(Float32, size(latent_µ, 1), size(latent_µ, 1))
+
+        # Accumulate weighted Σ_inv matrices, weighted by the kernel
+        for i in 1:size(latent_µ, 2)
+            # Compute ω terms with exponential mahalanobis kernel
+            ω = exponential_mahalanobis_kernel(
+                z, latent_µ[:, i], Σ_inv_array[i]; ρ=ρ
+            )
+            # Update value of metric as the precision metric multiplied
+            # (elementwise for some reason) by the resulting value of the kernel
+            metric .+= Σ_inv_array[i] .* ω
+        end # for
+
+        # Regularization term: λ * exp(-τ||z||²) * I_d
+        regularization = λ * exp(-τ * sum(z .^ 2)) .* I_d
+
+        return metric + regularization
+    end # function
+
+    return G
 end # function
