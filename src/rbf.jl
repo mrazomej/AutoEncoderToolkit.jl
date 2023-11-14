@@ -25,7 +25,7 @@ using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
 
 """
     latent_rbf_centers(
-        vae::VAE, data::AbstractMatrix{Float32}, num_centers::Int
+        vae::VAE, data::AbstractMatrix{Float32}, n_centers::Int
     ) -> Matrix{Float32}
 
 Perform k-means clustering in the latent space of a trained Variational
@@ -42,7 +42,7 @@ the VAE's decoder.
 - `encoder::JointLogEncoder`: An instance of a trained encoder.
 - `data::AbstractMatrix{Float32}`: The input data matrix, where each column
   represents a single observation in the original feature space.
-- `num_centers::Int`: The desired number of centers to find in the latent space
+- `n_centers::Int`: The desired number of centers to find in the latent space
   for RBF network.
 
 # Optional Keyword Arguments
@@ -60,14 +60,14 @@ the VAE's decoder.
 ```julia
 vae = VAE(...) # A trained VAE instance
 data = rand(Float32, input_dim, num_samples) # Example data matrix
-num_centers = 10 # Number of desired RBF centers
-rbf_centers = latent_rbf_centers(vae.encoder, data, num_centers)
+n_centers = 10 # Number of desired RBF centers
+rbf_centers = latent_rbf_centers(vae.encoder, data, n_centers)
 ```
 """
 function latent_rbf_centers(
     encoder::JointLogEncoder,
     data::AbstractMatrix{Float32},
-    num_centers::Int;
+    n_centers::Int;
     assigment::Bool=true
 )
     # Map the data to the latent space
@@ -77,10 +77,10 @@ function latent_rbf_centers(
     # centers
     if assigment
         # Compute clustering
-        clustering = Clustering.kmeans(latent_µ, num_centers)
+        clustering = Clustering.kmeans(latent_µ, n_centers)
         return (clustering.centers, Clustering.assignments(clustering))
     else
-        return Clustering.kmeans(latent_µ, num_centers).centers
+        return Clustering.kmeans(latent_µ, n_centers).centers
     end # if
 end # function
 
@@ -113,7 +113,7 @@ where:
   k-means clustering.
 - `assignments::AbstractVector{<:Int}`: Cluster assignment for each of the
   elements in `latent_space`.
-- `a::Float32`: The hyper-parameter that controls the curvature of the
+- `a::AbstractFloat`: The hyper-parameter that controls the curvature of the
   Riemannian metric.
 
 # Returns
@@ -128,13 +128,13 @@ function calculate_bandwidths(
     latent_space::AbstractMatrix{Float32},
     centers::AbstractMatrix{Float32},
     assignments::AbstractVector{<:Int},
-    a::Float32
+    a::AbstractFloat
 )::Vector{Float32}
     # Count number of centers
-    num_centers = size(centers, 2)
+    n_centers = size(centers, 2)
 
     # Initialize array to save bandwidths
-    bandwidths = Vector{Float32}(undef, num_centers)
+    bandwidths = Vector{Float32}(undef, n_centers)
 
     # Loop through centers
     for (k, cₖ) in enumerate(eachcol(centers))
@@ -201,6 +201,97 @@ end # struct
 # In this case, we will only train the weights. Therefore, we indicate to
 # @functor the fields that can be trained.
 Flux.@functor RBFlayer (weights,)
+
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
+    RBFlayer(
+        vae::VAE{<:JointLogEncoder,<:Union{JointLogDecoder,SplitLogDecoder}},
+        x::AbstractMatrix{Float32},
+        n_centers::Int,
+        a::AbstractFloat;
+        bias::Union{Nothing, <:AbstractVector{Float32}}=nothing,
+        init::Function=Flux.glorot_uniform
+    ) -> RBFlayer
+
+Constructs and initializes an `RBFlayer` struct, which serves as the decoder
+part of a Variational Autoencoder (VAE) utilizing Radial Basis Function (RBF)
+networks to model the variance structure of the latent space.
+
+This function maps the input data `x` through the VAE's encoder to obtain latent
+space representations. It then performs k-means clustering to determine the
+centers for the RBF network and calculates the corresponding bandwidths.
+
+# Arguments
+- `vae::VAE`: A VAE model with a `JointLogEncoder` encoder and either a
+  `JointLogDecoder` or `SplitLogDecoder` decoder.
+- `x::AbstractMatrix{Float32}`: The input data matrix, where each column
+  represents a single observation in the original feature space.
+- `n_centers::Int`: The number of RBF centers to find in the latent space.
+- `a::AbstractFloat`: The hyper-parameter controlling the curvature of the
+  Riemannian metric in the latent space.
+
+## Optional Keyword Arguments
+- `bias::Union{Nothing, <:AbstractVector{Float32}}`: Optionally provide a bias
+  vector for the RBF layer. If `nothing`, the bias is initialized based on the
+  encoder's log variance.
+- `init::Function`: The initialization function used for the RBF weights,
+  defaults to `Flux.glorot_uniform`.
+
+# Returns
+- An initialized `RBFlayer` struct ready to be used as part of a VAE.
+
+# Examples
+```julia
+vae_model = VAE(...) # A pre-defined VAE model
+input_data = rand(Float32, input_dim, num_samples) # Sample data matrix
+number_of_centers = 10 # Desired number of RBF centers
+rbf_layer = RBFlayer(vae_model, input_data, number_of_centers, 0.1)
+```
+
+# Notes
+
+- The function uses the VAE's encoder to project data into the latent space and
+  uses this projection to initialize the RBF layer's centers via k-means
+  clustering.
+- The `bandwidths` for the RBF kernels are calculated using the latent space
+  representations and the determined centers.
+- If `bias` is not provided, it is calculated based on the mean of the encoder's
+  log variance, scaled by a factor of 1000.
+- The `weights` of the RBF network are initialized using the init function, with
+  the shape `(input_dim, n_centers)`.
+"""
+function RBFlayer(
+    vae::VAE{JointLogEncoder,D},
+    x::AbstractMatrix{Float32},
+    n_centers::Int,
+    a::AbstractFloat;
+    bias::Union{Nothing,<:AbstractVector{Float32}}=nothing,
+    init::Function=Flux.glorot_uniform
+) where {D<:Union{JointLogDecoder,SplitLogDecoder}}
+    # Map data to latent space
+    encoder_µ, encoder_logσ = vae.encoder(x)
+
+    # Calculate latent space centers
+    centers, assignments = latent_rbf_centers(vae.encoder, x, n_centers)
+
+    # Calculate bandwidths for RBF network
+    λs = calculate_bandwidths(encoder_µ, centers, assignments, a)
+
+    # Compute bias values if necessary. Note: This is the option presented by
+    # the original authors in
+    # https://github.com/georgiosarvanitidis/geometric_ml/blob/master/python/example2.py#L169
+    if typeof(bias) <: Nothing
+        σ_rbf = 1000 * StatsBase.mean(encoder_logσ)
+        bias = repeat([1 / (σ_rbf^2)], size(x, 1))
+    end # if
+
+    # Define initial weights using the provided init. This matrix should be
+    # D × n_centers
+    weights = init(size(x, 1), n_centers)
+
+    return RBFlayer(centers, λs, weights, bias)
+end # function
 
 # ------------------------------------------------------------------------------ 
 
