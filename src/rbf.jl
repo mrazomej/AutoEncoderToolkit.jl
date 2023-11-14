@@ -6,13 +6,14 @@ import Zygote
 import Distances
 import LinearAlgebra
 import StatsBase
+import Distributions
 
 # Import Clustering algorithms
 import Clustering
 
 using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
     AbstractVariationalDecoder, JointLogEncoder, SimpleDecoder, JointLogDecoder,
-    SplitLogDecoder, JointDecoder, SplitDecoder, VAE, rbfVAE
+    SplitLogDecoder, JointDecoder, SplitDecoder, VAE
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # > Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
@@ -196,6 +197,11 @@ mutable struct RBFlayer
     bias::AbstractVector{Float32}
 end # struct
 
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training.
+# In this case, we will only train the weights. Therefore, we indicate to
+# @functor the fields that can be trained.
+Flux.@functor RBFlayer (weights,)
+
 # ------------------------------------------------------------------------------ 
 
 @doc raw"""
@@ -271,7 +277,7 @@ corresponding outputs.
 > Curvature of Deep Generative Models. Preprint at
 > http://arxiv.org/abs/1710.11379 (2021).
 """
-function (rbf::RBFlayer)(z::AbstractVector{Float32,3})
+function (rbf::RBFlayer)(z::AbstractArray{Float32,3})
     return cat(eachslice(z, dims=3); dims=3)
 end # function
 
@@ -300,33 +306,329 @@ The `RBFVAE` struct is utilized in a similar manner to a standard VAE, with the
 added capability of approximating the decoder variance via an RBF network. This
 network is usually trained after the vanilla VAE has been already trained to
 force the variance to bound the data manifold.
+
+# Note
+An RBFVAE can be defined with any encoder and decoder. However, to properly
+train the RBF network, the procedure assumes that the decoder includes learning
+the reconstruction variance. In that sense, all the RBF network does is to build
+a "cage" around the data manifold. Thus, we recommend avoiding `SimpleDecoder`
+as the decoders.
 """
 mutable struct RBFVAE{
     V<:VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    R::RBFlayer
+    R<:RBFlayer
 } <: AbstractVariationalAutoEncoder
     vae::V
-    rbf::M
+    rbf::R
 end # struct
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor RBFVAE (rbf,)
 
 # ------------------------------------------------------------------------------ 
 
+@doc raw"""
+    (rbfvae::RBFVAE)(
+        x::AbstractVecOrMat{Float32}, 
+        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
+        latent::Bool=false, 
+        n_samples::Int=1
+    )
+
+Processes the input data `x` through an RBFVAE, which is a Variational
+Autoencoder with a Radial Basis Function (RBF) network as part of its decoder.
+This VAE variant aims to capture the complex variance structure in the latent
+space through the RBF network, enhancing the model's capacity to represent data
+manifolds.
+
+# Arguments
+- `x::AbstractVecOrMat{Float32}`: The data to be processed. Can be a vector or a
+  matrix where each column represents a separate data sample.
+
+# Optional Keyword Arguments
+- `prior::Distributions.Sampleable`: Specifies the prior distribution for the
+  latent space during the reparametrization trick. Defaults to a standard normal
+  distribution.
+- `latent::Bool`: If `true`, returns a dictionary containing the latent
+  variables, RBF network outputs, and the reconstructed data. Defaults to
+  `false`.
+- `n_samples::Int=1`: The number of samples to draw from the latent distribution
+  using the reparametrization trick.
+
+# Returns
+- If `latent=false`: A tuple containing the reconstructed data from the standard
+  decoder and the RBF network, providing both the mean reconstruction and the
+  RBF-adjusted output.
+- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_(log)σ`,
+  `:z`, `:decoder_µ`, `:decoder_(log)σ`, and `:rbf`, containing the mean and log
+  variance from the encoder, the sampled latent variables, the mean
+  reconstruction from the decoder, and the output of the RBF network,
+  respectively.
+
+# Description
+The function first uses the encoder to map the input `x` to a latent
+distribution, characterized by its mean and log variance. It then samples from
+this distribution using the reparametrization trick. The sampled latent vectors
+are passed through the decoder to reconstruct the data and through the RBF
+network to obtain the RBF-adjusted output. If the `latent` flag is set to
+`true`, the function also returns the latent variables and the RBF network's
+outputs.
+
+# Note
+Ensure the input data `x` matches the expected input dimensionality for the
+encoder in the RBFVAE. The `rbf` output provides the data-dependent variance
+estimation which is key to differential geometry operations in the latent space.
+"""
 function (rbfvae::RBFVAE)(
     x::AbstractVecOrMat{Float32},
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
     latent::Bool=false,
     n_samples::Int=1
 )
+    # Run inputs through VAE and save all outputs regardless of latent
+    outputs = rbfvae.vae(x, prior; latent=true, n_samples=n_samples)
     # Check if latent variables and mutual information should be returned
     if latent
-        outputs = rbfvae.vae(x, prior; latent=latent, n_samples=n_samples)
-
         # Add RBF output to dictionary
         outputs[:rbf] = rbfvae.rbf(outputs[:z])
 
         return outputs
     else
         # or return reconstructed data from decoder
-        return rbfvae.vae(x, prior; latent=latent, n_samples=n_samples)
+        return outputs[:decoder_µ], rbfvae.rbf(outputs[:z])
     end # if
+end # function
+
+# ==============================================================================
+# Loss RBFVAE.VAE{JointLogEncoder,Union{JointLogDecoder,SplitLogDecoder}}
+# ==============================================================================
+
+@doc raw"""
+    `loss(vae, rbf, x; n_samples=1, regularization=nothing, reg_strength=1.0f0)`
+
+Computes the loss for a Variational Autoencoder (VAE) with a Radial Basis
+Function (RBF) network as the decoder, by averaging over `n_samples` latent
+space samples.
+
+The loss function combines the reconstruction loss based on the estimated log
+variance from the VAE's decoder and the RBF network's output, and possibly
+includes a regularization term. The loss is computed as:
+
+loss = MSE(2 × decoder_logσ, -log(rbf_outputs_safe)) + reg_strength × reg_term
+
+Where:
+- `decoder_logσ` is the log standard deviation of the reconstructed data from
+  the decoder.
+- `rbf_outputs_safe` is the RBF network's output for the latent representations,
+  clamped to avoid log of non-positive values.
+
+# Arguments
+- `vae::VAE`: A VAE model with an encoder and a decoder network.
+- `rbf::RBFlayer`: An RBF layer representing the decoder of the VAE.
+- `x::AbstractVecOrMat{Float32}`: Input data. Can be a vector or a matrix where
+  each column represents an observation.
+
+# Optional Keyword Arguments
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the RBF outputs. Should return a Float32.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+
+# Returns
+- `Float32`: The computed average loss value for the input `x`, including the
+  mean squared error between the estimated and the RBF-adjusted log variances
+  and possible regularization terms.
+
+# Note
+- Ensure that the input data `x` match the expected input dimensionality for the
+  encoder in the VAE.
+- The `rbf_outputs_safe` is the output of the RBF network adjusted to ensure
+  numerical stability when taking the logarithm.
+- The RBF network aims to model the variance structure in the latent space,
+  enhancing the VAE's capacity to represent complex data manifolds.
+"""
+function loss(
+    vae::VAE{<:AbstractVariationalEncoder,D},
+    rbf::RBFlayer,
+    x::AbstractVecOrMat{Float32};
+    n_samples::Int=1,
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+) where {D<:Union{JointLogDecoder,SplitLogDecoder}}
+    # Forward Pass (run input through reconstruct function with n_samples)
+    vae_outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Extract log variance from VAE outputs. Note: Factor of 2 is to transform
+    # logσ to logvar
+    logvar_x̂ = 2 * vae_outputs[:decoder_logσ]
+
+    # Run latent space outputs through RBF network to estimate variances
+    rbf_outputs = rbf(vae_outputs[:z])
+    # Ensure no zero or negative values before taking log
+    rbf_outputs_safe = clamp.(rbf_outputs, eps(Float32), Inf)
+    # Compute the log variance from the RBF outputs. Note var(x) = 1 / RBF(x)
+    logvar_rbf = -log.(rbf_outputs_safe)
+
+    # Compute regularization term if a regularization function is provided
+    reg_term = (regularization !== nothing) ? regularization(rbf_outputs) : 0.0f0
+
+    # Mean squared error loss for log variances 
+    mse_loss = Flux.mse(logvar_x̂, logvar_rbf)
+    # Include regularization
+    total_loss = mse_loss + reg_strength * reg_term
+
+    return total_loss
+end # function
+
+# ==============================================================================
+# Loss RBFVAE.VAE{JointLogEncoder,Union{JointDecoder,SplitDecoder}}
+# ==============================================================================
+
+@doc raw"""
+    `loss(vae, rbf, x; n_samples=1, regularization=nothing, reg_strength=1.0f0)`
+
+Computes the loss for a Variational Autoencoder (VAE) with a Radial Basis
+Function (RBF) network as the decoder, by averaging over `n_samples` latent
+space samples.
+
+The loss function combines the reconstruction loss based on the estimated log
+variance from the VAE's decoder and the RBF network's output, and possibly
+includes a regularization term. The loss is computed as:
+
+loss = MSE(2 × decoder_logσ, -log(rbf_outputs_safe)) + reg_strength × reg_term
+
+Where:
+- `decoder_logσ` is the log standard deviation of the reconstructed data from
+  the decoder.
+- `rbf_outputs_safe` is the RBF network's output for the latent representations,
+  clamped to avoid log of non-positive values.
+
+# Arguments
+- `vae::VAE`: A VAE model with an encoder and a decoder network.
+- `rbf::RBFlayer`: An RBF layer representing the decoder of the VAE.
+- `x::AbstractVecOrMat{Float32}`: Input data. Can be a vector or a matrix where
+  each column represents an observation.
+
+# Optional Keyword Arguments
+- `n_samples::Int=1`: The number of samples to draw from the latent space when
+  computing the loss.
+- `regularization::Union{Function, Nothing}=nothing`: A function that computes
+  the regularization term based on the RBF outputs. Should return a Float32.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+
+# Returns
+- `Float32`: The computed average loss value for the input `x`, including the
+  mean squared error between the estimated and the RBF-adjusted log variances
+  and possible regularization terms.
+
+# Note
+- Ensure that the input data `x` match the expected input dimensionality for the
+  encoder in the VAE.
+- The `rbf_outputs_safe` is the output of the RBF network adjusted to ensure
+  numerical stability when taking the logarithm.
+- The RBF network aims to model the variance structure in the latent space,
+  enhancing the VAE's capacity to represent complex data manifolds.
+"""
+function loss(
+    vae::VAE{<:AbstractVariationalEncoder,D},
+    rbf::RBFlayer,
+    x::AbstractVecOrMat{Float32};
+    n_samples::Int=1,
+    regularization::Union{Function,Nothing}=nothing,
+    reg_strength::Float32=1.0f0
+) where {D<:Union{JointDecoder,SplitDecoder}}
+    # Forward Pass (run input through reconstruct function with n_samples)
+    vae_outputs = vae(x; latent=true, n_samples=n_samples)
+
+    # Extract log variance from VAE outputs. Note: Factor of 2 is to transform
+    # logσ to logvar
+    logvar_x̂ = log.(vae_outputs[:decoder_σ] .^ 2)
+
+    # Run latent space outputs through RBF network to estimate variances
+    rbf_outputs = rbf(vae_outputs[:z])
+    # Ensure no zero or negative values before taking log
+    rbf_outputs_safe = clamp.(rbf_outputs, eps(Float32), Inf)
+    # Compute the log variance from the RBF outputs. Note var(x) = 1 / RBF(x)
+    logvar_rbf = -log.(rbf_outputs_safe)
+
+    # Compute regularization term if a regularization function is provided
+    reg_term = (regularization !== nothing) ? regularization(rbf_outputs) : 0.0f0
+
+    # Mean squared error loss for log variances 
+    mse_loss = Flux.mse(logvar_x̂, logvar_rbf)
+    # Include regularization
+    total_loss = mse_loss + reg_strength * reg_term
+
+    return total_loss
+end # function
+
+# ==============================================================================
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# RBFVAE training functions
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# ==============================================================================
+
+"""
+    `train!(rbfvae, x, optimizer; loss_function=loss, loss_kwargs=Dict())`
+
+Customized training function to update parameters of a Variational Autoencoder
+(VAE) with a Radial Basis Function (RBF) network as part of its decoder. This
+function takes a pre-trained VAE model with an RBF layer and performs a single
+update step using the specified loss function for the RBF layer only.
+
+The RBFVAE loss function is aimed at modeling the variance structure in the
+latent space, enhancing the VAE's capacity to represent complex data manifolds.
+
+# Arguments
+- `rbfvae::RBFVAE`: Struct containing the elements of an RBFVAE, including a VAE
+  and an RBF network.
+- `x::AbstractVecOrMat{Float32}`: Data on which to evaluate the loss function.
+  Can be a vector or a matrix where each column represents a single data point.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Train.setup`.
+
+# Optional Keyword arguments
+- `loss_function::Function`: The loss function to be used during training,
+  defaulting to `loss`.
+- `loss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be
+  passed to the loss function.
+
+# Description
+Performs one step of gradient descent on the loss function to train the RBF
+network within the VAE. The RBF network's parameters are updated to minimize the
+discrepancy between the VAE decoder's estimated log variances and those adjusted
+by the RBF network. The function allows for customization of loss
+hyperparameters during training.
+
+# Examples
+```julia
+optimizer = Flux.Optimise.ADAM(1e-3)
+
+# Assuming 'x' is your input data and 'rbfvae' is an instance of RBFVAE
+train!(rbfvae, x, optimizer)
+````
+
+# Notes
+
+- Ensure that the dimensionality of the input data x aligns with the encoder's
+  expected input in the RBFVAE.
+- The training function assumes that the RBF network's centers and bandwidths
+  are fixed and that only the weights and biases are updated.
+- The provided loss function should compute the loss based on the VAE's output
+  and the RBF network's output.
+"""
+function train!(
+    rbfvae::RBFVAE,
+    x::AbstractVecOrMat{Float32},
+    opt::NamedTuple;
+    loss_function::Function=loss,
+    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+)
+    # Compute VAE gradient
+    ∇loss_ = Flux.gradient(rbfvae.rbf) do rbf_model
+        loss_function(rbfvae.vae, rbf_model, x; loss_kwargs...)
+    end # do block
+    # Update parameters
+    Flux.Optimisers.update!(opt, rbfvae, ∇loss_[1])
 end # function
