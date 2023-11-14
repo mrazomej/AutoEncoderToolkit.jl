@@ -477,7 +477,7 @@ function loss(
     info_x_z = variational_mutual_info(mlp, x, vae_outputs[:z], z_shuffle)
 
     # Compute regularization term if regularization function is provided
-    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+    reg_term = (regularization !== nothing) ? regularization(vae_outputs) : 0.0f0
 
     # Compute loss function
     return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z + reg_strength * reg_term
@@ -576,7 +576,7 @@ function loss(
     info_x_z = variational_mutual_info(mlp, x_in, vae_outputs[:z], z_shuffle)
 
     # Compute regularization term if regularization function is provided
-    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+    reg_term = (regularization !== nothing) ? regularization(vae_outputs) : 0.0f0
 
     # Compute loss function
     return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z + reg_strength * reg_term
