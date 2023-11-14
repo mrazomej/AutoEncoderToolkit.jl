@@ -387,7 +387,7 @@ function variational_mutual_info(
 end # function
 
 # ==============================================================================
-# Loss InfoMax.VAE{JointLogEncoder,SimpleDecoder}
+# Loss InfoMax
 # ==============================================================================
 
 @doc raw"""
@@ -695,10 +695,10 @@ input and latent variables.
 - `infomaxvae::InfoMaxVAE`: Struct containing the elements of an InfoMax VAE.
 - `x::AbstractMatrix{Float32}`: Matrix containing the data on which to evaluate
   the loss function. Each column represents a single data point.
-- `opt_vae::Flux.Optimise.Optimiser`: Optimizing algorithm to be used for
-  updating the VAE parameters.
-- `opt_mlp::Flux.Optimise.Optimiser`: Optimizing algorithm to be used for
-  updating the MLP parameters.
+- `opt_vae::NamedTuple`: State of the optimizer for updating the VAE parameters.
+    Typically initialized using `Flux.Train.setup`.
+- `opt_mlp::NamedTuple`: State of the optimizer for updating the MLP parameters.
+  Typically initialized using `Flux.Train.setup`.
 
 # Optional Keyword arguments
 - `loss_function::Function`: The loss function to be used during training,
@@ -788,10 +788,10 @@ input and latent variables.
   an individual sample.
 - `x_out::AbstractVector{Float32}`: Target output data for the loss function.
   Represents the corresponding output for the `x_in` sample.
-- `opt_vae::Flux.Optimise.Optimiser`: Optimizing algorithm to be used for
-  updating the VAE parameters.
-- `opt_mlp::Flux.Optimise.Optimiser`: Optimizing algorithm to be used for
-  updating the MLP parameters.
+- `opt_vae::NamedTuple`: State of the optimizer for updating the VAE parameters.
+  Typically initialized using `Flux.Train.setup`.
+- `opt_mlp::NamedTuple`: State of the optimizer for updating the MLP parameters.
+  Typically initialized using `Flux.Train.setup`.
 
 # Optional Keyword arguments
 - `loss_function::Function`: The loss function to be used during training,
