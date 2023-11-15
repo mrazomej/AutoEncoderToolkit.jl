@@ -1882,14 +1882,15 @@ function reconstruction_gaussian_decoder(
         throw(ArgumentError("Number of samples must be at least 1"))
     end # if
 
-    # Compute average reconstruction loss
-    neg_log_likelihood = -0.5f0 * (
+    # Compute average reconstruction loss as the log-likelihood of a Gaussian
+    # decoder.
+    log_likelihood = -0.5f0 * (
         log(2.0f0π) * length(decoder_µ) +
         sum((x .- decoder_µ) .^ 2)
     )
 
     # Average over the number of samples and batch size
-    return neg_log_likelihood / (n_samples * batch_size)
+    return log_likelihood / (n_samples * batch_size)
 end # function
 
 @doc raw"""
@@ -1955,19 +1956,20 @@ function reconstruction_gaussian_decoder(
         throw(ArgumentError("Number of samples must be at least 1"))
     end
 
-    # Compute average reconstruction loss
-    neg_log_likelihood = -0.5f0 * (
+    # Compute average reconstruction loss as the log-likelihood of a Gaussian
+    # decoder.
+    log_likelihood = -0.5f0 * (
         log(2.0f0π) * length(decoder_µ) +
         2.0f0 * sum(log, decoder_σ) +
         sum((x .- decoder_µ) .^ 2 ./ (decoder_σ .^ 2))
     )
 
     # Average over the number of samples and batch size
-    return neg_log_likelihood / (n_samples * batch_size)
+    return log_likelihood / (n_samples * batch_size)
 end # function
 
 """
-    reconstruction_log_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
+    reconstruction_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder, where the decoder outputs log standard deviations instead of
@@ -2025,15 +2027,16 @@ function reconstruction_gaussian_decoder(
         throw(ArgumentError("Number of samples must be at least 1"))
     end
 
-    # Compute average reconstruction loss
-    neg_log_likelihood = -0.5f0 * (
+    # Compute average reconstruction loss as the log-likelihood of a Gaussian
+    # decoder.
+    log_likelihood = -0.5f0 * (
         log(2.0f0π) * length(decoder_µ) +
         2.0f0 * sum(decoder_logσ) +
         sum((x .- decoder_µ) .^ 2 ./ decoder_σ .^ 2)
     )
 
     # Average over the number of samples and batch size
-    return neg_log_likelihood / (n_samples * batch_size)
+    return log_likelihood / (n_samples * batch_size)
 end # function
 
 # ==============================================================================
@@ -2148,13 +2151,13 @@ function loss(
     vae_outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    logπ_x_z = reconstruction_gaussian_decoder(
+    log_likelihood = reconstruction_gaussian_decoder(
         vae.decoder, x, vae_outputs; n_samples=n_samples
     )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_gaussian_encoder(
+    kl_div = kl_gaussian_encoder(
         vae.encoder, x, vae_outputs; n_samples=n_samples
     )
 
@@ -2162,7 +2165,7 @@ function loss(
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
 
     # Compute average loss function
-    return -logπ_x_z + β * kl_qᵩ_π + reg_strength * reg_term
+    return -log_likelihood + β * kl_div + reg_strength * reg_term
 end # function
 
 @doc raw"""
@@ -2221,13 +2224,13 @@ function loss(
     vae_outputs = vae(x_in; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    logπ_x_z = reconstruction_gaussian_decoder(
+    log_likelihood = reconstruction_gaussian_decoder(
         vae.decoder, x_out, vae_outputs; n_samples=n_samples
     )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_gaussian_encoder(
+    kl_div = kl_gaussian_encoder(
         vae.encoder, x, vae_outputs; n_samples=n_samples
     )
 
@@ -2235,7 +2238,7 @@ function loss(
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
 
     # Compute loss function
-    return -logπ_x_z + β * kl_qᵩ_π + reg_strength * reg_term
+    return -log_likelihood + β * kl_div + reg_strength * reg_term
 end # function
 
 # ==============================================================================

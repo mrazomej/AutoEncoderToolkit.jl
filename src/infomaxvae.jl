@@ -455,7 +455,7 @@ function loss(
     vae_outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    logπ_x_z = reconstruction_gaussian_decoder(
+    log_likelihood = reconstruction_gaussian_decoder(
         vae.decoder,
         x,
         vae_outputs;
@@ -464,7 +464,7 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_gaussian_encoder(
+    kl_div = kl_gaussian_encoder(
         vae.encoder, x, vae_outputs; n_samples=n_samples
     )
 
@@ -474,13 +474,14 @@ function loss(
     end # do block
 
     # Compute variational mutual information
-    info_x_z = variational_mutual_info(mlp, x, vae_outputs[:z], z_shuffle)
+    mutual_info = variational_mutual_info(mlp, x, vae_outputs[:z], z_shuffle)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(vae_outputs) : 0.0f0
 
     # Compute loss function
-    return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z + reg_strength * reg_term
+    return -log_likelihood + β * kl_div - α * mutual_info +
+           reg_strength * reg_term
 end #function
 
 @doc raw"""
@@ -554,7 +555,7 @@ function loss(
     vae_outputs = vae(x_in; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    logπ_x_z = reconstruction_gaussian_decoder(
+    log_likelihood = reconstruction_gaussian_decoder(
         vae.decoder,
         x_out,
         vae_outputs;
@@ -563,7 +564,7 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_qᵩ_π = kl_qᵩ_π = kl_gaussian_encoder(
+    kl_div = kl_div = kl_gaussian_encoder(
         vae.encoder, x, vae_outputs; n_samples=n_samples
     )
 
@@ -573,13 +574,14 @@ function loss(
     end # do block
 
     # Compute variational mutual information
-    info_x_z = variational_mutual_info(mlp, x_in, vae_outputs[:z], z_shuffle)
+    mutual_info = variational_mutual_info(mlp, x_in, vae_outputs[:z], z_shuffle)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(vae_outputs) : 0.0f0
 
     # Compute loss function
-    return -logπ_x_z + β * kl_qᵩ_π - α * info_x_z + reg_strength * reg_term
+    return -log_likelihood + β * kl_div - α * mutual_info +
+           reg_strength * reg_term
 end #function
 
 # ==============================================================================
@@ -660,13 +662,13 @@ function mlp_loss(
     end # do block
 
     # Compute variational mutual information
-    info_x_z = variational_mutual_info(mlp, x, z, z_shuffle)
+    mutual_info = variational_mutual_info(mlp, x, z, z_shuffle)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
 
     # Compute (negative) variational mutual information as loss function
-    return -info_x_z + reg_strength * reg_term
+    return -mutual_info + reg_strength * reg_term
 end #function
 
 # ==============================================================================
