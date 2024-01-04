@@ -1651,7 +1651,7 @@ function (vae::VAE{JointLogEncoder,SimpleDecoder})(
 
     # Check if latent variables should be returned
     if latent
-        # Run latent sample through decoder
+        # Run latent sample through decoder and collect outpus in dictionary
         return Dict(
             :encoder_µ => encoder_µ,
             :encoder_logσ => encoder_logσ,
@@ -1717,11 +1717,11 @@ function (vae::VAE{JointLogEncoder,T})(
         encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples, log=true
     )
 
-    # Run input through decoder to optain mean and log std
-    decoder_µ, decoder_logσ = vae.decoder(z_sample)
-
     # Check if latent variables should be returned
     if latent
+        # Run latent sample through decoder to optain mean and log std
+        decoder_µ, decoder_logσ = vae.decoder(z_sample)
+
         # Run latent sample through decoder
         return Dict(
             :encoder_µ => encoder_µ,
@@ -1790,12 +1790,11 @@ function (vae::VAE{JointLogEncoder,T})(
         encoder_µ, encoder_logσ; prior=prior, n_samples=n_samples, log=true
     )
 
-    # Run input through decoder to optain mean and log std
-    decoder_µ, decoder_σ = vae.decoder(z_sample)
-
     # Check if latent variables should be returned
     if latent
-        # Run latent sample through decoder
+        # Run input through decoder to optain mean and log std
+        decoder_µ, decoder_σ = vae.decoder(z_sample)
+        # Colect outputs in dictionary
         return Dict(
             :encoder_µ => encoder_µ,
             :encoder_logσ => encoder_logσ,
