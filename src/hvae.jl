@@ -1107,7 +1107,8 @@ Processes the input data `x` through a Hamiltonian Variational Autoencoder
     - `:decoder_µ`: The mean of the decoder's output distribution.
     - `:decoder_logσ`: The log standard deviation of the decoder's output
       distribution.
-- If `latent` is `false`, returns the mean of the decoder's output distribution.
+- If `latent` is `false`, returns the mean and log standard deviation the
+  decoder's output distribution.
 
 # Description
 The function first encodes the input `x` to obtain the mean and log standard
@@ -1159,6 +1160,125 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
                 :encoder_logσ => encoder_logσ,
                 :decoder_µ => decoder_µ,
                 :decoder_logσ => decoder_logσ
+            ),
+            step_dict
+        )
+    else
+        # Run latent sample through decoder
+        return hvae.vae.decoder(step_dict[:z_final])
+    end # if
+end # function
+
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
+        (hvae::HVAE{VAE{JointLogEncoder,D}})(
+                x::AbstractVector{T},
+                K::Int,
+                ϵ::Union{T,<:AbstractVector{T}},
+                βₒ::T;
+                prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
+                potential_energy::Function=potential_energy,
+                potential_energy_kwargs::Dict=Dict(
+                        :decoder_dist => MvDiagGaussianDecoder, :prior => SphericalPrior
+                ),
+                tempering_schedule::Function=null_tempering,
+                latent::Bool=false,
+        ) where {D<:Union{JointDecoder,SplitDecoder},T<:Float32}
+
+Processes the input data `x` through a Hamiltonian Variational Autoencoder
+(HVAE), consisting of an encoder and either a `JointLogDecoder` or a
+`SplitLogDecoder`.
+
+# Arguments
+- `hvae::HVAE{VAE{JointLogEncoder,D}}`: The HVAE model.
+- `x::AbstractVector{T}`: The data to be processed. This should be a vector of
+  type `T`.
+- `K::Int`: The number of leapfrog steps to perform in the Hamiltonian Monte
+  Carlo (HMC) algorithm.
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size for the leapfrog steps in the
+  HMC algorithm. This can be a scalar or a vector.
+- `βₒ::T`: The initial inverse temperature for the tempering schedule.
+
+# Optional Keyword Arguments
+- `potential_energy::Function`: The function to compute the potential energy in
+  the HMC algorithm. Defaults to `potential_energy`.
+- `potential_energy_kwargs::Dict`: A dictionary of keyword arguments to pass to
+  the `potential_energy` function. Defaults to `Dict(:decoder_dist =>
+  MvDiagGaussianDecoder, :prior => SphericalPrior)`.
+- `tempering_schedule::Function`: The function to compute the inverse
+  temperature at each step in the HMC algorithm. Defaults to `null_tempering`.  
+- `prior::Distributions.Sampleable`: Specifies the prior distribution to be used
+  during the reparametrization trick. Defaults to a standard normal
+  distribution.
+- `latent::Bool`: If set to `true`, returns a dictionary containing the latent
+  variables as well as the mean and log standard deviation of the reconstructed
+  data. Defaults to `false`.
+
+# Returns
+- If `latent` is `true`, returns a `Dict` with the following keys: 
+    - `:encoder_µ`: The mean of the encoder's output distribution. 
+    - `:encoder_logσ`: The log standard deviation of the encoder's output
+      distribution. 
+    - `:z_init`: The initial latent variable. 
+    - `:ρ_init`: The initial momentum variable. 
+    - `:z_final`: The final latent variable after `K` leapfrog steps. 
+    - `:ρ_final`: The final momentum variable after `K` leapfrog steps. 
+    - `:decoder_µ`: The mean of the decoder's output distribution.
+    - `:decoder_σ`: The standard deviation of the decoder's output distribution.
+- If `latent` is `false`, returns the mean and standard deviation the decoder's
+  output distribution.
+
+# Description
+The function first encodes the input `x` to obtain the mean and log standard
+deviation of the latent space. Using the reparametrization trick, it samples
+from this distribution. Then, it performs `K` steps of HMC with tempering to
+generate a new sample from the latent space, which is then decoded.
+
+# Note
+Ensure the input data `x` matches the expected input dimensionality for the
+encoder in the HVAE.
+"""
+function (hvae::HVAE{VAE{JointLogEncoder,D}})(
+    x::AbstractVecOrMat{T},
+    K::Int,
+    ϵ::Union{T,<:AbstractVector{T}},
+    βₒ::T;
+    potential_energy::Function=potential_energy,
+    potential_energy_kwargs::Dict=Dict(
+        :decoder_dist => MvDiagGaussianDecoder, :prior => SphericalPrior
+    ),
+    tempering_schedule::Function=null_tempering,
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
+    latent::Bool=false,
+) where {D<:Union{JointDecoder,SplitDecoder},T<:Float32}
+    # Run input through encoder to obtain mean and log std
+    encoder_µ, encoder_logσ = hvae.vae.encoder(x)
+
+    # Run reparametrization trick to generate latent variable zₒ
+    zₒ = reparameterize(
+        encoder_µ, encoder_logσ; prior=prior, n_samples=1, log=false
+    )
+
+    # Run leapfrog and tempering steps
+    step_dict = leapfrog_tempering_step(
+        hvae, x, zₒ, K, ϵ, βₒ;
+        potential_energy=potential_energy,
+        potential_energy_kwargs=potential_energy_kwargs,
+        tempering_schedule=tempering_schedule,
+    )
+
+    # Check if latent variables should be returned
+    if latent
+        # Run latent sample through decoder to optain mean and log std
+        decoder_µ, decoder_σ = hvae.vae.decoder(step_dict[:z_final])
+        # Colect outputs in dictionary
+        return merge(
+            Dict(
+                :encoder_µ => encoder_µ,
+                :encoder_logσ => encoder_logσ,
+                :decoder_µ => decoder_µ,
+                :decoder_σ => decoder_σ
             ),
             step_dict
         )
