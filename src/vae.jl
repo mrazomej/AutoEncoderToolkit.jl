@@ -1636,8 +1636,8 @@ encoder in the VAE.
 """
 
 function (vae::VAE{JointLogEncoder,SimpleDecoder})(
-    x::AbstractVecOrMat{Float32},
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
+    x::AbstractVecOrMat{Float32};
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
     n_samples::Int=1
 )
@@ -1704,8 +1704,8 @@ Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the VAE.
 """
 function (vae::VAE{JointLogEncoder,T})(
-    x::AbstractVecOrMat{Float32},
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
+    x::AbstractVecOrMat{Float32};
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
     n_samples::Int=1
 ) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
@@ -1777,8 +1777,8 @@ Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the VAE.
 """
 function (vae::VAE{JointLogEncoder,T})(
-    x::AbstractVecOrMat{Float32},
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
+    x::AbstractVecOrMat{Float32};
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
