@@ -26,7 +26,7 @@ using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # ==============================================================================
-# Hamiltonian Leapfrog Integrator
+# Hamiltonian Dynamics
 # ==============================================================================
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -180,7 +180,7 @@ end # function
 # ==============================================================================
 
 """
-        SphericalPrior(z::AbstractVector{T}) where {T<:AbstractFloat}
+        SphericalPrior(z::AbstractVector{T}, σ::T=1.0f0) where {T<:AbstractFloat}
 
 Generates a prior distribution as a spherical Gaussian. A spherical Gaussian is
 a multivariate Gaussian distribution with a diagonal covariance matrix where all
@@ -190,6 +190,8 @@ that is symmetric (or "spherical") in all dimensions.
 # Arguments
 - `z::AbstractVector{T}`: A vector representing the latent variable, where `T`
   is a subtype of `AbstractFloat`.
+- `σ::T=1.0f0`: The standard deviation of the spherical Gaussian distribution.
+  Defaults to 1.0.
 
 # Returns
 - `prior`: A `Distributions.MvNormal{T}` object representing the multivariate
@@ -199,13 +201,17 @@ that is symmetric (or "spherical") in all dimensions.
 ```julia
 # Define a latent variable
 z = rand(Float32, 2)
+# Define the standard deviation
+σ = 0.5f0
 # Generate the spherical Gaussian prior distribution
-prior = SphericalPrior(z)
+prior = SphericalPrior(z, σ)
 ```
 """
-function SphericalPrior(z::AbstractVector{T}) where {T<:AbstractFloat}
+function SphericalPrior(
+    z::AbstractVector{T}, σ::T=1.0f0
+) where {T<:AbstractFloat}
     # Generate prior distribution as spherical Gaussian
-    prior = Distributions.MvNormal(zeros(length(z)), ones(length(z)))
+    prior = Distributions.MvNormal(zeros(T, length(z)), σ .* ones(T, length(z)))
     # Return prior
     return prior
 end # function
@@ -216,8 +222,8 @@ end # function
 
 """
         potential_energy(decoder::JointDecoder;
-                                         decoder_dist::Function = MvDiagGaussianDecoder,
-                                         prior::Function = SphericalPrior)
+                         decoder_dist::Function = MvDiagGaussianDecoder,
+                         prior::Function = SphericalPrior)
 
 Compute the potential energy of a variational autoencoder (VAE). In the context
 of Hamiltonian Monte Carlo (HMC), the potential energy is defined as the
@@ -239,8 +245,8 @@ log-likelihood and the log-prior.
   distribution used in the autoencoder. Default is `SphericalPrior`.
 
 # Returns
-- `U`: A function that computes the potential energy given an input `x` and
-  latent variable `z`.
+- `U::Function`: A function that computes the potential energy given an input
+  `x` and latent variable `z`.
 
 # Example
 ```julia
@@ -265,7 +271,9 @@ function potential_energy(
     prior::Function=SphericalPrior,
 )
     # Define function to compute potential energy
-    function U(x, z)
+    function U(
+        x::AbstractVector{T}, z::AbstractVector{T}
+    ) where {T<:AbstractFloat}
         # Compute log-likelihood
         log_likelihood = Distributions.logpdf(decoder_dist(decoder, z), x)
 
@@ -299,10 +307,12 @@ and another half-step update of the momentum.
   representing the latent variable.
 - `ρ::AbstractVector{T}`: The momentum variable in the HMC algorithm.
 - `ϵ::AbstractVector{T}`: The step size for each dimension in the HMC algorithm.
+
+## Optional Keyword Arguments
 - `potential_energy::Function=potential_energy`: The potential energy function
   used in the HMC algorithm.
 - `potential_energy_kwargs::Dict=Dict()`: The keyword arguments for the
-  potential energy function.
+  potential energy function. See `potential_energy` for details.
 
 # Returns
 - `z̄::AbstractVector{T}`: The updated position variable.
@@ -328,7 +338,7 @@ function leapfrog_step(
     x::AbstractVector{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
-    ϵ::AbstractVector{T},
+    ϵ::AbstractVector{T};
     potential_energy::Function=potential_energy,
     potential_energy_kwargs::Dict=Dict(),
 ) where {T<:AbstractFloat}
@@ -336,16 +346,90 @@ function leapfrog_step(
     U = potential_energy(decoder; potential_energy_kwargs...)
 
     # Define gradient of potential energy function
-    ∇U(z) = Zygote.gradient(z -> U(x, z), z)
+    ∇U(Ƶ::AbstractVector{T}) = first(Zygote.gradient(Ƶ -> U(x, Ƶ), Ƶ))
 
     # Update momentum variable with half-step
-    ρ̃ = @. ρ - ϵ * ∇U(z) / 2
+    ρ̃ = ρ - ϵ .* ∇U(z) / 2
 
     # Update position variable with full-step
-    z̄ = @. z + ϵ * ρ̃
+    z̄ = z + ϵ .* ρ̃
 
     # Update momentum variable with half-step
-    ρ̄ = @. ρ̃ - ϵ * ∇U(z̄) / 2
+    ρ̄ = ρ̃ - ϵ .* ∇U(z̄) / 2
+
+    return z̄, ρ̄
+end # function
+
+"""
+    leapfrog_step(decoder, x, z, ρ, ϵ, potential_energy, potential_energy_kwargs)
+
+Perform a single leapfrog step in Hamiltonian Monte Carlo (HMC) algorithm. The
+leapfrog step is a numerical integration scheme used in HMC to simulate the
+dynamics of a physical system (the position `z` and momentum `ρ` variables)
+under a potential energy function `U`. The leapfrog step consists of three
+parts: a half-step update of the momentum, a full-step update of the position,
+and another half-step update of the momentum.
+
+# Arguments
+- `decoder::AbstractVariationalDecoder`: The decoder model used in the
+  autoencoder.
+- `x::AbstractVector{T}`: The input data.
+- `z::AbstractVector{T}`: The position variable in the HMC algorithm,
+  representing the latent variable.
+- `ρ::AbstractVector{T}`: The momentum variable in the HMC algorithm.
+- `ϵ::AbstractFloat`: The step size for the HMC algorithm.
+
+## Optional Keyword Arguments
+- `potential_energy::Function=potential_energy`: The potential energy function
+  used in the HMC algorithm.
+- `potential_energy_kwargs::Dict=Dict()`: The keyword arguments for the
+  potential energy function. See `potential_energy` for details.
+
+# Returns
+- `z̄::AbstractVector{T}`: The updated position variable.
+- `ρ̄::AbstractVector{T}`: The updated momentum variable.
+
+# Example
+```julia
+# Define a decoder
+decoder = JointDecoder(
+    Flux.Chain(Dense(10, 5, relu), Dense(5, 2)),
+    Flux.Dense(2, 2), Flux.Dense(2, 2)
+)
+
+# Define input data, position, momentum, and step size
+x = rand(2)
+z = rand(2)
+ρ = rand(2)
+ϵ = 0.01
+
+# Perform a leapfrog step
+z̄, ρ̄ = leapfrog_step(decoder, x, z, ρ, ϵ, potential_energy, Dict())
+```
+"""
+function leapfrog_step(
+    decoder::AbstractVariationalDecoder,
+    x::AbstractVector{T},
+    z::AbstractVector{T},
+    ρ::AbstractVector{T},
+    ϵ::T;
+    potential_energy::Function=potential_energy,
+    potential_energy_kwargs::Dict=Dict(),
+) where {T<:AbstractFloat}
+    # Build potential energy function
+    U = potential_energy(decoder; potential_energy_kwargs...)
+
+    # Define gradient of potential energy function
+    ∇U(Ƶ::AbstractVector{T}) = first(Zygote.gradient(Ƶ -> U(x, Ƶ), Ƶ))
+
+    # Update momentum variable with half-step
+    ρ̃ = ρ - ϵ * ∇U(z) / 2
+
+    # Update position variable with full-step
+    z̄ = z + ϵ * ρ̃
+
+    # Update momentum variable with half-step
+    ρ̄ = ρ̃ - ϵ * ∇U(z̄) / 2
 
     return z̄, ρ̄
 end # function
@@ -353,15 +437,52 @@ end # function
 # ==============================================================================
 # Tempering Functions
 # ==============================================================================
+"""
+    quadratic_tempering(βₒ::AbstractFloat, k::Int, K::Int)
 
+Compute the inverse temperature `βₖ` at a given stage `k` of a tempering
+schedule with `K` total stages, using a quadratic tempering scheme. 
+
+Tempering is a technique used in sampling algorithms to improve mixing and
+convergence. It involves running parallel chains of the algorithm at different
+"temperatures", and swapping states between the chains. The "temperature" of a
+chain is controlled by an inverse temperature parameter `β`, which is varied
+according to a tempering schedule. 
+
+In a quadratic tempering schedule, the inverse temperature `βₖ` at stage `k` is
+computed as the square of the quantity `((1 - 1 / √(βₒ)) * (k / K)^2 + 1 /
+√(βₒ))`, where `βₒ` is the initial inverse temperature. This schedule starts at
+`βₒ` when `k = 0`, and increases quadratically as `k` increases, reaching 1 when
+`k = K`.
+
+# Arguments
+- `βₒ::AbstractFloat`: The initial inverse temperature.
+- `k::Int`: The current stage of the tempering schedule.
+- `K::Int`: The total number of stages in the tempering schedule.
+
+# Returns
+- `βₖ::AbstractFloat`: The inverse temperature at stage `k`.
+
+# Example
+```julia
+# Define the initial inverse temperature, current stage, and total stages
+βₒ = 0.5
+k = 5
+K = 10
+
+# Compute the inverse temperature at stage k
+βₖ = quadratic_tempering(βₒ, k, K)
+```
+"""
 function quadratic_tempering(
-    β₀::AbstractFloat,
-    k
-)
-    # Define quadratic tempering function
-    β = @. β₀ + (β₁ - β₀) * t^2
+    βₒ::T,
+    k::Int,
+    K::Int,
+) where {T<:AbstractFloat}
+    # Compute βₖ
+    βₖ = ((1 - 1 / √(βₒ)) * (k / K)^2 + 1 / √(βₒ))^(-2)
 
-    return β
+    return T(βₖ)
 end # function
 
 # ==============================================================================
@@ -369,37 +490,73 @@ end # function
 # ==============================================================================
 
 function hamiltonian_elbo_fixed_tempering(
-    vae::VAE,
-    x::AbstractVector{Float32},
-    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
+    vae::VAE{JointLogEncoder,<:AbstractVariationalDecoder},
+    x::AbstractVector{T},
+    vae_outputs::Dict{Symbol,<:AbstractVector{T}};
     K::Int=3,
-    β₀::AbstractFloat=0.3,
-    ϵ::AbstractFloat=0.001,
-)
-    # Unpack zₒ from vae_outputs
-    zₒ = vae_outputs[:z_sample]
+    βₒ::T=0.3f0,
+    ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+    potential_energy::Function=potential_energy,
+    potential_energy_kwargs::Dict=Dict(
+        :decoder_dist => MvDiagGaussianDecoder, :prior => SphericalPrior
+    ),
+    tempering_schedule::Function=quadratic_tempering,
+) where {T<:AbstractFloat}
+    # Unpack zₒ from vae_outputs 
+    # (equivalent to sampling zₒ ~ variational prior) 
+    zₒ = vae_outputs[:z]
 
     # Sample γₒ ~ N(0, I)
-    γₒ = Random.rand(
-        Distributions.MvNormal(zeros(length(zₒ)), ones(length(zₒ)))
-    )
-    # Define ρₒ = γₒ / √β₀
-    ρₒ = γₒ / sqrt(β₀)
+    γₒ = Random.rand(SphericalPrior(zₒ))
+    # Define ρₒ = γₒ / √βₒ
+    ρₒ = γₒ ./ √(βₒ)
 
     # Define initial value of z and ρ before loop
     zₖ₋₁, ρₖ₋₁ = zₒ, ρₒ
 
+    # Initialize variables to have them available outside the for loop
+    zₖ = Vector{T}(undef, length(zₒ))
+    ρₖ = Vector{T}(undef, length(ρₒ))
+
     # Loop over K steps
     for k = 1:K
         # 1) Leapfrog step
-
-        # Update zₖ, ρₖ
-        zₖ, ρₖ = leapfrog_step(ϵ, zₖ₋₁, ρₖ₋₁,)
-
-        # Update zₒ, ρₒ
-        zₒ, ρₒ = zₖ, ρₖ
+        zₖ, ρₖ = leapfrog_step(
+            vae.decoder,
+            x,
+            zₖ₋₁,
+            ρₖ₋₁,
+            ϵ;
+            potential_energy=potential_energy,
+            potential_energy_kwargs=potential_energy_kwargs,
+        )
 
         # 2) Tempering step
+        # Compute previous step's inverse temperature
+        βₖ₋₁ = tempering_schedule(βₒ, k - 1, K)
+        # Compute current step's inverse temperature
+        βₖ = tempering_schedule(βₒ, k, K)
 
+        # Update momentum variable with tempering
+        ρₖ = ρₖ * √(βₖ₋₁ / βₖ)
+        # Update zₖ₋₁, ρₖ₋₁ for next iteration
+        zₖ₋₁, ρₖ₋₁ = zₖ, ρₖ
     end # for
+
+    # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
+
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
+    # log p̄ = - U(x, zₖ) + log p(ρₖ)
+    log_p̄ = -potential_energy(vae.decoder; potential_energy_kwargs...)(x, zₖ) +
+             Distributions.logpdf(SphericalPrior(ρₖ), ρₖ)
+
+    # log q̄ = log q(zₒ) + log p(ρₒ)
+    log_q̄ = Distributions.logpdf(
+        Distributions.MvNormal(
+            vae_outputs[:encoder_µ], vae_outputs[:encoder_logσ]
+        ),
+        zₒ
+    ) + Distributions.logpdf(SphericalPrior(ρₒ, βₒ^-1), ρₒ)
+
+    return log_p̄ - log_q̄
 end # function
