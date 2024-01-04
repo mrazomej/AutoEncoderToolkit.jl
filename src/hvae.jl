@@ -513,6 +513,93 @@ function leapfrog_step(
     return z̄, ρ̄
 end # function
 
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
+    leapfrog_step(
+        hvae::HVAE,
+        x::AbstractMatrix{T},
+        z::AbstractMatrix{T},
+        ρ::AbstractMatrix{T},
+        ϵ::Union{T,AbstractArray{T}};
+        potential_energy::Function=potential_energy,
+        potential_energy_kwargs::Dict=Dict(),
+    ) where {T<:AbstractFloat}
+
+Perform a single leapfrog step in Hamiltonian Monte Carlo (HMC) algorithm for
+each column of the input matrices. The leapfrog step is a numerical integration
+scheme used in HMC to simulate the dynamics of a physical system (the position
+`z` and momentum `ρ` variables) under a potential energy function `U`. The
+leapfrog step consists of three parts: a half-step update of the momentum, a
+full-step update of the position, and another half-step update of the momentum.
+
+# Arguments
+- `hvae::HVAE`: An `HVAE` struct representing the Hamiltonian Variational
+  Autoencoder model.
+- `x::AbstractMatrix{T}`: The input data. Each column is treated as a separate
+  vector of data.
+- `z::AbstractMatrix{T}`: The position variables in the HMC algorithm,
+  representing the latent variables. Each column corresponds to the position
+  variable for the corresponding column in `x`.
+- `ρ::AbstractMatrix{T}`: The momentum variables in the HMC algorithm. Each
+  column corresponds to the momentum variable for the corresponding column in
+  `x`.
+- `ϵ::Union{T,AbstractArray{T}}`: The step size for the HMC algorithm. This can
+  be a scalar or an array.
+
+# Optional Keyword Arguments
+- `potential_energy::Function=potential_energy`: The potential energy function
+  used in the HMC algorithm.
+- `potential_energy_kwargs::Dict=Dict()`: The keyword arguments for the
+  potential energy function.
+
+# Returns
+- `z̄::AbstractMatrix{T}`: The updated position variables. Each column
+  corresponds to the updated position variable for the corresponding column in
+  `x`.
+- `ρ̄::AbstractMatrix{T}`: The updated momentum variables. Each column
+  corresponds to the updated momentum variable for the corresponding column in
+  `x`.
+
+# Example
+```julia
+# Define a decoder
+decoder = JointDecoder(
+    Flux.Chain(Dense(10, 5, relu), Dense(5, 2)),
+    Flux.Dense(2, 2), Flux.Dense(2, 2)
+)
+
+# Define input data, position, momentum, and step size
+x = rand(2, 100)
+z = rand(2, 100)
+ρ = rand(2, 100)
+ϵ = 0.01
+
+# Perform a leapfrog step
+z̄, ρ̄ = leapfrog_step(decoder, x, z, ρ, ϵ, potential_energy, Dict())
+```
+"""
+function leapfrog_step(
+    hvae::HVAE,
+    x::AbstractMatrix{T},
+    z::AbstractMatrix{T},
+    ρ::AbstractMatrix{T},
+    ϵ::Union{T,AbstractArray{T}};
+    potential_energy::Function=potential_energy,
+    potential_energy_kwargs::Dict=Dict(),
+) where {T<:AbstractFloat}
+    # Initialize matrices for updated position and momentum variables
+    z̄ = similar(z)
+    ρ̄ = similar(ρ)
+
+    # Apply leapfrog_step to each column
+    for i in 1:size(x, 2)
+        z̄[:, i], ρ̄[:, i] = leapfrog_step(hvae, x[:, i], z[:, i], ρ[:, i], ϵ; potential_energy=potential_energy, potential_energy_kwargs=potential_energy_kwargs)
+    end
+
+    return z̄, ρ̄
+end
+
 # ==============================================================================
 # Tempering Functions
 # ==============================================================================
@@ -717,6 +804,128 @@ end # function
 # ------------------------------------------------------------------------------ 
 
 @doc raw"""
+    leapfrog_tempering_step(
+        hvae::HVAE,
+        x::AbstractMatrix{T},
+        zₒ::AbstractMatrix{T},
+        K::Int,
+        ϵ::Union{T,<:AbstractVector{T}},
+        βₒ::T;
+        potential_energy::Function=potential_energy,
+        potential_energy_kwargs::Dict=Dict(
+            :decoder_dist => MvDiagGaussianDecoder, :prior => SphericalPrior
+        ),
+        tempering_schedule::Function=null_tempering,
+    ) where {T<:AbstractFloat}
+
+Perform a sequence of leapfrog steps followed by a tempering step in the
+Hamiltonian Monte Carlo (HMC) algorithm for each column of the input matrices.
+The leapfrog step is a numerical integration scheme used in HMC to simulate the
+dynamics of a physical system (the position `z` and momentum `ρ` variables)
+under a potential energy function `U`. The tempering step adjusts the momentum
+variable according to a tempering schedule.
+
+# Arguments
+- `hvae::HVAE`: An `HVAE` struct representing the Hamiltonian Variational
+  Autoencoder model.
+- `x::AbstractMatrix{T}`: The input data. Each column is treated as a separate
+  vector of data.
+- `zₒ::AbstractMatrix{T}`: The initial position variables in the HMC algorithm,
+  representing the latent variables. Each column corresponds to the position
+  variable for the corresponding column in `x`.
+- `K::Int`: The number of leapfrog steps to perform.
+- `ϵ::Union{T,AbstractArray{T}}`: The step size for the HMC algorithm. This can
+  be a scalar or an array.
+- `βₒ::T`: The initial inverse temperature for the tempering schedule.
+
+# Optional Keyword Arguments
+- `potential_energy::Function=potential_energy`: The potential energy function
+  used in the HMC algorithm.
+- `potential_energy_kwargs::Dict=Dict()`: The keyword arguments for the
+  potential energy function.
+- `tempering_schedule::Function=null_tempering`: The function to compute the
+  inverse temperature at each step in the HMC algorithm.
+
+# Returns
+- `zₖ::AbstractMatrix{T}`: The updated position variables after `K` leapfrog
+  steps. Each column corresponds to the updated position variable for the
+  corresponding column in `x`.
+- `ρₖ::AbstractMatrix{T}`: The updated momentum variables after `K` leapfrog
+  steps. Each column corresponds to the updated momentum variable for the
+  corresponding column in `x`.
+
+# Example
+```julia
+# Define a decoder
+decoder = JointDecoder(
+    Flux.Chain(Dense(10, 5, relu), Dense(5, 2)),
+    Flux.Dense(2, 2), Flux.Dense(2, 2)
+)
+
+# Define input data, initial position, number of steps, step size, and initial inverse temperature
+x = rand(2, 100)
+zₒ = rand(2, 100)
+K = 10
+ϵ = 0.01
+βₒ = 1.0
+
+# Perform a sequence of leapfrog steps followed by a tempering step
+zₖ, ρₖ = leapfrog_tempering_step(decoder, x, zₒ, K, ϵ, βₒ, potential_energy, Dict(), null_tempering)
+```
+"""
+function leapfrog_tempering_step(
+    hvae::HVAE,
+    x::AbstractMatrix{T},
+    zₒ::AbstractMatrix{T},
+    K::Int,
+    ϵ::Union{T,<:AbstractVector{T}},
+    βₒ::T;
+    potential_energy::Function=potential_energy,
+    potential_energy_kwargs::Dict=Dict(
+        :decoder_dist => MvDiagGaussianDecoder, :prior => SphericalPrior
+    ),
+    tempering_schedule::Function=null_tempering,
+) where {T<:AbstractFloat}
+    # Sample γₒ ~ N(0, I)
+    γₒ = Random.rand(SphericalPrior(zₒ[:, 1]), size(zₒ, 2))
+    # Define ρₒ = γₒ / √βₒ
+    ρₒ = γₒ ./ √(βₒ)
+
+    # Define initial value of z and ρ before loop
+    zₖ₋₁, ρₖ₋₁ = zₒ, ρₒ
+
+    # Initialize variables to have them available outside the for loop
+    zₖ = Matrix{T}(undef, size(zₒ)...)
+    ρₖ = Matrix{T}(undef, size(ρₒ)...)
+
+    Zygote.ignore() do
+        # Loop over K steps
+        for k = 1:K
+            # 1) Leapfrog step
+            zₖ, ρₖ = leapfrog_step(
+                hvae, x, zₖ₋₁, ρₖ₋₁, ϵ;
+                potential_energy=potential_energy,
+                potential_energy_kwargs=potential_energy_kwargs,
+            )
+
+            # 2) Tempering step
+            # Compute previous step's inverse temperature
+            βₖ₋₁ = tempering_schedule(βₒ, k - 1, K)
+            # Compute current step's inverse temperature
+            βₖ = tempering_schedule(βₒ, k, K)
+
+            # Update momentum variable with tempering
+            ρₖ = ρₖ * √(βₖ₋₁ / βₖ)
+            # Update zₖ₋₁, ρₖ₋₁ for next iteration
+            zₖ₋₁, ρₖ₋₁ = zₖ, ρₖ
+        end # for
+    end # do block
+    return zₖ, ρₖ
+end # function
+
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
         (hvae::HVAE{VAE{JointLogEncoder,SimpleDecoder}})(
                 x::AbstractVector{T},
                 K::Int,
@@ -781,7 +990,7 @@ Ensure the input data `x` matches the expected input dimensionality for the HVAE
 model.
 """
 function (hvae::HVAE{VAE{JointLogEncoder,SimpleDecoder}})(
-    x::AbstractVector{T},
+    x::AbstractVecOrMat{T},
     K::Int,
     ϵ::Union{T,<:AbstractVector{T}},
     βₒ::T;
@@ -894,7 +1103,7 @@ Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the HVAE.
 """
 function (hvae::HVAE{VAE{JointLogEncoder,D}})(
-    x::AbstractVector{T},
+    x::AbstractVecOrMat{T},
     K::Int,
     ϵ::Union{T,<:AbstractVector{T}},
     βₒ::T;
