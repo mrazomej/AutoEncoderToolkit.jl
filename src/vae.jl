@@ -16,7 +16,7 @@ import CUDA
 
 using ..AutoEncode: AbstractAutoEncoder, AbstractVariationalAutoEncoder,
     AbstractEncoder, AbstractDecoder, AbstractVariationalEncoder,
-    AbstractVariationalDecoder
+    AbstractVariationalDecoder, AbstractData
 
 # Export functions to use elsewhere
 export reparameterize, reconstruction_gaussian_decoder, kl_gaussian_encoder
@@ -648,7 +648,7 @@ end # function
 
 @doc raw"""
     (decoder::SimpleDecoder)(
-        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+        z::AbstractData
     )
 Maps the given latent representation `z` through the `SimpleDecoder` network.
 
@@ -680,7 +680,7 @@ Ensure that the latent space representation z matches the expected input
 dimensionality for the SimpleDecoder.
 """
 function (decoder::SimpleDecoder)(
-    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    z::AbstractData
 )
     # Run input to decoder network
     return decoder.decoder(z)
@@ -921,7 +921,7 @@ end
 
 @doc raw"""
     (decoder::JointLogDecoder)(
-        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+        z::AbstractData
     )
 
 Maps the given latent representation `z` through the `JointLogDecoder` network
@@ -957,7 +957,7 @@ Ensure that the latent space representation z matches the expected input
 dimensionality for the JointLogDecoder.
 """
 function (decoder::JointLogDecoder)(
-    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    z::AbstractData
 )
     # Run input through the primary decoder network
     h = decoder.decoder(z)
@@ -1102,7 +1102,7 @@ end
 
 @doc raw"""
     (decoder::JointDecoder)(
-        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+        z::AbstractData
     )
 
 Maps the given latent representation `z` through the `JointLogDecoder` network
@@ -1138,7 +1138,7 @@ Ensure that the latent space representation z matches the expected input
 dimensionality for the JointDecoder.
 """
 function (decoder::JointDecoder)(
-    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    z::AbstractData
 )
     # Run input through the primary decoder network
     h = decoder.decoder(z)
@@ -1307,7 +1307,7 @@ end # function
 
 @doc raw"""
     (decoder::SplitLogDecoder)(
-        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+        z::AbstractData
     )
 
 Maps the given latent representation `z` through the separate networks of the
@@ -1345,7 +1345,7 @@ Ensure that the latent space representation z matches the expected input
 dimensionality for both networks in the SplitLogDecoder.
 """
 function (decoder::SplitLogDecoder)(
-    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    z::AbstractData
 )
     # Map through the decoder dedicated to the mean
     µ = decoder.µ(z)
@@ -1516,7 +1516,7 @@ end # function
 
 @doc raw"""
     (decoder::SplitDecoder)(
-        z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+        z::AbstractData
     )
 
 Maps the given latent representation `z` through the separate networks of the
@@ -1554,7 +1554,7 @@ Ensure that the latent space representation z matches the expected input
 dimensionality for both networks in the SplitDecoder.
 """
 function (decoder::SplitDecoder)(
-    z::Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+    z::AbstractData
 )
     # Map through the decoder dedicated to the mean
     µ = decoder.µ(z)
