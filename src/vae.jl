@@ -1621,8 +1621,8 @@ Processes the input data `x` through a VAE that consists of an encoder and a
 # Returns
 - If `latent=false`: `Array{Float32}`, the reconstructed data after processing
   through the encoder and decoder.
-- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
-  and `:decoder_µ`, containing the corresponding values.
+- If `latent=true`: A `NamedTuple` with keys `encoder_µ`, `encoder_logσ`, `z`,
+  and `decoder_µ`, containing the corresponding values.
 
 # Description
 The function first encodes the input `x` using the encoder to get the mean and
@@ -1652,11 +1652,11 @@ function (vae::VAE{JointLogEncoder,SimpleDecoder})(
     # Check if latent variables should be returned
     if latent
         # Run latent sample through decoder and collect outpus in dictionary
-        return Dict(
-            :encoder_µ => encoder_µ,
-            :encoder_logσ => encoder_logσ,
-            :z => z_sample,
-            :decoder_µ => vae.decoder(z_sample)
+        return (
+            encoder_µ=encoder_µ,
+            encoder_logσ=encoder_logσ,
+            z=z_sample,
+            decoder_µ=vae.decoder(z_sample)
         )
     else
         # Run latent sample through decoder
@@ -1665,23 +1665,23 @@ function (vae::VAE{JointLogEncoder,SimpleDecoder})(
 end # function
 
 @doc raw"""
-    (vae::VAE{JointLogEncoder,T})(
-        x::AbstractVecOrMat{Float32}; 
-        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
-        latent::Bool=false, n_samples::Int=1) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
+        (vae::VAE{JointLogEncoder,T})(
+                x::AbstractVecOrMat{Float32}; 
+                prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
+                latent::Bool=false, n_samples::Int=1) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
 
 Processes the input data `x` through a VAE, consisting of an encoder and either
 a `JointLogDecoder` or a `SplitLogDecoder`.
 
 # Arguments
 - `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
-  or a matrix where each column represents a separate sample.
+    or a matrix where each column represents a separate sample.
 
 # Optional Keyword Arguments
 - `prior::Distributions.Sampleable`: Specifies the prior distribution to be used
   during the reparametrization trick. Defaults to a standard normal
   distribution.
-- `latent::Bool`: If set to `true`, returns a dictionary containing the latent
+- `latent::Bool`: If set to `true`, returns a NamedTuple containing the latent
   variables (mean, log standard deviation, and the sampled latent
   representation) as well as the mean and log standard deviation of the
   reconstructed data. Defaults to `false`.
@@ -1691,8 +1691,8 @@ a `JointLogDecoder` or a `SplitLogDecoder`.
 # Returns
 - If `latent=false`: `Array{Float32}`, the reconstructed data after processing
   through the encoder and decoder.
-- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
-  `:decoder_µ`, and `:decoder_logσ`, containing the corresponding values.
+- If `latent=true`: A NamedTuple with keys `encoder_µ`, `encoder_logσ`, `z`,
+  `decoder_µ`, and `decoder_logσ`, containing the corresponding values.
 
 # Description
 The function first encodes the input `x` to obtain the mean and log standard
@@ -1723,12 +1723,12 @@ function (vae::VAE{JointLogEncoder,T})(
         decoder_µ, decoder_logσ = vae.decoder(z_sample)
 
         # Run latent sample through decoder
-        return Dict(
-            :encoder_µ => encoder_µ,
-            :encoder_logσ => encoder_logσ,
-            :z => z_sample,
-            :decoder_µ => decoder_µ,
-            :decoder_logσ => decoder_logσ
+        return (
+            encoder_µ=encoder_µ,
+            encoder_logσ=encoder_logσ,
+            z=z_sample,
+            decoder_µ=decoder_µ,
+            decoder_logσ=decoder_logσ
         )
     else
         # Run latent sample through decoder
@@ -1764,8 +1764,8 @@ a `JointDecoder` or a `SplitDecoder`.
 # Returns
 - If `latent=false`: `Array{Float32}`, the reconstructed data after processing
   through the encoder and decoder.
-- If `latent=true`: A dictionary with keys `:encoder_µ`, `:encoder_logσ`, `:z`,
-  `:decoder_µ`, and `:decoder_logσ`, containing the corresponding values.
+- If `latent=true`: A `NamedTuple` with keys `encoder_µ`, `encoder_logσ`, `z`,
+  `decoder_µ`, and `decoder_logσ`, containing the corresponding values.
 
 # Description
 The function first encodes the input `x` to obtain the mean and log standard
@@ -1795,12 +1795,12 @@ function (vae::VAE{JointLogEncoder,T})(
         # Run input through decoder to optain mean and log std
         decoder_µ, decoder_σ = vae.decoder(z_sample)
         # Colect outputs in dictionary
-        return Dict(
-            :encoder_µ => encoder_µ,
-            :encoder_logσ => encoder_logσ,
-            :z => z_sample,
-            :decoder_µ => decoder_µ,
-            :decoder_σ => decoder_σ
+        return (
+            encoder_µ=encoder_µ,
+            encoder_logσ=encoder_logσ,
+            z=z_sample,
+            decoder_µ=decoder_µ,
+            decoder_σ=decoder_σ
         )
     else
         # Run latent sample through decoder
@@ -1837,7 +1837,7 @@ the specified `decoder`.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
 - `n_samples::Int=1`: The number of latent samples to average over when
@@ -1858,14 +1858,14 @@ the specified `decoder`.
 function reconstruction_gaussian_decoder(
     decoder::SimpleDecoder,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
+    vae_outputs::NamedTuple;
     n_samples::Int=1
 )
     # Compute batch size
     batch_size = size(x, 2)
 
     # Unpack needed outputs
-    decoder_µ = vae_outputs[:decoder_µ]
+    decoder_µ = vae_outputs.decoder_µ
 
     # Validate input dimensions
     if size(x, 2) ≠ size(decoder_µ, 2)
@@ -1911,7 +1911,7 @@ the specified `decoder`.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
 - `n_samples::Int=1`: The number of latent samples to average over when
@@ -1931,15 +1931,15 @@ the specified `decoder`.
 function reconstruction_gaussian_decoder(
     decoder::T,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
+    vae_outputs::NamedTuple;
     n_samples::Int=1
 ) where {T<:Union{JointDecoder,SplitDecoder}}
     # Compute batch size
     batch_size = size(x, 2)
 
     # Unpack needed ouput
-    decoder_µ = vae_outputs[:decoder_µ]
-    decoder_σ = vae_outputs[:decoder_σ]
+    decoder_µ = vae_outputs.decoder_µ
+    decoder_σ = vae_outputs.decoder_σ
 
     # Validate input dimensions
     if size(x, 2) ≠ size(decoder_µ, 2) || size(x, 2) ≠ size(decoder_logσ, 2)
@@ -1980,7 +1980,7 @@ standard deviations.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
 - `n_samples::Int=1`: The number of latent samples to average over when
@@ -1999,15 +1999,15 @@ standard deviations.
 function reconstruction_gaussian_decoder(
     decoder::T,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
+    vae_outputs::NamedTuple;
     n_samples::Int=1
 ) where {T<:Union{JointLogDecoder,SplitLogDecoder}}
     # Compute batch size
     batch_size = size(x, 2)
 
     # Unpack needed ouput
-    decoder_µ = vae_outputs[:decoder_µ]
-    decoder_logσ = vae_outputs[:decoder_logσ]
+    decoder_µ = vae_outputs.decoder_µ
+    decoder_logσ = vae_outputs.decoder_logσ
 
     # Convert log standard deviation to standard deviation
     decoder_σ = exp.(decoder_logσ)
@@ -2057,7 +2057,7 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `vae_outputs::Dict`: Dictionary containing the all the VAE outputs.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
 
 ## Optional Keyword Arguments
 - `n_samples::Int=1`: The number of latent samples to average over when
@@ -2075,15 +2075,15 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 function kl_gaussian_encoder(
     encoder::JointLogEncoder,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::Dict{Symbol,<:AbstractArray{Float32}};
+    vae_outputs::NamedTuple;
     n_samples::Int=1
 )
     # Compute batch size
     batch_size = size(x, 2)
 
     # Unpack needed ouput
-    encoder_μ = vae_outputs[:encoder_μ]
-    encoder_logσ = vae_outputs[:encoder_logσ]
+    encoder_μ = vae_outputs.encoder_μ
+    encoder_logσ = vae_outputs.encoder_logσ
 
     # Compute KL divergence
     return 0.5f0 * sum(
