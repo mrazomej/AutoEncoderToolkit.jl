@@ -24,7 +24,7 @@ Random.seed!(42)
 
     # Test with log scale standard deviation
     @testset "log scale standard deviation" begin
-        result = AutoEncode.VAEs.reparameterize(
+        result = VAEs.reparameterize(
             µ, logσ, prior=prior, n_samples=1, log=true
         )
         @test size(result) == size(µ)
@@ -34,7 +34,7 @@ Random.seed!(42)
     # Test with standard deviation (not log scale)
     @testset "standard deviation (not log scale)" begin
         σ = exp.(logσ)
-        result = AutoEncode.VAEs.reparameterize(
+        result = VAEs.reparameterize(
             µ, σ, prior=prior, n_samples=1, log=false
         )
         @test size(result) == size(µ)
@@ -44,7 +44,7 @@ Random.seed!(42)
     # Test with multiple samples
     @testset "multiple samples" begin
         n_samples = 5
-        result = AutoEncode.VAEs.reparameterize(
+        result = VAEs.reparameterize(
             µ, logσ, prior=prior, n_samples=n_samples, log=true
         )
         @test size(result) == (size(µ)..., n_samples)
@@ -89,16 +89,9 @@ z_rand = f.(x_rand, y_rand)
 # Compile data into matrix
 data = Matrix(hcat(x_rand, y_rand, z_rand)')
 
-# Fit model to standardize data to mean zero and standard deviation 1 on each
-# environment
-dt = StatsBase.fit(StatsBase.ZScoreTransform, data, dims=2)
-
-# Center data to have mean zero and standard deviation one
-data = StatsBase.transform(dt, data);
-
 ## =============================================================================
 
-@testset "Testing VAE = JointLogEncoder + SimpleDecoder" begin
+@testset "VAE{JointLogEncoder, SimpleDecoder}" begin
 
     # Define latent space activation function
     latent_activation = Flux.identity
@@ -122,9 +115,6 @@ data = StatsBase.transform(dt, data);
         latent_activation
     )
 
-    # Test if it returns the right type
-    @test isa(encoder, VAEs.JointLogEncoder)
-
     # Initialize decoder
     decoder = VAEs.SimpleDecoder(
         n_input,
@@ -134,17 +124,64 @@ data = StatsBase.transform(dt, data);
         output_activation
     )
 
-    # Test if it returns the right type
-    @test isa(decoder, VAEs.SimpleDecoder)
-
     # Define VAE
     vae = encoder * decoder
 
-    # Test if it returns the right type
-    @test isa(vae, VAEs.VAE)
+    @testset "Type checking" begin
+        # Test if it returns the right type
+        @test isa(encoder, VAEs.JointLogEncoder)
+        # Test if it returns the right type
+        @test isa(decoder, VAEs.SimpleDecoder)
+        # Test if it returns the right type
+        @test isa(vae, VAEs.VAE)
+    end # Type checking
 
-    # Test that reconstruction works
-    @test isa(vae(data), AbstractVecOrMat)
+
+    @testset "VAE Forward Pass" begin
+
+        # Define some inputs
+        prior = Distributions.Normal{Float32}(0.0f0, 1.0f0)
+
+        # Test with latent=false
+        @testset "latent=false" begin
+            # Test with latent=false and single data point
+            result = vae(data[:, 1], prior=prior, latent=false, n_samples=1)
+            @test typeof(result) <: Vector{Float32}
+
+            # Test with latent=false and multiple data points
+            result = vae(data, prior=prior, latent=false, n_samples=1)
+            @test typeof(result) <: Matrix{Float32}
+        end
+
+        # Test with latent=true
+        @testset "latent=true" begin
+            # Test with latent=true and single data point
+            result = vae(data[:, 1], prior=prior, latent=true, n_samples=1)
+            @test isa(result, NamedTuple)
+            @test all(isa.(values(result), AbstractVector{Float32}))
+
+            # Test with latent=true and multiple data points
+            result = vae(data, prior=prior, latent=true, n_samples=1)
+            @test isa(result, NamedTuple)
+            @test all(isa.(values(result), AbstractMatrix{Float32}))
+
+        end
+
+        # Test with multiple samples
+        @testset "multiple samples" begin
+            # Test with latent=true and multiple data points
+            n_samples = 5
+            result = vae(data[:, 1], prior=prior, latent=true, n_samples=n_samples)
+            @test isa(result, NamedTuple)
+            @test all(isa.(values(result), AbstractArray{Float32}))
+
+            # Test with latent=true and multiple data points
+            result = vae(data, prior=prior, latent=true, n_samples=n_samples)
+            @test isa(result, NamedTuple)
+            @test all(isa.(values(result), AbstractArray{Float32}))
+        end
+    end
+
 
     # Test reconstruction
     @test isa(VAEs.loss(vae, data[:, 1]), AbstractFloat)
