@@ -1819,7 +1819,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    reconstruction_log_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
+    reconstruction_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder.
@@ -2230,7 +2230,7 @@ function loss(
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
     kl_div = kl_gaussian_encoder(
-        vae.encoder, x, vae_outputs; n_samples=n_samples
+        vae.encoder, x_in, vae_outputs; n_samples=n_samples
     )
 
     # Compute regularization term if regularization function is provided
