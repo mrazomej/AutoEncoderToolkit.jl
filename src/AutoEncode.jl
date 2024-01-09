@@ -173,6 +173,46 @@ types.
 """
 abstract type AbstractVariationalDecoder <: AbstractDecoder end
 
+"""
+    AbstractVariationalLogDecoder <: AbstractVariationalDecoder
+
+An abstract type representing a variational autoencoder's decoder that returns
+the log of the standard deviation.
+
+This type is used to represent decoders that, given a latent variable `z`,
+output not only the mean of the reconstructed data distribution but also the log
+of the standard deviation. This is useful for variational autoencoders where the
+decoder's output is modeled as a Gaussian distribution, and we want to learn
+both its mean and standard deviation.
+
+Subtypes of this abstract type should implement the `decode` method, which takes
+a latent variable `z` and returns a tuple `(μ, logσ)`, where `μ` is the mean of
+the reconstructed data distribution and `logσ` is the log of the standard
+deviation.
+"""
+abstract type AbstractVariationalLogDecoder <: AbstractVariationalDecoder end
+
+"""
+    AbstractVariationalLinearDecoder <: AbstractVariationalDecoder
+
+An abstract type representing a variational autoencoder's decoder that returns
+the standard deviation directly.
+
+This type is used to represent decoders that, given a latent variable `z`,
+output not only the mean of the reconstructed data distribution but also the
+standard deviation directly. This is useful for variational autoencoders where
+the decoder's output is modeled as a Gaussian distribution, and we want to learn
+both its mean and standard deviation.
+
+The activation function for the last layer of the decoder should be strictly
+positive to ensure the standard deviation is positive.
+
+Subtypes of this abstract type should implement the `decode` method, which takes
+a latent variable `z` and returns a tuple `(μ, σ)`, where `μ` is the mean of the
+reconstructed data distribution and `σ` is the standard deviation.
+"""
+abstract type AbstractVariationalLinearDecoder <: AbstractVariationalDecoder end
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include Utils module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
