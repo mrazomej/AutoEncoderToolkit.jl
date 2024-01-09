@@ -1005,6 +1005,105 @@ Flux.@functor JointDecoder
     JointDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 latent_activation; init=Flux.glorot_uniform)
 
+Constructs and initializes a `JointLogDecoder` object for variational
+autoencoders (VAEs). This function sets up a decoder network that first
+processes the latent space and then maps it separately to both its mean (`µ`)
+and log standard deviation (`logσ`).
+
+# Arguments
+- `n_input::Int`: Dimensionality of the output data (or the data to be
+  reconstructed).
+- `n_latent::Int`: Dimensionality of the latent space.
+- `decoder_neurons::Vector{<:Int}`: Vector of layer sizes for the primary
+  decoder network, not including the input latent layer.
+- `decoder_activation::Vector{<:Function}`: Activation functions for each
+  primary decoder layer.
+- `output_activation::Function`: Activation function for the mean (`µ`) and log
+  standard deviation (`logσ`) layers.
+
+# Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: Initialization function for the network
+  parameters.
+
+# Returns
+A `JointDecoder` object with the specified architecture and initialized weights.
+
+# Description
+This function constructs a `JointDecoder` object, setting up its primary decoder
+network based on the provided specifications. The architecture begins with a
+dense layer mapping from the latent space and goes through a sequence of middle
+layers if specified. After processing the latent space through the primary
+decoder, it then maps separately to both its mean (`µ`) and standard deviation
+(`σ`).
+
+# Example
+```julia
+n_input = 28*28
+n_latent = 64
+decoder_neurons = [128, 256]
+decoder_activation = [relu, relu]
+output_activation = tanh
+decoder = JointDecoder(
+    n_input, n_latent, decoder_neurons, decoder_activation, output_activation
+)
+```
+
+# Note
+Ensure that the lengths of decoder_neurons and decoder_activation match.
+"""
+function JointDecoder(
+    n_input::Int,
+    n_latent::Int,
+    decoder_neurons::Vector{<:Int},
+    decoder_activation::Vector{<:Function},
+    output_activation::Function;
+    init::Function=Flux.glorot_uniform
+)
+    # Check there's enough activation functions for all layers
+    if (length(decoder_activation) != length(decoder_neurons))
+        error("Each layer needs exactly one activation function")
+    end # if
+
+    # Initialize list with decoder layers
+    decoder_layers = Array{Flux.Dense}(undef, length(decoder_neurons))
+
+    # Add first layer from latent space to decoder
+    decoder_layers[1] = Flux.Dense(
+        n_latent => decoder_neurons[1], decoder_activation[1]; init=init
+    )
+
+    # Check if there are multiple middle layers
+    if length(decoder_neurons) > 1
+        # Loop through middle layers if they exist
+        for i = 2:length(decoder_neurons)
+            decoder_layers[i] = Flux.Dense(
+                decoder_neurons[i-1] => decoder_neurons[i],
+                decoder_activation[i];
+                init=init
+            )
+        end # for
+    end # if
+
+    # Construct the primary decoder
+    decoder_chain = Flux.Chain(decoder_layers...)
+
+    # Define layers that map from the last decoder layer to the mean and log
+    # standard deviation
+    µ_layer = Flux.Dense(
+        decoder_neurons[end] => n_input, output_activation; init=init
+    )
+    logσ_layer = Flux.Dense(
+        decoder_neurons[end] => n_input, output_activation; init=init
+    )
+
+    # Initialize joint decoder
+    return JointDecoder(decoder_chain, µ_layer, logσ_layer)
+end
+
+@doc raw"""
+    JointDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+                latent_activation; init=Flux.glorot_uniform)
+
 Constructs and initializes a `JointDecoder` object for variational autoencoders
 (VAEs). This function sets up a decoder network that first processes the latent
 space and then maps it separately to both its mean (`µ`) and standard deviation
@@ -1893,7 +1992,7 @@ function reconstruction_gaussian_decoder(
 end # function
 
 @doc raw"""
-    reconstruction_log_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
+    reconstruction_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder.
@@ -1942,7 +2041,7 @@ function reconstruction_gaussian_decoder(
     decoder_σ = vae_outputs.decoder_σ
 
     # Validate input dimensions
-    if size(x, 2) ≠ size(decoder_µ, 2) || size(x, 2) ≠ size(decoder_logσ, 2)
+    if size(x, 2) ≠ size(decoder_µ, 2) || size(x, 2) ≠ size(decoder_σ, 2)
         throw(
             DimensionMismatch(
                 "Input data and decoder outputs must have the same dimensions"
