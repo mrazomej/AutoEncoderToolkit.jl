@@ -11,6 +11,20 @@ import Distributions
 # Abstract Types
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+"""
+    Float32Array
+
+A type alias for the union of `AbstractVector{Float32}`,
+`AbstractMatrix{Float32}`, and `Array{Float32,3}`.
+
+This type is used to represent data that can be processed by a decoder. It can
+be a vector, a matrix, or a 3D array, as long as the elements are `Float32`. A
+vector is treated as a single data point.  Each column of a matrix is treated as
+a separate data point. Each slice of a 3D array is treated as multiple samples
+from the same data point.
+"""
+const Float32Array = Union{AbstractVector{Float32},AbstractMatrix{Float32},Array{Float32,3}}
+
 @doc raw"""
     AbstractAutoEncoder
 
@@ -216,6 +230,17 @@ end # submodule
 module HVAEs
 include("hvae.jl")
 end # submodule
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Define operators over abstract types
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+# Import * operator from Base module
+import Base: *
+
+# Define * operator for AbstractEncoder and AbstractDecoder types
+*(E::AbstractDeterministicEncoder, D::AbstractDeterministicDecoder) = AEs.AE(E, D)
+*(E::AbstractVariationalEncoder, D::AbstractVariationalDecoder) = VAEs.VAE(E, D)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include Differential Geometry Module
