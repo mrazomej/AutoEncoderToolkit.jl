@@ -182,41 +182,96 @@ data = Matrix(hcat(x_rand, y_rand, z_rand)')
         end
     end
 
+    @testset "loss function" begin
 
-    # Test reconstruction
-    @test isa(VAEs.loss(vae, data[:, 1]), AbstractFloat)
+        @testset "reconstruction_gaussian_decoder function" begin
+            # Test with vector input
+            @testset "vector input" begin
+                vae_outputs = vae(data[:, 1]; latent=true)
+                result = VAEs.reconstruction_gaussian_decoder(
+                    vae.decoder, data[:, 1], vae_outputs, n_samples=1
+                )
+                @test isa(result, Float32)
+            end # vector input
 
-    # Explicit setup of optimizer
-    opt_state = Flux.Train.setup(
-        Flux.Optimisers.Adam(1E-3),
-        vae
-    )
+            # Test with matrix input
+            @testset "matrix input" begin
+                vae_outputs = vae(data; latent=true)
+                result = VAEs.reconstruction_gaussian_decoder(
+                    vae.decoder, data, vae_outputs, n_samples=1
+                )
+                @test isa(result, Float32)
+            end # matrix input
+        end # reconstruction_gaussian_decoder function
 
-    # Extract parameters
-    params_init = deepcopy(Flux.params(vae))
+        @testset "kl_gaussian_encoder function" begin
+            # Test with vector input
+            @testset "vector input" begin
+                vae_outputs = vae(data[:, 1]; latent=true)
+                result = VAEs.kl_gaussian_encoder(
+                    vae.encoder, data[:, 1], vae_outputs, n_samples=1
+                )
+                @test isa(result, Float32)
+            end # vector input
 
-    # Loop through a couple of epochs
-    losses = Float32[]  # Track the loss
-    for epoch = 1:10
-        Random.seed!(42)
-        # Test training function
-        VAEs.train!(vae, data, opt_state)
-        push!(losses, VAEs.loss(vae, data))
-    end
+            # Test with matrix input
+            @testset "matrix input" begin
+                vae_outputs = vae(data; latent=true)
+                result = VAEs.kl_gaussian_encoder(
+                    vae.encoder, data, vae_outputs, n_samples=1
+                )
+                @test isa(result, Float32)
+            end # matrix input
+        end # kl_gaussian_encoder function
 
-    # Check if loss is decreasing
-    @test all(diff(losses) ≠ 0)
+        @testset "loss function (no regularization)" begin
+            # Test with vector input
+            @testset "vector input" begin
+                result = VAEs.loss(vae, data[:, 1])
+                @test isa(result, Float32)
+            end # vector input
 
-    # Extract modified parameters
-    params_end = deepcopy(Flux.params(vae))
+            # Test with matrix input
+            @testset "matrix input" begin
+                result = VAEs.loss(vae, data)
+                @test isa(result, Float32)
+            end # matrix input
+        end # kl_gaussian_encoder function
+    end # loss function
 
-    # Check that parameters have significantly changed
-    threshold = 1e-5
-    # Check if any parameter has changed significantly
-    @test all([
-        all(abs.(x .- y) .> threshold) for (x, y) in zip(params_init, params_end)
-    ])
-end
+    @testset "VAE training" begin
+        # Explicit setup of optimizer
+        opt_state = Flux.Train.setup(
+            Flux.Optimisers.Adam(1E-3),
+            vae
+        )
+
+        # Extract parameters
+        params_init = deepcopy(Flux.params(vae))
+
+        # Loop through a couple of epochs
+        losses = Float32[]  # Track the loss
+        for epoch = 1:10
+            Random.seed!(42)
+            # Test training function
+            VAEs.train!(vae, data, opt_state)
+            push!(losses, VAEs.loss(vae, data))
+        end
+
+        # Check if loss is decreasing
+        @test all(diff(losses) ≠ 0)
+
+        # Extract modified parameters
+        params_end = deepcopy(Flux.params(vae))
+
+        # Check that parameters have significantly changed
+        threshold = 1e-5
+        # Check if any parameter has changed significantly
+        @test all([
+            all(abs.(x .- y) .> threshold) for (x, y) in zip(params_init, params_end)
+        ])
+    end # VAE training
+end # VAE{JointLogEncoder, SimpleDecoder}
 
 ## =============================================================================
 
