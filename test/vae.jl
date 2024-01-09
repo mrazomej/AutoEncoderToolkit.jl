@@ -275,7 +275,7 @@ end # VAE{JointLogEncoder, SimpleDecoder}
 
 ## =============================================================================
 
-@testset "Testing VAE = JointLogEncoder + JointLogDecoder" begin
+@testset "VAE{JointLogEncoder,JointLogDecoder}" begin
 
     # Define latent space activation function
     latent_activation = Flux.identity
@@ -299,9 +299,6 @@ end # VAE{JointLogEncoder, SimpleDecoder}
         latent_activation
     )
 
-    # Test if it returns the right type
-    @test isa(encoder, VAEs.JointLogEncoder)
-
     # Initialize decoder
     decoder = VAEs.JointLogDecoder(
         n_input,
@@ -311,12 +308,17 @@ end # VAE{JointLogEncoder, SimpleDecoder}
         output_activation
     )
 
-    # Test if it returns the right type
-    @test isa(decoder, VAEs.JointLogDecoder)
-
     # Define VAE
     vae = encoder * decoder
 
+    @testset "Type checking" begin
+        # Test if it returns the right type
+        @test isa(encoder, VAEs.JointLogEncoder)
+        # Test if it returns the right type
+        @test isa(decoder, VAEs.JointLogDecoder)
+        # Test if it returns the right type
+        @test isa(vae, VAEs.VAE)
+    end # Type checking
     # Test if it returns the right type
     @test isa(vae, VAEs.VAE)
 
