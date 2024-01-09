@@ -51,12 +51,13 @@ Random.seed!(42)
         @test typeof(result) == Array{Float32,2}
     end
 end
+
 ## =============================================================================
 
 # Define number of inputs
 n_input = 3
 # Define number of synthetic data points
-n_data = 10
+n_data = 5
 # Define number of hidden layers
 n_hidden = 2
 # Define number of neurons in non-linear hidden layers
@@ -91,155 +92,290 @@ data = Matrix(hcat(x_rand, y_rand, z_rand)')
 
 ## =============================================================================
 
-@testset "VAE{JointLogEncoder, SimpleDecoder}" begin
+println("Defining layers structure...")
 
-    # Define latent space activation function
-    latent_activation = Flux.identity
-    # Define output layer activation function
-    output_activation = Flux.identity
+# Define latent space activation function
+latent_activation = Flux.identity
+# Define output layer activation function
+output_activation = Flux.identity
+# Define output layer activation function
+output_activations = [Flux.identity, Flux.softplus]
 
-    # Define encoder layer and activation functions
-    encoder_neurons = repeat([n_neuron], n_hidden)
-    encoder_activation = repeat([Flux.swish], n_hidden)
+# Define encoder layer and activation functions
+encoder_neurons = repeat([n_neuron], n_hidden)
+encoder_activation = repeat([Flux.swish], n_hidden)
 
-    # Define decoder layer and activation function
-    decoder_neurons = repeat([n_neuron], n_hidden)
-    decoder_activation = repeat([Flux.swish], n_hidden)
+# Define decoder layer and activation function
+decoder_neurons = repeat([n_neuron], n_hidden)
+decoder_activation = repeat([Flux.swish], n_hidden)
 
-    # Initialize encoder
-    encoder = VAEs.JointLogEncoder(
-        n_input,
-        n_latent,
-        encoder_neurons,
-        encoder_activation,
-        latent_activation
-    )
+# Define decoder split layers and activation functions
+µ_neurons = repeat([n_neuron], n_hidden)
+µ_activation = repeat([Flux.swish], n_hidden)
 
-    # Initialize decoder
-    decoder = VAEs.SimpleDecoder(
-        n_input,
-        n_latent,
-        decoder_neurons,
-        decoder_activation,
-        output_activation
-    )
+logσ_neurons = repeat([n_neuron], n_hidden)
+logσ_activation = repeat([Flux.swish], n_hidden)
 
-    # Define VAE
-    vae = encoder * decoder
-
-    @testset "Type checking" begin
-        # Test if it returns the right type
-        @test isa(encoder, VAEs.JointLogEncoder)
-        # Test if it returns the right type
-        @test isa(decoder, VAEs.SimpleDecoder)
-        # Test if it returns the right type
-        @test isa(vae, VAEs.VAE)
-    end # Type checking
+σ_neurons = repeat([n_neuron], n_hidden)
+σ_activation = [repeat([Flux.swish], n_hidden - 1); Flux.softplus]
 
 
-    @testset "VAE Forward Pass" begin
+## =============================================================================
 
-        # Define some inputs
-        prior = Distributions.Normal{Float32}(0.0f0, 1.0f0)
 
-        # Test with latent=false
-        @testset "latent=false" begin
-            # Test with latent=false and single data point
-            result = vae(data[:, 1], prior=prior, latent=false, n_samples=1)
-            @test typeof(result) <: Vector{Float32}
+println("Defining encoders...")
+# Initialize JointLogEncoder
+joint_log_encoder = VAEs.JointLogEncoder(
+    n_input,
+    n_latent,
+    encoder_neurons,
+    encoder_activation,
+    latent_activation,
+)
 
-            # Test with latent=false and multiple data points
-            result = vae(data, prior=prior, latent=false, n_samples=1)
-            @test typeof(result) <: Matrix{Float32}
-        end
+# -----------------------------------------------------------------------------
 
-        # Test with latent=true
-        @testset "latent=true" begin
-            # Test with latent=true and single data point
-            result = vae(data[:, 1], prior=prior, latent=true, n_samples=1)
+println("Defining decoders...")
+
+# Initialize SimpleDecoder
+simple_decoder = VAEs.SimpleDecoder(
+    n_input,
+    n_latent,
+    decoder_neurons,
+    decoder_activation,
+    output_activation
+)
+
+# Initialize JointLogDecoder
+joint_log_decoder = VAEs.JointLogDecoder(
+    n_input,
+    n_latent,
+    decoder_neurons,
+    decoder_activation,
+    output_activation
+)
+
+# Initialize SplitLogDecoder
+split_log_decoder = VAEs.SplitLogDecoder(
+    n_input,
+    n_latent,
+    µ_neurons,
+    µ_activation,
+    logσ_neurons,
+    logσ_activation,
+)
+
+# Initialize JointDecoder
+joint_decoder = VAEs.JointDecoder(
+    n_input,
+    n_latent,
+    decoder_neurons,
+    decoder_activation,
+    output_activations
+)
+
+# Initialize SplitDecoder
+split_decoder = VAEs.SplitDecoder(
+    n_input,
+    n_latent,
+    µ_neurons,
+    µ_activation,
+    σ_neurons,
+    σ_activation,
+)
+
+@testset "Type checking" begin
+    @test typeof(joint_log_encoder) == VAEs.JointLogEncoder
+    @test typeof(simple_decoder) == VAEs.SimpleDecoder
+    @test typeof(joint_log_decoder) == VAEs.JointLogDecoder
+    @test typeof(split_log_decoder) == VAEs.SplitLogDecoder
+    @test typeof(joint_decoder) == VAEs.JointDecoder
+    @test typeof(split_decoder) == VAEs.SplitDecoder
+    @test typeof(joint_log_encoder * simple_decoder) <: VAEs.VAE
+end # @testset "Type checking"
+
+# Collect all decoders
+decoders = [
+    joint_log_decoder,
+    split_log_decoder,
+    joint_decoder,
+    split_decoder,
+    simple_decoder,
+]
+
+## =============================================================================
+
+@testset "VAE Forward Pass" begin
+    # Define single data
+    x_vector = @view data[:, 1]
+    # Define batch of data
+    x_matrix = data
+
+    # Test with latent=false
+    @testset "latent=false" begin
+        # Loop through decoders
+        for decoder in decoders
+            # Define VAE
+            vae = joint_log_encoder * decoder
+
+            # Test with single data point
+            result = vae(x_vector, latent=false)
+            # Check type of decoder
+            if isa(decoder, VAEs.SimpleDecoder)
+                @test typeof(result) <: AbstractVector{Float32}
+            else
+                @test typeof(result) <: Tuple{
+                    <:AbstractVector{Float32},<:AbstractVector{Float32}
+                }
+            end # if isa(decoder, VAEs.SimpleDecoder)
+
+            # Test with multiple data points
+            result = vae(x_matrix, latent=false)
+            # Check type of decoder
+            if isa(decoder, VAEs.SimpleDecoder)
+                @test typeof(result) <: AbstractMatrix{Float32}
+            else
+                @test typeof(result) <: Tuple{
+                    <:AbstractMatrix{Float32},<:AbstractMatrix{Float32}
+                }
+            end # if isa(decoder, VAEs.SimpleDecoder)
+        end # for decoder in decoders
+    end # @testset "latent=false"
+
+    # Test with latent=false
+    @testset "latent=true" begin
+        # Loop through decoders
+        for decoder in decoders
+            # Define VAE
+            vae = joint_log_encoder * decoder
+
+            # Test with single data point
+            result = vae(x_vector, latent=true)
             @test isa(result, NamedTuple)
             @test all(isa.(values(result), AbstractVector{Float32}))
 
-            # Test with latent=true and multiple data points
-            result = vae(data, prior=prior, latent=true, n_samples=1)
+            # Test with multiple data points
+            result = vae(data, latent=true)
             @test isa(result, NamedTuple)
             @test all(isa.(values(result), AbstractMatrix{Float32}))
+        end # for decoder in decoders
+    end # @testset "latent=false"
 
-        end
 
-        # Test with multiple samples
-        @testset "multiple samples" begin
-            # Test with latent=true and multiple data points
-            n_samples = 5
-            result = vae(data[:, 1], prior=prior, latent=true, n_samples=n_samples)
+    # Test with multiple samples
+    @testset "multiple samples" begin
+        # Loop through decoders
+        for decoder in decoders
+            # Define VAE
+            vae = joint_log_encoder * decoder
+
+            # Test with single data point
+            result = vae(x_vector, latent=true, n_samples=2)
             @test isa(result, NamedTuple)
             @test all(isa.(values(result), AbstractArray{Float32}))
 
-            # Test with latent=true and multiple data points
-            result = vae(data, prior=prior, latent=true, n_samples=n_samples)
+            # Test with multiple data points
+            result = vae(data, latent=true, n_samples=2)
             @test isa(result, NamedTuple)
             @test all(isa.(values(result), AbstractArray{Float32}))
-        end
-    end
+        end # for decoder in decoders
+    end # @testset "multiple samples"
 
-    @testset "loss function" begin
+end # @testset "VAE Forward Pass"
+
+## =============================================================================
+
+@testset "loss function" begin
+    # Define single data
+    x_vector = @view data[:, 1]
+    # Define batch of data
+    x_matrix = data
+
+    # Define VAE with any decoder
+    vae = joint_log_encoder * joint_log_decoder
+
+    @testset "kl_gaussian_encoder function" begin
+        # Test with vector input
+        @testset "vector input" begin
+            vae_outputs = vae(x_vector; latent=true)
+            result = VAEs.kl_gaussian_encoder(
+                vae.encoder, x_vector, vae_outputs, n_samples=1
+            )
+            @test isa(result, Float32)
+        end # vector input
+
+        # Test with matrix input
+        @testset "matrix input" begin
+            vae_outputs = vae(x_matrix; latent=true)
+            result = VAEs.kl_gaussian_encoder(
+                vae.encoder, x_matrix, vae_outputs, n_samples=1
+            )
+            @test isa(result, Float32)
+        end # matrix input
+    end # kl_gaussian_encoder function
+
+    # Loop through decoders
+    for decoder in decoders
+        # Define VAE
+        vae = joint_log_encoder * decoder
 
         @testset "reconstruction_gaussian_decoder function" begin
             # Test with vector input
             @testset "vector input" begin
-                vae_outputs = vae(data[:, 1]; latent=true)
+                vae_outputs = vae(x_vector; latent=true)
                 result = VAEs.reconstruction_gaussian_decoder(
-                    vae.decoder, data[:, 1], vae_outputs, n_samples=1
+                    decoder, x_vector, vae_outputs, n_samples=1
                 )
                 @test isa(result, Float32)
             end # vector input
 
             # Test with matrix input
             @testset "matrix input" begin
-                vae_outputs = vae(data; latent=true)
+                vae_outputs = vae(x_matrix; latent=true)
                 result = VAEs.reconstruction_gaussian_decoder(
-                    vae.decoder, data, vae_outputs, n_samples=1
+                    decoder, x_matrix, vae_outputs, n_samples=1
                 )
                 @test isa(result, Float32)
             end # matrix input
         end # reconstruction_gaussian_decoder function
+    end # for decoder in decoders
 
-        @testset "kl_gaussian_encoder function" begin
+    # Loop through decoders
+    for decoder in decoders
+        # Define VAE
+        vae = joint_log_encoder * decoder
+
+        @testset "loss function" begin
             # Test with vector input
             @testset "vector input" begin
-                vae_outputs = vae(data[:, 1]; latent=true)
-                result = VAEs.kl_gaussian_encoder(
-                    vae.encoder, data[:, 1], vae_outputs, n_samples=1
-                )
+                result = VAEs.loss(vae, x_vector)
                 @test isa(result, Float32)
             end # vector input
 
             # Test with matrix input
             @testset "matrix input" begin
-                vae_outputs = vae(data; latent=true)
-                result = VAEs.kl_gaussian_encoder(
-                    vae.encoder, data, vae_outputs, n_samples=1
-                )
+                result = VAEs.loss(vae, x_matrix)
                 @test isa(result, Float32)
             end # matrix input
-        end # kl_gaussian_encoder function
+        end # loss function
+    end # for decoder in decoders
+end # @testset "loss function"
 
-        @testset "loss function (no regularization)" begin
-            # Test with vector input
-            @testset "vector input" begin
-                result = VAEs.loss(vae, data[:, 1])
-                @test isa(result, Float32)
-            end # vector input
+## =============================================================================
 
-            # Test with matrix input
-            @testset "matrix input" begin
-                result = VAEs.loss(vae, data)
-                @test isa(result, Float32)
-            end # matrix input
-        end # kl_gaussian_encoder function
-    end # loss function
+@testset "VAE training" begin
+    # Define number of epochs
+    n_epochs = 3
+    # Define single data
+    x_vector = @view data[:, 1]
+    # Define batch of data
+    x_matrix = data
 
-    @testset "VAE training" begin
+    # Loop through decoders
+    for decoder in decoders
+        # Define VAE with any decoder
+        vae = deepcopy(joint_log_encoder) * decoder
+
         # Explicit setup of optimizer
         opt_state = Flux.Train.setup(
             Flux.Optimisers.Adam(1E-3),
@@ -251,7 +387,7 @@ data = Matrix(hcat(x_rand, y_rand, z_rand)')
 
         # Loop through a couple of epochs
         losses = Float32[]  # Track the loss
-        for epoch = 1:10
+        for epoch = 1:n_epochs
             Random.seed!(42)
             # Test training function
             VAEs.train!(vae, data, opt_state)
@@ -268,185 +404,8 @@ data = Matrix(hcat(x_rand, y_rand, z_rand)')
         threshold = 1e-5
         # Check if any parameter has changed significantly
         @test all([
-            all(abs.(x .- y) .> threshold) for (x, y) in zip(params_init, params_end)
+            all(abs.(x .- y) .> threshold)
+            for (x, y) in zip(params_init, params_end)
         ])
-    end # VAE training
-end # VAE{JointLogEncoder, SimpleDecoder}
-
-## =============================================================================
-
-@testset "VAE{JointLogEncoder,JointLogDecoder}" begin
-
-    # Define latent space activation function
-    latent_activation = Flux.identity
-    # Define output layer activation function
-    output_activation = Flux.identity
-
-    # Define encoder layer and activation functions
-    encoder_neurons = repeat([n_neuron], n_hidden)
-    encoder_activation = repeat([Flux.swish], n_hidden)
-
-    # Define decoder layer and activation function
-    decoder_neurons = repeat([n_neuron], n_hidden)
-    decoder_activation = repeat([Flux.swish], n_hidden)
-
-    # Initialize encoder
-    encoder = VAEs.JointLogEncoder(
-        n_input,
-        n_latent,
-        encoder_neurons,
-        encoder_activation,
-        latent_activation
-    )
-
-    # Initialize decoder
-    decoder = VAEs.JointLogDecoder(
-        n_input,
-        n_latent,
-        decoder_neurons,
-        decoder_activation,
-        output_activation
-    )
-
-    # Define VAE
-    vae = encoder * decoder
-
-    @testset "Type checking" begin
-        # Test if it returns the right type
-        @test isa(encoder, VAEs.JointLogEncoder)
-        # Test if it returns the right type
-        @test isa(decoder, VAEs.JointLogDecoder)
-        # Test if it returns the right type
-        @test isa(vae, VAEs.VAE)
-    end # Type checking
-    # Test if it returns the right type
-    @test isa(vae, VAEs.VAE)
-
-    # Test if reconstruction returns the right type of data
-    @test all(isa.(vae(data), Ref(AbstractVecOrMat)))
-
-    # Test reconstruction
-    @test isa(VAEs.loss(vae, data[:, 1]), AbstractFloat)
-
-    # Explicit setup of optimizer
-    opt_state = Flux.Train.setup(
-        Flux.Optimisers.Adam(1E-3),
-        vae
-    )
-
-    # Extract parameters
-    params_init = deepcopy(Flux.params(vae))
-
-    # Loop through a couple of epochs
-    losses = Float64[]  # Track the loss
-    for epoch = 1:10
-        Random.seed!(42)
-        # Test training function
-        VAEs.train!(vae, data, opt_state)
-        push!(losses, VAEs.loss(vae, data))
-    end
-
-    # Check if loss is decreasing
-    @test all(diff(losses) ≠ 0)
-
-    # Extract parameters
-    params_end = deepcopy(Flux.params(vae))
-
-    # Check that parameters have significantly changed
-    threshold = 1e-5
-    # Check if any parameter has changed significantly
-    @test all([
-        all(abs.(x .- y) .> threshold) for (x, y) in zip(params_init, params_end)
-    ])
-end
-
-## =============================================================================
-
-@testset "Testing VAE = JointLogEncoder + SplitLogDecoder" begin
-
-    # Define latent space activation function
-    latent_activation = Flux.identity
-    # Define output layer activation function
-    output_activation = Flux.identity
-
-    # Define encoder layer and activation functions
-    encoder_neurons = repeat([n_neuron], n_hidden)
-    encoder_activation = repeat([Flux.swish], n_hidden)
-
-    # Define decoder layer and activation function
-    decoder_neurons = [repeat([n_neuron], n_hidden); n_input]
-    decoder_activation = [repeat([Flux.swish], n_hidden); Flux.identity]
-
-    # Initialize encoder
-    encoder = VAEs.JointLogEncoder(
-        n_input,
-        n_latent,
-        encoder_neurons,
-        encoder_activation,
-        latent_activation
-    )
-
-    # Test if it returns the right type
-    @test isa(encoder, VAEs.JointLogEncoder)
-
-    # Initialize decoder
-    decoder = VAEs.SplitLogDecoder(
-        n_input,
-        n_latent,
-        decoder_neurons,
-        decoder_activation,
-        decoder_neurons,
-        decoder_activation,
-    )
-
-    # Test if it returns the right type
-    @test isa(decoder, VAEs.SplitLogDecoder)
-
-    # Define VAE
-    vae = encoder * decoder
-
-    # Test if it returns the right type
-    @test isa(vae, VAEs.VAE)
-
-    # Test if reconstruction returns the right type of data
-    @test all(isa.(vae(data), Ref(AbstractVecOrMat)))
-
-    # Test reconstruction
-    @test isa(VAEs.loss(vae, data[:, 1]), AbstractFloat)
-
-    # Explicit setup of optimizer
-    opt_state = Flux.Train.setup(
-        Flux.Optimisers.Adam(1E-2),
-        vae
-    )
-
-    # Extract parameters
-    params_init = deepcopy(Flux.params(vae))
-
-    # Loop through a couple of epochs
-    losses = Float64[]  # Track the loss
-    for epoch = 1:10
-        Random.seed!(42)
-        # Test training function
-        VAEs.train!(vae, data, opt_state)
-        push!(losses, VAEs.loss(vae, data))
-    end
-
-    # Check if loss is decreasing
-    @test all(diff(losses) ≠ 0)
-
-    # Extract parameters
-    params_end = deepcopy(Flux.params(vae))
-
-    # Check that parameters have significantly changed
-    threshold = 1e-5
-    # Check if any parameter has changed significantly
-    @test all([
-        all(abs.(x .- y) .> threshold) for (x, y) in zip(params_init, params_end)
-    ])
-
-end
-## =============================================================================
-
-println("Passed tests for VAEs module!\n")
-##
+    end # for decoder in decoders
+end # @testset "VAE training"
