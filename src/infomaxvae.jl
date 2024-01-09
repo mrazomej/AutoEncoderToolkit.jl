@@ -11,7 +11,7 @@ import Distributions
 
 # Import Abstract Types
 
-using ..AutoEncode: AbstractData, AbstractVariationalAutoEncoder,
+using ..AutoEncode: Float32Array, AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractVariationalDecoder,
     JointLogEncoder, SimpleDecoder, JointLogDecoder,
     SplitLogDecoder, JointDecoder, SplitDecoder, VAE
