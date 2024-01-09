@@ -11,8 +11,9 @@ import Distributions
 
 # Import Abstract Types
 
-using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
-    AbstractVariationalDecoder, JointLogEncoder, SimpleDecoder, JointLogDecoder,
+using ..AutoEncode: AbstractData, AbstractVariationalAutoEncoder,
+    AbstractVariationalEncoder, AbstractVariationalDecoder,
+    JointLogEncoder, SimpleDecoder, JointLogDecoder,
     SplitLogDecoder, JointDecoder, SplitDecoder, VAE
 
 using ..VAEs: reparameterize, reconstruction_gaussian_decoder,
@@ -187,8 +188,8 @@ encoder, a decoder, and a multi-layer perceptron (MLP) to estimate variational
 mutual information.
 
 # Arguments
-- `x::AbstractVecOrMat{Float32}`: The data to be processed. Can be a vector or a
-  matrix where each column represents a separate data sample.
+- `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
+  or a matrix where each column represents a separate sample.
 
 # Optional Keyword Arguments
 - `prior::Distributions.Sampleable`: Specifies the prior distribution for the
@@ -218,8 +219,8 @@ Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the InfoMaxVAE.
 """
 function (infomaxvae::InfoMaxVAE)(
-    x::AbstractVecOrMat{Float32},
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0);
+    x::AbstractVecOrMat{Float32};
+    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
     n_samples::Int=1
 )
@@ -228,12 +229,15 @@ function (infomaxvae::InfoMaxVAE)(
         outputs = infomaxvae.vae(x, prior; latent=latent, n_samples=n_samples)
 
         # Compute mutual information estimate using MLP
-        outputs[:mutual_info] = infomaxvae.mlp([x; outputs[:z]])
+        mutual_info = infomaxvae.mlp([x; outputs.z])
+
+        # Add mutual_info to the NamedTuple
+        outputs = merge(outputs, (mutual_info=mutual_info,))
 
         return outputs
     else
         # or return reconstructed data from decoder
-        return infomaxvae.vae(x, prior; latent=latent, n_samples=n_samples)
+        return infomaxvae.vae(x; prior, latent=false, n_samples=n_samples)
     end # if
 end # function
 
@@ -470,11 +474,11 @@ function loss(
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_z(vae_outputs[:z])
+        shuffle_z(vae_outputs.z)
     end # do block
 
     # Compute variational mutual information
-    mutual_info = variational_mutual_info(mlp, x, vae_outputs[:z], z_shuffle)
+    mutual_info = variational_mutual_info(mlp, x, vae_outputs.z, z_shuffle)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(vae_outputs) : 0.0f0
@@ -564,17 +568,17 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_div = kl_div = kl_gaussian_encoder(
-        vae.encoder, x, vae_outputs; n_samples=n_samples
+    kl_div = kl_gaussian_encoder(
+        vae.encoder, x_in, vae_outputs; n_samples=n_samples
     )
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
-        shuffle_z(vae_outputs[:z])
+        shuffle_z(vae_outputs.z)
     end # do block
 
     # Compute variational mutual information
-    mutual_info = variational_mutual_info(mlp, x_in, vae_outputs[:z], z_shuffle)
+    mutual_info = variational_mutual_info(mlp, x_in, vae_outputs.z, z_shuffle)
 
     # Compute regularization term if regularization function is provided
     reg_term = (regularization !== nothing) ? regularization(vae_outputs) : 0.0f0
@@ -654,7 +658,7 @@ function mlp_loss(
     outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Extract relevant variable
-    z = outputs[:z]
+    z = outputs.z
 
     # Permute latent codes for computation of mutual information
     z_shuffle = Zygote.ignore() do
