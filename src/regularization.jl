@@ -38,20 +38,20 @@ new, unseen data.
 function l2_regularization(
     outputs::NamedTuple; reg_terms::Vector{Symbol}=[:decoder_µ]
 )::Float32
+    # Ensyre there is at least one key
+    if isempty(reg_terms)
+        return 0.0f0
+    end # if
+
     # Ensure all keys in reg_terms are in outputs
     if !all(key ∈ keys(outputs) for key in reg_terms)
         error("All keys in reg_terms must exist in outputs!")
     end # if
 
-    # Initialize the regularization term to zero
-    reg_term = Vector{Float32}(undef, length(reg_terms))
-    # Loop through reg_terms
-    for (i, term) in enumerate(reg_terms)
-        # L2 regularization for the given value
-        reg_term[i] = sum(outputs[term] .^ 2)
-    end # for
+    # Compute the regularization term without in-place mutation
+    reg_term = sum(sum(outputs[term] .^ 2) for term in reg_terms)
 
-    return sum(reg_term)
+    return reg_term
 end # function
 
 # ==============================================================================
@@ -153,6 +153,11 @@ function entropy_regularization(
     # List possible targets
     targets = [:encoder_logσ, :decoder_logσ, :decoder_σ]
 
+    # Ensyre there is at least one key
+    if isempty(reg_terms)
+        return 0.0f0
+    end # if
+
     # Check if reg_terms are valid
     if !any(term in targets for term in reg_terms)
         throw(ArgumentError("The specified target is not valid. Valid " *
@@ -164,24 +169,23 @@ function entropy_regularization(
         throw(ArgumentError("All keys in reg_terms must exist in outputs!"))
     end # if
 
-    # Initialize array to store entropy values
-    entropy = Vector{Float32}(undef, length(reg_terms))
+    # Compute the entropy values directly in the sum
+    entropy = sum(
+        begin
+            if term == :decoder_σ
+                # Compute the entropy of the Gaussian distribution
+                # H(X) = 0.5 * n * (1 + log(2π)) + 0.5 * sum(log(diagonal_elements))
+                0.5f0 * length(outputs[term]) * (1 + log(2π)) +
+                0.5f0 * sum(log.(outputs[term]))
+            else
+                # Compute the entropy of the Gaussian distribution
+                # H(X) = 0.5 * n * (1 + log(2π)) + 0.5 * sum(log(diagonal_elements))
+                0.5f0 * (length(outputs[term])) * (1 + log(2π)) +
+                0.5f0 * sum(outputs[term])
+            end # if
+        end # begin
+        for term in reg_terms
+    )
 
-    # Loop through reg_terms
-    for (i, term) in enumerate(reg_terms)
-        # Check term
-        if term == :decoder_σ
-            # Compute the entropy of the Gaussian distribution
-            # H(X) = 0.5 * n * (1 + log(2π)) + 0.5 * sum(log(diagonal_elements))
-            entropy[i] = 0.5f0 * length(outputs[term]) * (1 + log(2π)) +
-                         0.5f0 * sum(log.(outputs[term]))
-        else
-            # Compute the entropy of the Gaussian distribution
-            # H(X) = 0.5 * n * (1 + log(2π)) + 0.5 * sum(log(diagonal_elements))
-            entropy[i] = 0.5f0 * (length(outputs[term])) * (1 + log(2π)) +
-                         0.5f0 * sum(outputs[term])
-        end # if
-    end # for
-
-    return sum(entropy)
+    return entropy
 end # function
