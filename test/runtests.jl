@@ -11,6 +11,9 @@ using Test
     # Test InfoMaxVAE module
     include("infomaxvae.jl")
 
+    # Test HVAE module
+    include("hvae.jl")
+
     # Test regularization module
     include("regularization.jl")
 end

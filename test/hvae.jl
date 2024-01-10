@@ -5,6 +5,7 @@ println("Testing HVAEs module:\n")
 # Import AutoEncode.jl module to be tested
 import AutoEncode.HVAEs
 import AutoEncode.VAEs
+import AutoEncode.regularization: l2_regularization
 # Import Flux library
 import Flux
 
@@ -471,45 +472,149 @@ end # @testset "hamiltonian_elbo"
 
 ## =============================================================================
 
-@testset "HVAE training" begin
-    # Define number of epochs
-    n_epochs = 3
+@testset "loss" begin
+    # Define the number of steps, step size, and initial inverse temperature
+    K = 2
+    ϵ = 0.01f0
+    βₒ = 1.0f0
+
+    # Define regularization function and its arguments
+    reg_function = l2_regularization
+    reg_kwargs = Dict(:reg_terms => [:encoder_logσ])
 
     # Loop through decoders
     for decoder in decoders
-        # Define VAE with any decoder
-        hvae = HVAES.HVAE(deepcopy(joint_log_encoder) * decoder)
+        # Define HVAE
+        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
 
-        # Explicit setup of optimizer
-        opt_state = Flux.Train.setup(
-            Flux.Optimisers.Adam(1E-3),
-            hvae
+        # Test with vector input without regularization
+        @testset "vector input without regularization" begin
+            result = HVAEs.loss(hvae, x_vector; K=K, ϵ=ϵ, βₒ=βₒ)
+            @test isa(result, Float32)
+        end # vector input without regularization
+
+        # Test with matrix input without regularization
+        @testset "matrix input without regularization" begin
+            result = HVAEs.loss(hvae, x_matrix; K=K, ϵ=ϵ, βₒ=βₒ)
+            @test isa(result, Float32)
+        end # matrix input without regularization
+
+        # Test with vector input with regularization
+        @testset "vector input with regularization" begin
+            result = HVAEs.loss(hvae, x_vector; K=K, ϵ=ϵ, βₒ=βₒ, reg_function=reg_function, reg_kwargs=reg_kwargs)
+            @test isa(result, Float32)
+        end # vector input with regularization
+
+        # Test with matrix input with regularization
+        @testset "matrix input with regularization" begin
+            result = HVAEs.loss(hvae, x_matrix; K=K, ϵ=ϵ, βₒ=βₒ, reg_function=reg_function, reg_kwargs=reg_kwargs)
+            @test isa(result, Float32)
+        end # matrix input with regularization
+    end # for decoder in decoders
+end # @testset "loss"
+
+## =============================================================================
+
+@testset "HVAE training" begin
+    # Define number of epochs
+    n_epochs = 3
+    # Define the number of steps, step size, and initial inverse temperature
+    K = 2
+    ϵ = 0.01f0
+    βₒ = 1.0f0
+
+    @testset "without regularization" begin
+        # Define loss_kwargs
+        loss_kwargs = Dict(:K => K, :ϵ => ϵ, :βₒ => βₒ)
+
+        # Loop through decoders
+        for decoder in decoders
+            # Define HVAE with any decoder
+            hvae = HVAEs.HVAE(deepcopy(joint_log_encoder) * deepcopy(decoder))
+
+            # Explicit setup of optimizer
+            opt_state = Flux.Train.setup(
+                Flux.Optimisers.Adam(1E-3),
+                hvae
+            )
+
+            # Extract parameters
+            params_init = deepcopy(Flux.params(hvae))
+
+            # Loop through a couple of epochs
+            losses = Float32[]  # Track the loss
+            for epoch = 1:n_epochs
+                Random.seed!(42)
+                # Test training function
+                HVAEs.train!(hvae, data, opt_state; loss_kwargs=loss_kwargs)
+                push!(losses, HVAEs.loss(hvae, data; loss_kwargs...))
+            end
+
+            # Check if loss is decreasing
+            @test all(diff(losses) ≠ 0)
+
+            # Extract modified parameters
+            params_end = deepcopy(Flux.params(hvae))
+
+            # Check that parameters have significantly changed
+            threshold = 1e-5
+            # Check if any parameter has changed significantly
+            @test all([
+                all(abs.(x .- y) .> threshold)
+                for (x, y) in zip(params_init, params_end)
+            ])
+        end # for decoder in decoders
+    end # @testset "without regularization"
+
+    @testset "with regularization" begin
+        reg_function = l2_regularization
+        reg_kwargs = Dict(:reg_terms => [:encoder_μ, :encoder_logσ])
+
+        # Define loss_kwargs
+        loss_kwargs = Dict(
+            :K => K, :ϵ => ϵ, :βₒ => βₒ,
+            :reg_function => reg_function, :reg_kwargs => reg_kwargs
         )
 
-        # Extract parameters
-        params_init = deepcopy(Flux.params(hvae))
+        # Loop through decoders
+        for decoder in decoders[1:2]
+            # Define HVAE with any decoder
+            hvae = HVAEs.HVAE(deepcopy(joint_log_encoder) * deepcopy(decoder))
 
-        # Loop through a couple of epochs
-        losses = Float32[]  # Track the loss
-        for epoch = 1:n_epochs
-            Random.seed!(42)
-            # Test training function
-            HVAEs.train!(hvae, data, opt_state)
-            push!(losses, HVAEs.hamiltonian_elbo(vae, data))
-        end
+            # Explicit setup of optimizer
+            opt_state = Flux.Train.setup(
+                Flux.Optimisers.Adam(1E-3),
+                hvae
+            )
 
-        # Check if loss is decreasing
-        @test all(diff(losses) ≠ 0)
+            # Extract parameters
+            params_init = deepcopy(Flux.params(hvae))
 
-        # Extract modified parameters
-        params_end = deepcopy(Flux.params(vae))
+            # Loop through a couple of epochs
+            losses = Float32[]  # Track the loss
+            for epoch = 1:n_epochs
+                Random.seed!(42)
+                # Test training function
+                HVAEs.train!(hvae, data, opt_state; loss_kwargs=loss_kwargs)
+                push!(
+                    losses,
+                    HVAEs.loss(hvae, data; loss_kwargs...)
+                )
+            end
 
-        # Check that parameters have significantly changed
-        threshold = 1e-5
-        # Check if any parameter has changed significantly
-        @test all([
-            all(abs.(x .- y) .> threshold)
-            for (x, y) in zip(params_init, params_end)
-        ])
-    end # for decoder in decoders
-end # @testset "VAE training"
+            # Check if loss is decreasing
+            @test all(diff(losses) ≠ 0)
+
+            # Extract modified parameters
+            params_end = deepcopy(Flux.params(hvae))
+
+            # Check that parameters have significantly changed
+            threshold = 1e-5
+            # Check if any parameter has changed significantly
+            @test all([
+                all(abs.(x .- y) .> threshold)
+                for (x, y) in zip(params_init, params_end)
+            ])
+        end # for decoder in decoders
+    end # @testset "with regularization"
+end # @testset "HVAE training"
