@@ -4,11 +4,10 @@ using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder, SplitLogDec
 # ==============================================================================
 
 @doc raw"""
-    l2_regularization(outputs::Dict{Symbol, Any}, 
-                    reg_flags::Dict{Symbol, Bool})
+        l2_regularization(outputs::NamedTuple, reg_terms::Vector{Symbol})
 
 Compute the L2 regularization term (also known as Ridge regularization) based on
-the autoencoder outputs and the `reg_flags` dictionary.
+the autoencoder outputs and the `reg_terms` vector.
 
 L2 regularization is defined as: L₂(v) = λ ∑ᵢ vᵢ²
 
@@ -24,47 +23,48 @@ boundaries or function approximations. This helps in improving generalization to
 new, unseen data.
 
 # Arguments
-- `outputs::Dict{Symbol, Any}`: Dictionary containing outputs from the AE or VAE
-  model.
-- `reg_flags::Dict{Symbol, Bool}`: Dictionary that specifies which entries from
+- `outputs::NamedTuple`: NamedTuple containing outputs from the AE or VAE model.
+
+## Optional Keyword Arguments
+- `reg_terms::Vector{Symbol}`: Vector that specifies which entries from
   `outputs` to consider for regularization.
 
 # Returns
 - `reg_term::Float32`: The computed L2 regularization value.
 
 # Notes
-- Ensure that the keys in `reg_flags` are a subset of the keys in `outputs`.
+- Ensure that all elements in `reg_terms` are keys in `outputs`.
 """
 function l2_regularization(
-    outputs::Dict{Symbol,<:Any}, reg_flags::Dict{Symbol,Bool}
+    outputs::NamedTuple; reg_terms::Vector{Symbol}=[:decoder_µ]
 )::Float32
-    # Ensure all keys in reg_flags are in outputs
-    if !all(key in keys(outputs) for key in keys(reg_flags))
-        error("All keys in reg_flags must exist in outputs!")
-    end
+    # Ensure all keys in reg_terms are in outputs
+    if !all(key ∈ keys(outputs) for key in reg_terms)
+        error("All keys in reg_terms must exist in outputs!")
+    end # if
 
     # Initialize the regularization term to zero
-    reg_term = 0.0f0
-    # Loop through dictionary keys
-    for (key, flag) in reg_flags
-        if flag
-            # L2 regularization for the given key's value
-            reg_term += sum(outputs[key] .^ 2)
-        end # if 
+    reg_term = Vector{Float32}(undef, length(reg_terms))
+    # Loop through reg_terms
+    for (i, term) in enumerate(reg_terms)
+        # L2 regularization for the given value
+        reg_term[i] = sum(outputs[term] .^ 2)
     end # for
 
-    return reg_term
-end
+    return sum(reg_term)
+end # function
 
 # ==============================================================================
 
 @doc raw"""
-    min_variance_regularization(vae_outputs::Dict{Symbol, Any}, σ_min::Float32)
+        min_variance_regularization(outputs::NamedTuple, σ_min::Float32=0.1f0, logσ::Bool=true)
 
 Compute the minimum variance constraint regularization term based on the VAE
 outputs and a specified minimum standard deviation (σ_min).
 
-The regularization is defined as: L = λ ∑ᵢ max(0, log(σᵢ²) - log(σ_min²))
+The regularization is defined as: 
+- If `logσ` is true: L = λ ∑ᵢ max(0, log(σᵢ²) - log(σ_min²))
+- If `logσ` is false: L = λ ∑ᵢ max(0, σᵢ² - σ_min²)
 
 Where:
 - λ is the regularization strength (not computed in this function, but typically
@@ -76,22 +76,40 @@ below a certain threshold, discouraging the model from making overconfident
 predictions.
 
 # Arguments
-- `vae_outputs::Dict{Symbol, Any}`: Dictionary containing outputs from the VAE
-  model.
-- `σ_min::Float32`: The minimum allowable standard deviation.
+- `outputs::NamedTuple`: NamedTuple containing outputs from the VAE model.
+
+## Optional Keyword Arguments
+- `σ_min::Float32`: The minimum allowable standard deviation. Default is 0.1.
+- `logσ::Bool`: If true, the regularization is computed in the log-space. If
+  false, the regularization is computed in the original space. Default is true.
 
 # Returns
 - `reg_term::Float32`: The computed minimum variance constraint regularization
   value.
 """
 function min_variance_regularization(
-    vae_outputs::Dict{Symbol,<:Any}, σ_min::Float32
+    outputs::NamedTuple; σ_min::Float32=0.1f0, logσ::Bool=true
 )::Float32
-    # Extract decoder log variance
-    decoder_logσ = vae_outputs[:decoder_logσ]
+    # Check if the decoder variance exists in the outputs
+    if :decoder_logσ ∈ keys(outputs)
+        # Extract decoder log std
+        decoder_logσ = outputs[:decoder_logσ]
+    elseif :decoder_σ ∈ keys(outputs)
+        # Extract decoder log std
+        decoder_logσ = log.(outputs[:decoder_σ])
+    else
+        throw(ArgumentError("The decoder standard deviation does not exist in " *
+                            "outputs."))
+    end # if
 
-    # Compute regularization term to discourage extremeley small variances
-    reg_term = sum(max.(0.0f0, decoder_logσ .- log(σ_min^2)))
+    # Check if logσ is true
+    if logσ
+        # Compute regularization term to discourage extremeley small variances
+        reg_term = sum(max.(0.0f0, decoder_logσ .- log(σ_min^2)))
+    else
+        # Compute regularization term to discourage extremeley small variances
+        reg_term = sum(max.(0.0f0, exp.(decoder_logσ) .- σ_min^2))
+    end # if
 
     return reg_term
 end # function
@@ -99,54 +117,71 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    entropy_regularization(vae_output::Dict{Symbol, Any}, target::Symbol)
+        entropy_regularization(outputs::NamedTuple, reg_terms::Vector{Symbol}=[:encoder_logσ])
 
-Compute the entropy regularization term for a specified Gaussian-distributed
-variable within the `vae_output` dictionary. The regularization term is based on
-the entropy of the Gaussian distribution.
+Compute the entropy regularization term for specified Gaussian-distributed
+variables within the `outputs` NamedTuple. The regularization term is based on
+the entropy of the Gaussian distributions.
 
-Given a Gaussian with standard deviation σ, its entropy is: H(σ) = 0.5 *
-log(2πeσ²)
+Given a Gaussian with standard deviation σ, its entropy is: H(σ) = 0.5 * n * (1
++ log(2π)) + 0.5 * sum(log(σ²))
 
 Regularizing by this quantity encourages the model to find a balance in the
 uncertainty it expresses, preventing it from being either too certain or too
 uncertain.
 
 # Arguments
-- `vae_output::Dict{Symbol, Any}`: A dictionary containing VAE outputs.
-- `target::Symbol`: The key in `vae_output` specifying which
-  Gaussian-distributed variable's entropy to compute. For a VAE, valid targets
-  are `:encoder_logσ` or `:decoder_logσ`.
+- `outputs::NamedTuple`: A NamedTuple containing VAE outputs.
+
+## Optional Keyword Arguments
+- `reg_terms::Vector{Symbol}`: The keys in `outputs` specifying which
+  Gaussian-distributed variables' entropy to compute. For a VAE, valid targets
+  are `:encoder_logσ`, `:decoder_logσ`, and `:decoder_σ`.
 
 # Returns
 - `entropy_reg::Float32`: The computed entropy regularization term for the
-  specified target.
+  specified targets.
 
 # Notes
-- Ensure that the target exists within the `vae_output` dictionary and is a
-  valid target.
+- Ensure that all keys in `reg_terms` exist within the `outputs` NamedTuple.
+- The entropy is computed in the log-space for `:encoder_logσ` and
+  `:decoder_logσ`, and in the original space for `:decoder_σ`.
 """
 function entropy_regularization(
-    vae_output::Dict{Symbol,<:Any}, target::Symbol
+    outputs::NamedTuple; reg_terms::Vector{Symbol}=[:encoder_logσ]
 )::Float32
-    # Check if the target is valid
-    if !(target in [:encoder_logσ, :decoder_logσ])
+    # List possible targets
+    targets = [:encoder_logσ, :decoder_logσ, :decoder_σ]
+
+    # Check if reg_terms are valid
+    if !any(term in targets for term in reg_terms)
         throw(ArgumentError("The specified target is not valid. Valid " *
-                            "targets  are :encoder_logσ and :decoder_logσ."))
+                            "targets  are $(targets)."))
     end
 
-    # Check if the target exists in the vae_output
-    if !haskey(vae_output, target)
-        throw(
-            ArgumentError("The specified target does not exist in vae_output.")
-        )
-    end
+    # Ensure all keys in reg_terms are in outputs
+    if !all(key ∈ keys(outputs) for key in reg_terms)
+        throw(ArgumentError("All keys in reg_terms must exist in outputs!"))
+    end # if
 
-    # Extract the log variance from the vae_output
-    logσ = vae_output[target]
+    # Initialize array to store entropy values
+    entropy = Vector{Float32}(undef, length(reg_terms))
 
-    # Compute the entropy of the Gaussian distribution
-    entropy = 0.5f0 * (log(2π) + 1 + 2 * logσ)
+    # Loop through reg_terms
+    for (i, term) in enumerate(reg_terms)
+        # Check term
+        if term == :decoder_σ
+            # Compute the entropy of the Gaussian distribution
+            # H(X) = 0.5 * n * (1 + log(2π)) + 0.5 * sum(log(diagonal_elements))
+            entropy[i] = 0.5f0 * length(outputs[term]) * (1 + log(2π)) +
+                         0.5f0 * sum(log.(outputs[term]))
+        else
+            # Compute the entropy of the Gaussian distribution
+            # H(X) = 0.5 * n * (1 + log(2π)) + 0.5 * sum(log(diagonal_elements))
+            entropy[i] = 0.5f0 * (length(outputs[term])) * (1 + log(2π)) +
+                         0.5f0 * sum(outputs[term])
+        end # if
+    end # for
 
-    return entropy
+    return sum(entropy)
 end # function
