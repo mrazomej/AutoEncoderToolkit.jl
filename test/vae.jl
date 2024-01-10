@@ -4,6 +4,7 @@ println("Testing VAEs module:\n")
 
 # Import AutoEncode.jl module to be tested
 import AutoEncode.VAEs
+import AutoEncode.regularization
 # Import Flux library
 import Flux
 
@@ -350,13 +351,36 @@ end # @testset "VAE Forward Pass"
             @testset "vector input" begin
                 result = VAEs.loss(vae, x_vector)
                 @test isa(result, Float32)
+                result = VAEs.loss(vae, x_vector, x_vector)
+                @test isa(result, Float32)
+
             end # vector input
 
             # Test with matrix input
             @testset "matrix input" begin
                 result = VAEs.loss(vae, x_matrix)
                 @test isa(result, Float32)
+                result = VAEs.loss(vae, x_matrix, x_matrix)
+                @test isa(result, Float32)
+
             end # matrix input
+
+            # Test with regularization function
+            @testset "with regularization" begin
+                reg_function = regularization.l2_regularization
+                reg_kwargs = Dict(:reg_terms => [:encoder_μ, :encoder_logσ])
+                result = VAEs.loss(
+                    vae, x_vector;
+                    reg_function=reg_function, reg_kwargs=reg_kwargs
+                )
+                @test isa(result, Float32)
+
+                result = VAEs.loss(
+                    vae, x_vector, x_vector;
+                    reg_function=reg_function, reg_kwargs=reg_kwargs
+                )
+                @test isa(result, Float32)
+            end # with regularization
         end # loss function
     end # for decoder in decoders
 end # @testset "loss function"
@@ -371,41 +395,97 @@ end # @testset "loss function"
     # Define batch of data
     x_matrix = data
 
-    # Loop through decoders
-    for decoder in decoders
-        # Define VAE with any decoder
-        vae = deepcopy(joint_log_encoder) * decoder
+    @testset "without regularization" begin
+        # Loop through decoders
+        for decoder in decoders
+            # Define VAE with any decoder
+            vae = deepcopy(joint_log_encoder) * decoder
 
-        # Explicit setup of optimizer
-        opt_state = Flux.Train.setup(
-            Flux.Optimisers.Adam(1E-3),
-            vae
-        )
+            # Explicit setup of optimizer
+            opt_state = Flux.Train.setup(
+                Flux.Optimisers.Adam(1E-3),
+                vae
+            )
 
-        # Extract parameters
-        params_init = deepcopy(Flux.params(vae))
+            # Extract parameters
+            params_init = deepcopy(Flux.params(vae))
 
-        # Loop through a couple of epochs
-        losses = Float32[]  # Track the loss
-        for epoch = 1:n_epochs
-            Random.seed!(42)
-            # Test training function
-            VAEs.train!(vae, data, opt_state)
-            push!(losses, VAEs.loss(vae, data))
-        end
+            # Loop through a couple of epochs
+            losses = Float32[]  # Track the loss
+            for epoch = 1:n_epochs
+                Random.seed!(42)
+                # Test training function
+                VAEs.train!(vae, data, opt_state)
+                push!(losses, VAEs.loss(vae, data))
+            end
 
-        # Check if loss is decreasing
-        @test all(diff(losses) ≠ 0)
+            # Check if loss is decreasing
+            @test all(diff(losses) ≠ 0)
 
-        # Extract modified parameters
-        params_end = deepcopy(Flux.params(vae))
+            # Extract modified parameters
+            params_end = deepcopy(Flux.params(vae))
 
-        # Check that parameters have significantly changed
-        threshold = 1e-5
-        # Check if any parameter has changed significantly
-        @test all([
-            all(abs.(x .- y) .> threshold)
-            for (x, y) in zip(params_init, params_end)
-        ])
-    end # for decoder in decoders
+            # Check that parameters have significantly changed
+            threshold = 1e-5
+            # Check if any parameter has changed significantly
+            @test all([
+                all(abs.(x .- y) .> threshold)
+                for (x, y) in zip(params_init, params_end)
+            ])
+        end # for decoder in decoders
+    end # @testset "without regularization"
+
+    @testset "with regularization" begin
+        reg_function = regularization.l2_regularization
+        reg_kwargs = Dict(:reg_terms => [:encoder_μ, :encoder_logσ])
+        # Loop through decoders
+        for decoder in decoders
+            # Define VAE with any decoder
+            vae = deepcopy(joint_log_encoder) * decoder
+
+            # Explicit setup of optimizer
+            opt_state = Flux.Train.setup(
+                Flux.Optimisers.Adam(1E-3),
+                vae
+            )
+
+            # Extract parameters
+            params_init = deepcopy(Flux.params(vae))
+
+            # Loop through a couple of epochs
+            losses = Float32[]  # Track the loss
+            for epoch = 1:n_epochs
+                Random.seed!(42)
+                # Test training function
+                VAEs.train!(
+                    vae, data, opt_state;
+                    loss_kwargs=Dict(
+                        :reg_function => reg_function,
+                        :reg_kwargs => reg_kwargs
+                    )
+                )
+                push!(
+                    losses,
+                    VAEs.loss(
+                        vae, data;
+                        reg_function=reg_function, reg_kwargs=reg_kwargs
+                    )
+                )
+            end
+
+            # Check if loss is decreasing
+            @test all(diff(losses) ≠ 0)
+
+            # Extract modified parameters
+            params_end = deepcopy(Flux.params(vae))
+
+            # Check that parameters have significantly changed
+            threshold = 1e-5
+            # Check if any parameter has changed significantly
+            @test all([
+                all(abs.(x .- y) .> threshold)
+                for (x, y) in zip(params_init, params_end)
+            ])
+        end # for decoder in decoders
+    end # @testset "without regularization"
 end # @testset "VAE training"

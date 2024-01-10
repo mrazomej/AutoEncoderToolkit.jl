@@ -2198,8 +2198,8 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    `loss(vae, x; σ=1.0f0, β=1.0f0, n_samples=1, regularization=nothing, 
-        reg_strength=1.0f0)`
+        `loss(vae, x; β=1.0f0, n_samples=1, reg_function=nothing, reg_kwargs=Dict(), 
+                reg_strength=1.0f0)`
 
 Computes the loss for the variational autoencoder (VAE) by averaging over
 `n_samples` latent space samples.
@@ -2218,15 +2218,19 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
 - `x::AbstractVecOrMat{Float32}`: Input data. Each column represents a single
-  data point.
+    data point.
 
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. Should return a Float32.
+- `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
+  regularization term based on the VAE outputs. Should return a Float32. This
+  function must take as input the VAE outputs and the keyword arguments provided
+  in `reg_kwargs`.
+- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+  regularization function.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
@@ -2236,14 +2240,15 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 
 # Note
 - Ensure that the input data `x` matches the expected input dimensionality for
-  the encoder in the VAE.
+    the encoder in the VAE.
 """
 function loss(
     vae::VAE,
     x::AbstractVecOrMat{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
-    regularization::Union{Function,Nothing}=nothing,
+    reg_function::Union{Function,Nothing}=nothing,
+    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input through reconstruct function with n_samples)
@@ -2261,7 +2266,8 @@ function loss(
     )
 
     # Compute regularization term if regularization function is provided
-    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+    reg_term = (reg_function !== nothing) ?
+               reg_function(vae_outputs; reg_kwargs...) : 0.0f0
 
     # Compute average loss function
     return -log_likelihood + β * kl_div + reg_strength * reg_term
@@ -2297,8 +2303,12 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   annealing.
 - `n_samples::Int=1`: The number of samples to draw from the latent space when
   computing the loss.
-- `regularization::Union{Function, Nothing}=nothing`: A function that computes
-  the regularization term based on the VAE outputs. Should return a Float32.
+- `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
+  regularization term based on the VAE outputs. Should return a Float32. This
+  function must take as input the VAE outputs and the keyword arguments provided
+  in `reg_kwargs`.
+- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+  regularization function.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 
 # Returns
@@ -2316,7 +2326,8 @@ function loss(
     x_out::AbstractVecOrMat{Float32};
     β::Float32=1.0f0,
     n_samples::Int=1,
-    regularization::Union{Function,Nothing}=nothing,
+    reg_function::Union{Function,Nothing}=nothing,
+    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input through reconstruct function with n_samples)
@@ -2334,7 +2345,8 @@ function loss(
     )
 
     # Compute regularization term if regularization function is provided
-    reg_term = (regularization !== nothing) ? regularization(outputs) : 0.0f0
+    reg_term = (reg_function !== nothing) ?
+               reg_function(vae_outputs; reg_kwargs...) : 0.0f0
 
     # Compute loss function
     return -log_likelihood + β * kl_div + reg_strength * reg_term
