@@ -577,7 +577,7 @@ end # @testset "loss"
         )
 
         # Loop through decoders
-        for decoder in decoders[1:2]
+        for decoder in decoders
             # Define HVAE with any decoder
             hvae = HVAEs.HVAE(deepcopy(joint_log_encoder) * deepcopy(decoder))
 
