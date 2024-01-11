@@ -231,13 +231,10 @@ end # @testset "SphericalPrior function"
 
     # Loop through decoders
     for decoder in decoders
-        # Build HVAE
-        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-
         # Test with default decoder distribution and prior
         @testset "default decoder distribution and prior" begin
             # Build potential energy function
-            U = HVAEs.potential_energy(hvae)
+            U = HVAEs.potential_energy(decoder)
             # Check type of potential energy function
             @test typeof(U) <: Function
             # Evaluate potential energy function
@@ -253,7 +250,7 @@ end # @testset "SphericalPrior function"
             prior_dist(z) = HVAEs.SphericalPrior(z, 0.5f0)
             # Build potential energy function
             U = HVAEs.potential_energy(
-                hvae; decoder_dist=decoder_dist, prior=prior_dist
+                decoder; decoder_dist=decoder_dist, prior=prior_dist
             )
             # Check type of potential energy function
             @test typeof(U) <: Function
@@ -274,25 +271,21 @@ end # @testset "potential_energy function"
 
     # Loop through decoders
     for decoder in decoders
-        # Build HVAE
-        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+        # Build potential energy gradient function
+        ∇U = HVAEs.∇potential_energy(decoder)
 
         # Test with default potential energy function and its arguments
         @testset "default potential energy function and its arguments" begin
             @testset "single data point" begin
                 # Compute leapfrog step
-                z̄, ρ̄ = HVAEs.leapfrog_step(
-                    hvae, x_vector, z_vector, ρ_vector, ϵ
-                )
+                z̄, ρ̄ = HVAEs.leapfrog_step(x_vector, z_vector, ρ_vector, ϵ, ∇U)
                 @test isa(z̄, AbstractVector{Float32})
                 @test isa(ρ̄, AbstractVector{Float32})
             end # @testset "single data point"
 
             @testset "multiple data points" begin
                 # Compute leapfrog step
-                z̄, ρ̄ = HVAEs.leapfrog_step(
-                    hvae, x_matrix, z_matrix, ρ_matrix, ϵ
-                )
+                z̄, ρ̄ = HVAEs.leapfrog_step(x_matrix, z_matrix, ρ_matrix, ϵ, ∇U)
                 @test isa(z̄, AbstractMatrix{Float32})
                 @test isa(ρ̄, AbstractMatrix{Float32})
             end # @testset "multiple data points
@@ -303,14 +296,15 @@ end # @testset "potential_energy function"
         @testset "custom potential energy function and its arguments" begin
             # Define custom potential energy function kwargs
             prior_dist(z) = HVAEs.SphericalPrior(z, 0.5f0)
-            potential_energy_kwargs = (
-                decoder_dist=HVAEs.MvDiagGaussianDecoder, prior=prior_dist
+
+            # Build potential energy gradient function
+            ∇U = HVAEs.∇potential_energy(
+                decoder;
+                potential_energy_kwargs=Dict(:prior => prior_dist)
             )
+
             # Compute leapfrog step
-            z̄, ρ̄ = HVAEs.leapfrog_step(
-                hvae, x_vector, z_vector, ρ_vector, ϵ;
-                potential_energy_kwargs=potential_energy_kwargs
-            )
+            z̄, ρ̄ = HVAEs.leapfrog_step(x_vector, z_vector, ρ_vector, ϵ, ∇U)
             @test isa(z̄, AbstractVector{Float32})
             @test isa(ρ̄, AbstractVector{Float32})
         end
@@ -350,13 +344,13 @@ using Test
 
     # Loop through decoders
     for decoder in decoders
-        # Build HVAE
-        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+        # Build potential energy gradient function
+        ∇U = HVAEs.∇potential_energy(decoder)
 
         # Test the version of the function that accepts AbstractVector inputs
         @testset "single input" begin
             result = HVAEs.leapfrog_tempering_step(
-                hvae, x_vector, z_vector, K, ϵ, βₒ
+                x_vector, z_vector, K, ϵ, βₒ, ∇U
             )
             @test result.z_init == z_vector
             @test isa(result.ρ_init, AbstractVector)
@@ -367,7 +361,7 @@ using Test
         # Test the version of the function that accepts AbstractMatrix inputs
         @testset "multiple inputs" begin
             result = HVAEs.leapfrog_tempering_step(
-                hvae, x_matrix, z_matrix, K, ϵ, βₒ
+                x_matrix, z_matrix, K, ϵ, βₒ, ∇U
             )
             @test result.z_init == z_matrix
             @test isa(result.ρ_init, AbstractMatrix)
@@ -385,63 +379,125 @@ end # @testset "leapfrog_tempering_step function"
     ϵ = 0.01f0
     βₒ = 1.0f0
 
-    # Test with latent=true
-    @testset "latent=false" begin
-        # Loop through decoders
-        for decoder in decoders
-            # Define VAE
-            hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+    @testset "Without ∇U provided" begin
+        @testset "latent=false" begin
+            # Loop through decoders
+            for decoder in decoders
+                # Define VAE
+                hvae = HVAEs.HVAE(joint_log_encoder * decoder)
 
-            @testset "single input" begin
-                # Test with single data point
-                result = hvae(x_vector, K, ϵ, βₒ; latent=false)
-                # Check type of decoder
-                if isa(decoder, VAEs.SimpleDecoder)
-                    @test typeof(result) <: AbstractVector{Float32}
-                else
-                    @test typeof(result) <: Tuple{
-                        <:AbstractVector{Float32},<:AbstractVector{Float32}
-                    }
-                end # if isa(decoder, VAEs.SimpleDecoder)
-            end # @testset "single input"
+                @testset "single input" begin
+                    # Test with single data point
+                    result = hvae(x_vector, K, ϵ, βₒ; latent=false)
+                    # Check type of decoder
+                    if isa(decoder, VAEs.SimpleDecoder)
+                        @test typeof(result) <: AbstractVector{Float32}
+                    else
+                        @test typeof(result) <: Tuple{
+                            <:AbstractVector{Float32},<:AbstractVector{Float32}
+                        }
+                    end # if isa(decoder, VAEs.SimpleDecoder)
+                end
 
-            @testset "multiple inputs" begin
-                # Test with multiple data points
-                result = hvae(x_matrix, K, ϵ, βₒ; latent=false)
-                # Check type of decoder
-                if isa(decoder, VAEs.SimpleDecoder)
-                    @test typeof(result) <: AbstractMatrix{Float32}
-                else
-                    @test typeof(result) <: Tuple{
-                        <:AbstractMatrix{Float32},<:AbstractMatrix{Float32}
-                    }
-                end # if
-            end # @testset "multiple inputs"
-        end # for decoder in decoders
-    end # @testset "latent=false"
+                @testset "multiple inputs" begin
+                    # Test with multiple data points
+                    result = hvae(x_matrix, K, ϵ, βₒ; latent=false)
+                    # Check type of decoder
+                    if isa(decoder, VAEs.SimpleDecoder)
+                        @test typeof(result) <: AbstractMatrix{Float32}
+                    else
+                        @test typeof(result) <: Tuple{
+                            <:AbstractMatrix{Float32},<:AbstractMatrix{Float32}
+                        }
+                    end # if isa(decoder, VAEs.SimpleDecoder)
+                end
+            end
+        end
 
-    @testset "latent=true" begin
-        # Loop through decoders
-        for decoder in decoders
-            # Define VAE
-            hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+        @testset "latent=true" begin
+            # Loop through decoders
+            for decoder in decoders
+                # Define VAE
+                hvae = HVAEs.HVAE(joint_log_encoder * decoder)
 
-            @testset "single input" begin
-                # Test with single data point
-                result = hvae(x_vector, K, ϵ, βₒ; latent=true)
-                @test isa(result, NamedTuple)
-                @test all(isa.(values(result), AbstractVector{Float32}))
-            end # @testset "single input"
+                @testset "single input" begin
+                    # Test with single data point
+                    result = hvae(x_vector, K, ϵ, βₒ; latent=true)
+                    @test isa(result, NamedTuple)
+                    @test all(isa.(values(result), AbstractVector{Float32}))
+                end
 
-            @testset "multiple inputs" begin
-                # Test with multiple data points
-                result = hvae(x_matrix, K, ϵ, βₒ; latent=true)
-                @test isa(result, NamedTuple)
-                @test all(isa.(values(result), AbstractMatrix{Float32}))
-            end # @testset "multiple inputs"
-        end # for decoder in decoders
-    end # @testset "latent=true"
-end # @testset "HVAE Forward Pass"
+                @testset "multiple inputs" begin
+                    # Test with multiple data points
+                    result = hvae(x_matrix, K, ϵ, βₒ; latent=true)
+                    @test isa(result, NamedTuple)
+                    @test all(isa.(values(result), AbstractMatrix{Float32}))
+                end
+            end
+        end
+    end
+
+    @testset "With ∇U provided" begin
+        # Define ∇U
+        ∇U = HVAEs.∇potential_energy(hvae.vae.decoder)
+
+        @testset "latent=false" begin
+            # Loop through decoders
+            for decoder in decoders
+                # Define VAE
+                hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+
+                @testset "single input" begin
+                    # Test with single data point
+                    result = hvae(x_vector, K, ϵ, βₒ, ∇U; latent=false)
+                    # Check type of decoder
+                    if isa(decoder, VAEs.SimpleDecoder)
+                        @test typeof(result) <: AbstractVector{Float32}
+                    else
+                        @test typeof(result) <: Tuple{
+                            <:AbstractVector{Float32},<:AbstractVector{Float32}
+                        }
+                    end # if isa(decoder, VAEs.SimpleDecoder)
+                end
+
+                @testset "multiple inputs" begin
+                    # Test with multiple data points
+                    result = hvae(x_matrix, K, ϵ, βₒ, ∇U; latent=false)
+                    # Check type of decoder
+                    if isa(decoder, VAEs.SimpleDecoder)
+                        @test typeof(result) <: AbstractMatrix{Float32}
+                    else
+                        @test typeof(result) <: Tuple{
+                            <:AbstractMatrix{Float32},<:AbstractMatrix{Float32}
+                        }
+                    end # if isa(decoder, VAEs.SimpleDecoder)
+                end
+            end
+        end
+
+        @testset "latent=true" begin
+            # Loop through decoders
+            for decoder in decoders
+                # Define VAE
+                hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+
+                @testset "single input" begin
+                    # Test with single data point
+                    result = hvae(x_vector, K, ϵ, βₒ, ∇U; latent=true)
+                    @test isa(result, NamedTuple)
+                    @test all(isa.(values(result), AbstractVector{Float32}))
+                end
+
+                @testset "multiple inputs" begin
+                    # Test with multiple data points
+                    result = hvae(x_matrix, K, ϵ, βₒ, ∇U; latent=true)
+                    @test isa(result, NamedTuple)
+                    @test all(isa.(values(result), AbstractMatrix{Float32}))
+                end
+            end
+        end
+    end
+end
 
 ## =============================================================================
 
@@ -451,23 +507,49 @@ end # @testset "HVAE Forward Pass"
     ϵ = 0.01f0
     βₒ = 1.0f0
 
-    # Loop through decoders
-    for decoder in decoders
-        # Define HVAE
-        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+    @testset "Without U and ∇U provided" begin
+        # Loop through decoders
+        for decoder in decoders
+            # Define VAE
+            hvae = HVAEs.HVAE(joint_log_encoder * decoder)
 
-        # Test with vector input
-        @testset "vector input" begin
-            result = HVAEs.hamiltonian_elbo(hvae, x_vector)
-            @test isa(result, Float32)
-        end # vector input
+            # Test with vector input
+            @testset "vector input" begin
+                result = HVAEs.hamiltonian_elbo(hvae, x_vector)
+                @test isa(result, Float32)
+            end # vector input
 
-        # Test with matrix input
-        @testset "matrix input" begin
-            result = HVAEs.hamiltonian_elbo(hvae, x_matrix)
-            @test isa(result, Float32)
-        end # matrix input
-    end # for decoder in decoders
+            # Test with matrix input
+            @testset "matrix input" begin
+                result = HVAEs.hamiltonian_elbo(hvae, x_matrix)
+                @test isa(result, Float32)
+            end # matrix input
+        end # for decoder in decoders
+    end # @testset "Without U and ∇U provided"
+
+    @testset "With U and ∇U provided" begin
+        # Loop through decoders
+        for decoder in decoders
+            # Define U
+            U = HVAEs.potential_energy(decoder)
+            # Define ∇U
+            ∇U = HVAEs.∇potential_energy(decoder)
+            # Define VAE
+            hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+
+            # Test with vector input
+            @testset "vector input" begin
+                result = HVAEs.hamiltonian_elbo(hvae, U, ∇U, x_vector)
+                @test isa(result, Float32)
+            end # vector input
+
+            # Test with matrix input
+            @testset "matrix input" begin
+                result = HVAEs.hamiltonian_elbo(hvae, U, ∇U, x_matrix)
+                @test isa(result, Float32)
+            end # matrix input
+        end # for decoder in decoders
+    end # @testset "With U and ∇U provided"
 end # @testset "hamiltonian_elbo"
 
 ## =============================================================================
