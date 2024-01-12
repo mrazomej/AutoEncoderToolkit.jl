@@ -1416,7 +1416,7 @@ function hamiltonian_elbo(
     # log q̄ = log q(zₒ) + log p(ρₒ)
     log_q̄ = Distributions.logpdf(
         Distributions.MvNormal(
-            hvae_outputs.encoder_µ, hvae_outputs.encoder_logσ
+            hvae_outputs.encoder_µ, exp.(hvae_outputs.encoder_logσ)
         ),
         zₒ
     ) + Distributions.logpdf(SphericalPrior(ρₒ, βₒ^-1), ρₒ) -
@@ -1553,7 +1553,7 @@ function hamiltonian_elbo(
         log_q̄ = Distributions.logpdf(
             Distributions.MvNormal(
                 hvae_outputs.encoder_µ[:, i],
-                hvae_outputs.encoder_logσ[:, i]
+                exp.(hvae_outputs.encoder_logσ[:, i])
             ),
             zₒ[:, i]
         ) + Distributions.logpdf(SphericalPrior(ρₒ[:, i], βₒ^-1), ρₒ[:, i]) -
