@@ -1419,7 +1419,8 @@ function hamiltonian_elbo(
             hvae_outputs.encoder_µ, hvae_outputs.encoder_logσ
         ),
         zₒ
-    ) + Distributions.logpdf(SphericalPrior(ρₒ, βₒ^-1), ρₒ)
+    ) + Distributions.logpdf(SphericalPrior(ρₒ, βₒ^-1), ρₒ) -
+             0.5f0 * length(zₒ) * log(βₒ)
 
     if return_outputs
         return log_p̄ - log_q̄, hvae_outputs
@@ -1555,7 +1556,8 @@ function hamiltonian_elbo(
                 hvae_outputs.encoder_logσ[:, i]
             ),
             zₒ[:, i]
-        ) + Distributions.logpdf(SphericalPrior(ρₒ[:, i], βₒ^-1), ρₒ[:, i])
+        ) + Distributions.logpdf(SphericalPrior(ρₒ[:, i], βₒ^-1), ρₒ[:, i]) -
+                 0.5f0 * size(zₒ, 1) * log(βₒ)
 
         # Update ELBO
         elbo += log_p̄ - log_q̄

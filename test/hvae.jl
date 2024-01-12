@@ -397,7 +397,7 @@ end # @testset "leapfrog_tempering_step function"
                             <:AbstractVector{Float32},<:AbstractVector{Float32}
                         }
                     end # if isa(decoder, VAEs.SimpleDecoder)
-                end
+                end # @testset "single input"
 
                 @testset "multiple inputs" begin
                     # Test with multiple data points
@@ -410,9 +410,9 @@ end # @testset "leapfrog_tempering_step function"
                             <:AbstractMatrix{Float32},<:AbstractMatrix{Float32}
                         }
                     end # if isa(decoder, VAEs.SimpleDecoder)
-                end
-            end
-        end
+                end # @testset "multiple inputs"
+            end # for decoder in decoders
+        end # @testset "latent=false"
 
         @testset "latent=true" begin
             # Loop through decoders
@@ -425,28 +425,26 @@ end # @testset "leapfrog_tempering_step function"
                     result = hvae(x_vector, K, ϵ, βₒ; latent=true)
                     @test isa(result, NamedTuple)
                     @test all(isa.(values(result), AbstractVector{Float32}))
-                end
+                end # @testset "single input"
 
                 @testset "multiple inputs" begin
                     # Test with multiple data points
                     result = hvae(x_matrix, K, ϵ, βₒ; latent=true)
                     @test isa(result, NamedTuple)
                     @test all(isa.(values(result), AbstractMatrix{Float32}))
-                end
-            end
-        end
-    end
+                end # @testset "multiple inputs"
+            end # for decoder in decoders
+        end # @testset "latent=true"
+    end # @testset "Without ∇U provided"
 
     @testset "With ∇U provided" begin
-        # Define ∇U
-        ∇U = HVAEs.∇potential_energy(hvae.vae.decoder)
-
         @testset "latent=false" begin
             # Loop through decoders
             for decoder in decoders
                 # Define VAE
                 hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-
+                # Define ∇U
+                ∇U = HVAEs.∇potential_energy(hvae.vae.decoder)
                 @testset "single input" begin
                     # Test with single data point
                     result = hvae(x_vector, K, ϵ, βₒ, ∇U; latent=false)
@@ -458,7 +456,7 @@ end # @testset "leapfrog_tempering_step function"
                             <:AbstractVector{Float32},<:AbstractVector{Float32}
                         }
                     end # if isa(decoder, VAEs.SimpleDecoder)
-                end
+                end # @testset "single input"
 
                 @testset "multiple inputs" begin
                     # Test with multiple data points
@@ -471,9 +469,9 @@ end # @testset "leapfrog_tempering_step function"
                             <:AbstractMatrix{Float32},<:AbstractMatrix{Float32}
                         }
                     end # if isa(decoder, VAEs.SimpleDecoder)
-                end
-            end
-        end
+                end # @testset "multiple inputs"
+            end # for decoder in decoders
+        end # @testset "latent=false"
 
         @testset "latent=true" begin
             # Loop through decoders
@@ -481,23 +479,26 @@ end # @testset "leapfrog_tempering_step function"
                 # Define VAE
                 hvae = HVAEs.HVAE(joint_log_encoder * decoder)
 
+                # Define ∇U
+                ∇U = HVAEs.∇potential_energy(decoder)
+
                 @testset "single input" begin
                     # Test with single data point
                     result = hvae(x_vector, K, ϵ, βₒ, ∇U; latent=true)
                     @test isa(result, NamedTuple)
                     @test all(isa.(values(result), AbstractVector{Float32}))
-                end
+                end # @testset "single input"
 
                 @testset "multiple inputs" begin
                     # Test with multiple data points
                     result = hvae(x_matrix, K, ϵ, βₒ, ∇U; latent=true)
                     @test isa(result, NamedTuple)
                     @test all(isa.(values(result), AbstractMatrix{Float32}))
-                end
-            end
-        end
-    end
-end
+                end # @testset "multiple inputs"
+            end # for decoder in decoders
+        end # @testset "latent=true"
+    end # @testset "With ∇U provided"
+end # @testset "HVAE Forward Pass"
 
 ## =============================================================================
 
