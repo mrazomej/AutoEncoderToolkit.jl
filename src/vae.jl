@@ -16,8 +16,8 @@ import CUDA
 
 using ..AutoEncode: AbstractAutoEncoder, AbstractVariationalAutoEncoder,
     AbstractEncoder, AbstractDecoder, AbstractVariationalEncoder,
-    AbstractVariationalDecoder, AbstractVariationalLogDecoder,
-    AbstractVariationalLinearDecoder, Float32Array
+    AbstractVariationalDecoder, AbstractGaussianLogDecoder,
+    AbstractGaussianLinearDecoder, Float32Array
 
 # Export functions to use elsewhere
 export reparameterize, reconstruction_gaussian_decoder, kl_gaussian_encoder
@@ -692,7 +692,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    JointLogDecoder <: AbstractVariationalLogDecoder
+    JointLogDecoder <: AbstractGaussianLogDecoder
 
 An extended decoder structure for VAEs that incorporates separate layers for
 mapping from the latent space to both its mean (`µ`) and log standard deviation
@@ -711,7 +711,7 @@ mapping from the latent space to both its mean (`µ`) and log standard deviation
 is used initially, and then splits into two separate paths for determining both
 the mean and log standard deviation of the latent space.
 """
-mutable struct JointLogDecoder <: AbstractVariationalLogDecoder
+mutable struct JointLogDecoder <: AbstractGaussianLogDecoder
     decoder::Flux.Chain
     µ::Flux.Dense
     logσ::Flux.Dense
@@ -974,7 +974,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    JointDecoder <: AbstractVariationalLinearDecoder
+    JointDecoder <: AbstractGaussianLinearDecoder
 
 An extended decoder structure for VAEs that incorporates separate layers for
 mapping from the latent space to both its mean (`µ`) and standard deviation
@@ -993,7 +993,7 @@ mapping from the latent space to both its mean (`µ`) and standard deviation
 is used initially, and then splits into two separate paths for determining both
 the mean and standard deviation of the latent space.
 """
-mutable struct JointDecoder <: AbstractVariationalLinearDecoder
+mutable struct JointDecoder <: AbstractGaussianLinearDecoder
     decoder::Flux.Chain
     µ::Flux.Dense
     σ::Flux.Dense
@@ -1250,11 +1250,11 @@ function (decoder::JointDecoder)(
 end # function
 
 # ==============================================================================
-# struct SplitLogDecoder <: AbstractVariationalLogDecoder
+# struct SplitLogDecoder <: AbstractGaussianLogDecoder
 # ==============================================================================
 
 @doc raw"""
-    SplitLogDecoder <: AbstractVariationalLogDecoder
+    SplitLogDecoder <: AbstractGaussianLogDecoder
 
 A specialized decoder structure for VAEs that uses distinct neural networks for
 determining the mean (`µ`) and log standard deviation (`logσ`) of the latent
@@ -1272,7 +1272,7 @@ networks are preferred for computing the mean and log standard deviation,
 ensuring that each has its own distinct set of parameters and transformation
 logic.
 """
-mutable struct SplitLogDecoder <: AbstractVariationalLogDecoder
+mutable struct SplitLogDecoder <: AbstractGaussianLogDecoder
     µ::Flux.Chain
     logσ::Flux.Chain
 end
@@ -1455,11 +1455,11 @@ function (decoder::SplitLogDecoder)(
 end # function
 
 # ==============================================================================
-# struct SplitDecoder <: AbstractVariationalLinearDecoder
+# struct SplitDecoder <: AbstractGaussianLinearDecoder
 # ==============================================================================
 
 @doc raw"""
-    SplitDecoder <: AbstractVariationalLinearDecoder
+    SplitDecoder <: AbstractGaussianLinearDecoder
 
 A specialized decoder structure for VAEs that uses distinct neural networks for
 determining the mean (`µ`) and standard deviation (`logσ`) of the latent space.
@@ -1476,7 +1476,7 @@ networks are preferred for computing the mean and log standard deviation,
 ensuring that each has its own distinct set of parameters and transformation
 logic.
 """
-mutable struct SplitDecoder <: AbstractVariationalLinearDecoder
+mutable struct SplitDecoder <: AbstractGaussianLinearDecoder
     µ::Flux.Chain
     σ::Flux.Chain
 end
@@ -1768,10 +1768,10 @@ end # function
         (vae::VAE{JointLogEncoder,T})(
                 x::AbstractVecOrMat{Float32}; 
                 prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
-                latent::Bool=false, n_samples::Int=1) where {T<:AbstractVariationalLogDecoder}
+                latent::Bool=false, n_samples::Int=1) where {T<:AbstractGaussianLogDecoder}
 
 Processes the input data `x` through a VAE, consisting of an
-`AbstractVariationalLogDecoder`.
+`AbstractGaussianLogDecoder`.
 
 # Arguments
 - `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
@@ -1808,7 +1808,7 @@ function (vae::VAE{JointLogEncoder,T})(
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
     n_samples::Int=1
-) where {T<:AbstractVariationalLogDecoder}
+) where {T<:AbstractGaussianLogDecoder}
     # Run input through encoder to obtain mean and log std
     encoder_µ, encoder_logσ = vae.encoder(x)
 
@@ -1841,10 +1841,10 @@ end # function
         x::AbstractVecOrMat{Float32}; 
         prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
         latent::Bool=false, n_samples::Int=1) 
-        where {T<:AbstractVariationalLinearDecoder}
+        where {T<:AbstractGaussianLinearDecoder}
 
 Processes the input data `x` through a VAE, consisting of an
-`AbstractVariationalLinearDecoder`.
+`AbstractGaussianLinearDecoder`.
 
 # Arguments
 - `x::AbstractVecOrMat{Float32}`: The data to be decoded. This can be a vector
@@ -1881,7 +1881,7 @@ function (vae::VAE{JointLogEncoder,T})(
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
     n_samples::Int=1
-) where {T<:AbstractVariationalLinearDecoder}
+) where {T<:AbstractGaussianLinearDecoder}
     # Run input through encoder to obtain mean and log std
     encoder_µ, encoder_logσ = vae.encoder(x)
 
@@ -2005,7 +2005,7 @@ from the latent space to the parameters (`decoder_µ`, `decoder_σ`) is done by
 the specified `decoder`.
 
 # Arguments
-- `decoder::T`: Decoder network of type `AbstractVariationalLinearDecoder`,
+- `decoder::T`: Decoder network of type `AbstractGaussianLinearDecoder`,
   which is assumed to have already mapped the latent variables to the parameters
   of the Gaussian distribution.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
@@ -2033,7 +2033,7 @@ function reconstruction_gaussian_decoder(
     x::AbstractVecOrMat{Float32},
     vae_outputs::NamedTuple;
     n_samples::Int=1
-) where {T<:AbstractVariationalLinearDecoder}
+) where {T<:AbstractGaussianLinearDecoder}
     # Compute batch size
     batch_size = size(x, 2)
 
@@ -2075,7 +2075,7 @@ autoencoder, where the decoder outputs log standard deviations instead of
 standard deviations.
 
 # Arguments
-- `decoder::T`: Decoder network of type `AbstractVariationalLogDecoder`, which
+- `decoder::T`: Decoder network of type `AbstractGaussianLogDecoder`, which
   outputs the log of the standard deviation of the Gaussian distribution.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
@@ -2101,7 +2101,7 @@ function reconstruction_gaussian_decoder(
     x::AbstractVecOrMat{Float32},
     vae_outputs::NamedTuple;
     n_samples::Int=1
-) where {T<:AbstractVariationalLogDecoder}
+) where {T<:AbstractGaussianLogDecoder}
     # Compute batch size
     batch_size = size(x, 2)
 

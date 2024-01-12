@@ -173,8 +173,24 @@ types.
 """
 abstract type AbstractVariationalDecoder <: AbstractDecoder end
 
+@doc raw"""
+    AbstractGaussianDecoder <: AbstractVariationalDecoder
+
+This is an abstract type that serves as a parent for all Gaussian decoder models
+in this package.
+
+A Gaussian decoder is a type of variational decoder that maps the
+lower-dimensional latent variables to the parameters of a Gaussian distribution
+from which the reconstructed input data is sampled. This introduces
+stochasticity into the model.
+
+Subtypes of this abstract type should define specific types of Gaussian
+decoders, or other specialized Gaussian decoder types.
 """
-    AbstractVariationalLogDecoder <: AbstractVariationalDecoder
+abstract type AbstractGaussianDecoder <: AbstractVariationalDecoder end
+
+"""
+    AbstractGaussianLogDecoder <: AbstractGaussianDecoder
 
 An abstract type representing a variational autoencoder's decoder that returns
 the log of the standard deviation.
@@ -190,10 +206,10 @@ a latent variable `z` and returns a tuple `(μ, logσ)`, where `μ` is the mean 
 the reconstructed data distribution and `logσ` is the log of the standard
 deviation.
 """
-abstract type AbstractVariationalLogDecoder <: AbstractVariationalDecoder end
+abstract type AbstractGaussianLogDecoder <: AbstractGaussianDecoder end
 
 """
-    AbstractVariationalLinearDecoder <: AbstractVariationalDecoder
+    AbstractGaussianLinearDecoder <: AbstractGaussianDecoder
 
 An abstract type representing a variational autoencoder's decoder that returns
 the standard deviation directly.
@@ -211,7 +227,7 @@ Subtypes of this abstract type should implement the `decode` method, which takes
 a latent variable `z` and returns a tuple `(μ, σ)`, where `μ` is the mean of the
 reconstructed data distribution and `σ` is the standard deviation.
 """
-abstract type AbstractVariationalLinearDecoder <: AbstractVariationalDecoder end
+abstract type AbstractGaussianLinearDecoder <: AbstractGaussianDecoder end
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include Utils module

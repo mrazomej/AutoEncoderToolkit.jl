@@ -16,7 +16,7 @@ import CUDA
 
 using ..AutoEncode: Float32Array, AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractVariationalDecoder,
-    AbstractVariationalLogDecoder, AbstractVariationalLinearDecoder,
+    AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder,
     JointLogEncoder, SimpleDecoder, JointLogDecoder,
     SplitLogDecoder, JointDecoder, SplitDecoder, VAE
 
@@ -160,7 +160,7 @@ end # function
 Constructs a multivariate diagonal Gaussian distribution for decoding.
 
 # Arguments
-- `decoder::AbstractVariationalLogDecoder`: A `AbstractVariationalLogDecoder`
+- `decoder::AbstractGaussianLogDecoder`: A `AbstractGaussianLogDecoder`
     struct representing the decoder model. This assumes that the decoder maps
     the latent variables to the mean and the log of the standard deviation of a
     Gaussian distribution.
@@ -185,7 +185,7 @@ decoder_dist = MvDiagGaussianDecoder(decoder, z)
 ```
 """
 function MvDiagGaussianDecoder(
-    decoder::AbstractVariationalLogDecoder,
+    decoder::AbstractGaussianLogDecoder,
     z::AbstractVector{T}
 ) where {T<:AbstractFloat}
     # Compute mean and log std
@@ -206,8 +206,8 @@ end # function
 Constructs a multivariate diagonal Gaussian distribution for decoding.
 
 # Arguments
-- `decoder::AbstractVariationalLinearDecoder`: A
-  `AbstractVariationalLinearDecoder` struct representing the decoder model. This
+- `decoder::AbstractGaussianLinearDecoder`: A
+  `AbstractGaussianLinearDecoder` struct representing the decoder model. This
   assumes that the decoder maps the latent variables to the mean and the
   standard deviation of a Gaussian distribution.
 - `z::AbstractVector{T}`: A vector representing the latent variable, where `T`
@@ -231,7 +231,7 @@ decoder_dist = MvDiagGaussianDecoder(decoder, z)
 ```
 """
 function MvDiagGaussianDecoder(
-    decoder::AbstractVariationalLinearDecoder,
+    decoder::AbstractGaussianLinearDecoder,
     z::AbstractVector{T}
 ) where {T<:AbstractFloat}
     # Compute mean and log std
@@ -996,11 +996,11 @@ end # function
             tempering_schedule::Function=quadratic_tempering,
             prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
             latent::Bool=false,
-        ) where {D<:AbstractVariationalLogDecoder,T<:Float32}
+        ) where {D<:AbstractGaussianLogDecoder,T<:Float32}
 
 Processes the input data `x` through a Hamiltonian Variational Autoencoder
 (HVAE), consisting of a `JointLogEncoder` and an
-`AbstractVariationalLogDecoder`.
+`AbstractGaussianLogDecoder`.
 
 # Arguments
 - `hvae::HVAE{VAE{JointLogEncoder,D}}`: The HVAE model.
@@ -1062,7 +1062,7 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     tempering_schedule::Function=quadratic_tempering,
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
-) where {D<:AbstractVariationalLogDecoder,T<:Float32}
+) where {D<:AbstractGaussianLogDecoder,T<:Float32}
     # Run input through encoder to obtain mean and log std
     encoder_µ, encoder_logσ = hvae.vae.encoder(x)
 
@@ -1110,11 +1110,11 @@ end # function
             tempering_schedule::Function=quadratic_tempering,
             prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
             latent::Bool=false,
-        ) where {D<:AbstractVariationalLinearDecoder,T<:Float32}
+        ) where {D<:AbstractGaussianLinearDecoder,T<:Float32}
 
 Processes the input data `x` through a Hamiltonian Variational Autoencoder
 (HVAE), consisting of a `JointLogEncoder` and an
-`AbstractVariationalLinearDecoder`.
+`AbstractGaussianLinearDecoder`.
 
 # Arguments
 - `hvae::HVAE{VAE{JointLogEncoder,D}}`: The HVAE model.
@@ -1175,7 +1175,7 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     tempering_schedule::Function=quadratic_tempering,
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
-) where {D<:AbstractVariationalLinearDecoder,T<:Float32}
+) where {D<:AbstractGaussianLinearDecoder,T<:Float32}
     # Run input through encoder to obtain mean and log std
     encoder_µ, encoder_logσ = hvae.vae.encoder(x)
 
