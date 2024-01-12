@@ -187,10 +187,10 @@ z_vector = @view z_matrix[:, 1]
                 # Test mean
                 @test result.μ == latent
                 @test LinearAlgebra.diag(result.Σ) == ones(length(latent))
-            elseif typeof(decoder) <: VAEs.AbstractVariationalLogDecoder
+            elseif typeof(decoder) <: VAEs.AbstractGaussianLogDecoder
                 @test result.μ == latent[1]
                 @test LinearAlgebra.diag(result.Σ) == exp.(latent[2]) .^ 2
-            elseif typeof(decoder) <: VAEs.AbstractVariationalLinearDecoder
+            elseif typeof(decoder) <: VAEs.AbstractGaussianLinearDecoder
                 @test result.μ == latent[1]
                 @test LinearAlgebra.diag(result.Σ) == latent[2] .^ 2
             end # if typeof(decoder) 

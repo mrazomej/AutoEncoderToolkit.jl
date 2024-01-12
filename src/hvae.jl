@@ -1671,49 +1671,39 @@ end # function
 # ==============================================================================
 
 """
-    loss(
-        hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-        U::Function,
-        ∇U::Function,
-        x::AbstractMatrix{Float32};
-        K::Int=3,
-        ϵ::Union{T,<:AbstractVector{Float32}}=0.001f0,
-        βₒ::Float32=0.3f0,
-        potential_energy::Function=potential_energy,
-        potential_energy_kwargs::Union{NamedTuple,Dict}=(
-            decoder_dist=MvDiagGaussianDecoder, prior=SphericalPrior
-        ),
-        tempering_schedule::Function=quadratic_tempering,
-        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-        reg_function::Union{Function,Nothing}=nothing,
-        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-        reg_strength::Float32=1.0f0
-    )
+        loss(
+                hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
+                x::AbstractVecOrMat{Float32};
+                energy_functions::NamedTuple=NamedTuple(),
+                K::Int=3,
+                ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
+                βₒ::Float32=0.3f0,
+                tempering_schedule::Function=quadratic_tempering,
+                prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
+                reg_function::Union{Function,Nothing}=nothing,
+                reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+                reg_strength::Float32=1.0f0
+        )
 
 Compute the loss for a Hamiltonian Variational Autoencoder (HVAE).
 
 # Arguments
 - `hvae::HVAE`: The HVAE used to encode the input data and decode the latent
-  space.
-- `U::Function`: The potential energy. This function must takes both `x` and `z`
-  as arguments.
-- `∇U::Function`: The gradient function of the potential energy. This function
-  must takes both `x` and `z` as arguments, but only computes the gradient with
-  respect to `z`.
-- `x::AbstractVecOrMat{T}`: The input data, where `T` is a subtype of
-  `AbstractFloat`. If vector, the function assumes a single data point. If
-  matrix, the function assumes a batch of data points.
+    space.
+- `x::AbstractVecOrMat{Float32}`: The input data. If vector, the function
+    assumes a single data point. If matrix, the function assumes a batch of data
+    points.
 
 ## Optional Keyword Arguments
+- `energy_functions::NamedTuple`: A named tuple containing the potential energy
+  function `U` and its gradient function `∇U`. Both functions must take `x` and
+  `z` as arguments. `U` computes the potential energy, while `∇U` computes the
+  gradient of the potential energy with respect to `z`. If not provided, default
+  functions will be used.
 - `K::Int`: The number of HMC steps (default is 3).
 - `ϵ::Union{Float32,<:AbstractVector{Float32}}`: The step size for the leapfrog
   integrator (default is 0.001).
 - `βₒ::Float32`: The initial inverse temperature (default is 0.3).
-- `potential_energy::Function`: The potential energy function used in the HMC
-  (default is `potential_energy`).
-- `potential_energy_kwargs::Dict`: A dictionary of keyword arguments for the
-  potential energy function (default is `Dict(:decoder_dist =>
-  MvDiagGaussianDecoder, :prior => SphericalPrior)`).
 - `tempering_schedule::Function`: The tempering schedule function used in the
   HMC (default is `quadratic_tempering`).
 - `prior::Distributions.Sampleable`: The prior distribution for the latent
@@ -1731,9 +1721,8 @@ Compute the loss for a Hamiltonian Variational Autoencoder (HVAE).
 """
 function loss(
     hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-    U::Function,
-    ∇U::Function,
     x::AbstractVecOrMat{Float32};
+    energy_functions::NamedTuple=NamedTuple(),
     K::Int=3,
     ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
     βₒ::Float32=0.3f0,
@@ -1743,6 +1732,23 @@ function loss(
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
 )
+    # Check if energy functions are provided
+    if length(energy_functions) == 0
+        # Define default potential energy
+        U = potential_energy(hvae.vae.decoder)
+        # Define default gradient of potential energy
+        ∇U = ∇potential_energy(hvae.vae.decoder)
+    elseif !(:U in keys(energy_functions) && :∇U in keys(energy_functions))
+        # Check that energy_functions contains U and ∇U
+        throw(ArgumentError(
+            "energy_functions must contain both U and ∇U"
+        ))
+    else
+        # Unpack energy functions
+        U = energy_functions.U
+        ∇U = energy_functions.∇U
+    end # if
+
     # Check if there is regularization
     if reg_function !== nothing
         # Compute ELBO and regularization term
@@ -1767,83 +1773,6 @@ function loss(
             prior=prior
         )
     end # if
-end # function
-
-@doc raw"""
-        loss(
-            hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-            x::AbstractVecOrMat{Float32};
-            K::Int=3,
-            ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
-            βₒ::Float32=0.3f0,
-            tempering_schedule::Function=quadratic_tempering,
-            prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-            reg_function::Union{Function,Nothing}=nothing,
-            reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-            reg_strength::Float32=1.0f0
-        )
-
-Compute the loss for a Hamiltonian Variational Autoencoder (HVAE).
-
-This function takes as input an HVAE and a vector of input data `x`. It performs
-`K` HMC steps with a leapfrog integrator and a tempering schedule to estimate
-the ELBO. The ELBO is computed as the difference between the log evidence
-estimate `log p̄` and the log variational estimate `log q̄`.
-
-If no potential energy `U` and its gradient `∇U` functions are provided, it creates default ones using the decoder of the `hvae`.
-
-# Arguments
-- `hvae::HVAE`: The HVAE used to encode the input data and decode the latent
-    space.
-- `x::AbstractVecOrMat{Float32}`: The input data. Each column represents a single data point.
-
-## Optional Keyword Arguments
-- `K::Int`: The number of HMC steps (default is 3).
-- `ϵ::Union{Float32,<:AbstractVector{Float32}}`: The step size for the leapfrog integrator
-    (default is 0.001).
-- `βₒ::Float32`: The initial inverse temperature (default is 0.3).
-- `tempering_schedule::Function`: The tempering schedule function used in the
-    HMC (default is `quadratic_tempering`).
-- `prior::Distributions.Sampleable`: The prior distribution for the latent
-    variables. Defaults to a standard normal distribution.
-- `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
-    regularization term based on the VAE outputs. Should return a Float32. This
-    function must take as input the VAE outputs and the keyword arguments provided
-    in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
-    regularization function.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
-
-# Returns
-- The computed loss.
-"""
-function loss(
-    hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-    x::AbstractVecOrMat{Float32};
-    K::Int=3,
-    ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
-    βₒ::Float32=0.3f0,
-    tempering_schedule::Function=quadratic_tempering,
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-    reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-    reg_strength::Float32=1.0f0
-)
-    # Define default potential energy
-    U = potential_energy(hvae.vae.decoder)
-    # Define default gradient of potential energy
-    ∇U = ∇potential_energy(hvae.vae.decoder)
-
-    # Call previously defined methods as needed
-    return loss(
-        hvae, U, ∇U, x;
-        K=K, ϵ=ϵ, βₒ=βₒ,
-        tempering_schedule=tempering_schedule,
-        prior=prior,
-        reg_function=reg_function,
-        reg_kwargs=reg_kwargs,
-        reg_strength=reg_strength
-    )
 end # function
 
 # ==============================================================================
