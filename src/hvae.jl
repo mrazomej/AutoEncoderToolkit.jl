@@ -357,53 +357,49 @@ end # function
 # ------------------------------------------------------------------------------ 
 
 @doc raw"""
-        ∇potential_energy(decoder::AbstractVariationalDecoder;
-                          potential_energy::Function=potential_energy,
-                          potential_energy_kwargs::Union{NamedTuple,Dict}=(
-                            decoder_dist=MvDiagGaussianDecoder,
-                            prior=SphericalPrior
-                        )
-                    )
+                ∇potential_energy(
+                    hvae::HVAE,
+                    x::AbstractVector{T},
+                    z::AbstractVector{T};
+                    decoder_dist::Function=MvDiagGaussianDecoder,
+                    prior::Function=SphericalPrior
+                ) where {T<:AbstractFloat}
 
 Compute the gradient of the potential energy of a Hamiltonian Variational
-Autoencoder (HVAE) with respect to the latent variables `Ƶ` using `Zygote.jl`
-AutoDiff. This function returns a function `∇U` that takes both `x` and `Ƶ` as
-arguments, but only computes the gradient with respect to `Ƶ`. The
-`potential_energy` function must generate a function that takes two arguments:
-First, `x`, the data, then, `Ƶ`, the latent variables.
+Autoencoder (HVAE) with respect to the latent variables `z` using `Zygote.jl`
+AutoDiff. This function returns the gradient of the potential energy computed
+for given data `x` and latent variable `z`.
 
 # Arguments
-- `decoder::AbstractVariationalDecoder`: A decoder model that maps the latent
+- `hvae::HVAE`: An HVAE model that contains a decoder which maps the latent
   variables to the data space.
+- `x::AbstractVector{T}`: A vector representing the data.
+- `z::AbstractVector{T}`: A vector representing the latent variable.
 
 # Optional Keyword Arguments
-- `potential_energy::Function=potential_energy`: A function that generates a
-  function to compute the potential energy. The potential_energy function must
-  take a single argument, the HVAE, and any additional arguments must be passed
-  as optional keyword arguments. The generated function must take two arguments:
-  First, x, the data, then, Ƶ, the latent variables.
-- `potential_energy_kwargs::Union{NamedTuple,Dict}`: A named tuple or dictionary
-  of keyword arguments to pass to the potential_energy function. Default is a
-  tuple with decoder_dist=MvDiagGaussianDecoder and prior=SphericalPrior.
+- `decoder_dist::Function=MvDiagGaussianDecoder`: A function representing the
+  distribution function used by the decoder. The function must take as first
+  input an `AbstractVariationalDecoder` struct and as second input a vector `z`
+  representing the latent variable. Default is `MvDiagGaussianDecoder`.
+- `prior::Function=SphericalPrior`: A function representing the prior
+  distribution used in the autoencoder. The function must take as single input a
+  vector `z` representing the latent variable. Default is `SphericalPrior`.
 
 # Returns
-- `∇U::Function`: A function that takes both `x` and `Ƶ` as arguments, but only
-  computes the gradient with respect to `Ƶ`.
+- `gradient::AbstractVector{T}`: The computed gradient of the potential energy
+  for the given input `x` and latent variable `z`.
 
 # Example
 ```julia
-# Define decoder
-decoder = JointLogDecoder(Flux.Chain(Dense(10, 5, relu), Dense(5, 2)))
-
-# Compute the gradient of the potential energy
-∇U = ∇potential_energy(decoder)
+# Define HVAE
+hvae = HVAE(JointLogDecoder(Flux.Chain(Dense(10, 5, relu), Dense(5, 2))))
 
 # Define data x and latent variable z
 x = rand(2)
-Ƶ = rand(2)
+z = rand(2)
 
-# Use the function ∇U to compute the gradient of the potential energy
-gradient = ∇U(x, Ƶ)
+# Compute the gradient of the potential energy
+gradient = ∇potential_energy(hvae, x, z))
 ```
 """
 function ∇potential_energy(
@@ -415,54 +411,35 @@ function ∇potential_energy(
 ) where {T<:AbstractFloat}
     # Define potential energy
     function U(z::AbstractVector{T})
-    # Compute log-likelihood
-    log_likelihood = Distributions.logpdf(decoder_dist(hvae.vae.decoder, z), x)
+        # Compute log-likelihood
+        log_likelihood = Distributions.logpdf(
+            decoder_dist(hvae.vae.decoder, z), x
+        )
 
-    # Compute log-prior
-    log_prior = Distributions.logpdf(prior(z), z)
+        # Compute log-prior
+        log_prior = Distributions.logpdf(prior(z), z)
 
-    # Compute potential energy
-    return -log_likelihood - log_prior
-
+        # Compute potential energy
+        return -log_likelihood - log_prior
+    end # function
     # Define gradient of potential energy function
     return Zygote.gradient(U, z)[1]
 end # function
 
 # ==============================================================================
-# ==============================================================================
-function ∇potential_energy_params(
-    decoder::AbstractVariationalDecoder;
-    potential_energy::Function=potential_energy,
-    potential_energy_kwargs::Union{NamedTuple,Dict}=(
-        decoder_dist=MvDiagGaussianDecoder,
-        prior=SphericalPrior
-    )
-)
-    # Build potential energy function
-    U = potential_energy(decoder; potential_energy_kwargs...)
-
-    # Define gradient of potential energy function with respect to decoder parameters
-    ∇U_params(x::AbstractVector{Float32}, Ƶ::AbstractVector{Float32}) = Zygote.gradient(params -> begin
-            decoder = update_params(decoder, params)
-            U(x, Ƶ)
-        end, get_params(decoder))
-
-    return ∇U_params
-end
-# ==============================================================================
-# ==============================================================================
-# ==============================================================================
 # Hamiltonian Dynamics
 # ==============================================================================
 
 @doc raw"""
-    leapfrog_step(
-        x::AbstractVector{T}, 
-        z::AbstractVector{T}, 
-        ρ::AbstractVector{T}, 
-        ϵ::Union{T,AbstractVector{T}},
-        ∇U::Function
-    ) where {T<:AbstractFloat}
+        leapfrog_step(
+            hvae::HVAE,
+            x::AbstractVector{T}, 
+            z::AbstractVector{T}, 
+            ρ::AbstractVector{T}, 
+            ϵ::Union{T,AbstractVector{T}},
+            ∇U::Function=∇potential_energy,
+            ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
+        ) where {T<:AbstractFloat}
 
 Perform a single leapfrog step in Hamiltonian Monte Carlo (HMC) algorithm. The
 leapfrog step is a numerical integration scheme used in HMC to simulate the
@@ -472,6 +449,8 @@ parts: a half-step update of the momentum, a full-step update of the position,
 and another half-step update of the momentum.
 
 # Arguments
+- `hvae::HVAE`: An HVAE model that contains a decoder which maps the latent
+  variables to the data space.
 - `x::AbstractVector{T}`: The data that defines the potential energy function
   used in the HMC algorithm.
 - `z::AbstractVector{T}`: The position variable in the HMC algorithm,
@@ -480,9 +459,12 @@ and another half-step update of the momentum.
 - `ϵ::Union{T,AbstractArray{T}}`: The leapfrog step size. This can be a scalar
   used for all dimensions, or an array of the same size as `z` used for each
   dimension.
-- `∇U::Function`: The gradient of the potential energy function used in the HMC
-  algorithm. This function must take two inputs: First, `x`, the data, then,
-  `Ƶ`, the latent variables.
+- `∇U::Function=∇potential_energy`: The gradient of the potential energy
+  function used in the HMC algorithm. This function must take three inputs:
+  First, an `HVAE` model, then, `x`, the data, and finally, `z`, the latent
+  variables.
+- `∇U_kwargs::Union{Dict,NamedTuple}=Dict()`: Additional keyword arguments to be
+  passed to the `∇U` function.
 
 # Returns
 - `z̄::AbstractVector{T}`: The updated position variable.
@@ -490,31 +472,36 @@ and another half-step update of the momentum.
 
 # Example
 ```julia
-# Define position, momentum, step size, and gradient of potential energy
+# Define HVAE
+hvae = ... build HVAE here ...
+
+# Define data x, position, momentum, and step size
+x = rand(2)
 z = rand(2)
 ρ = rand(2)
 ϵ = rand(2)
-∇U = ∇potential_energy(hvae, potential_energy, (decoder_dist=MvDiagGaussianDecoder, prior=SphericalPrior))
 
 # Perform a leapfrog step
-z̄, ρ̄ = leapfrog_step(z, ρ, ϵ, ∇U)
+z̄, ρ̄ = leapfrog_step(hvae, x, z, ρ, ϵ)
 ```
 """
 function leapfrog_step(
+    hvae::HVAE,
     x::AbstractVector{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
-    ϵ::Union{T,<:AbstractArray{T}},
-    ∇U::Function
+    ϵ::Union{T,<:AbstractArray{T}};
+    ∇U::Function=∇potential_energy,
+    ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
 ) where {T<:AbstractFloat}
     # Update momentum variable with half-step
-    ρ̃ = ρ - ϵ .* ∇U(x, z) / 2
+    ρ̃ = ρ - ϵ .* ∇U(hvae, x, z; ∇U_kwargs...) / 2
 
     # Update position variable with full-step
     z̄ = z + ϵ .* ρ̃
 
     # Update momentum variable with half-step
-    ρ̄ = ρ̃ - ϵ .* ∇U(x, z̄) / 2
+    ρ̄ = ρ̃ - ϵ .* ∇U(hvae, x, z̄; ∇U_kwargs...) / 2
 
     return z̄, ρ̄
 end # function
@@ -579,11 +566,13 @@ z̄, ρ̄ = leapfrog_step(decoder, x, z, ρ, ϵ, potential_energy, Dict())
 ```
 """
 function leapfrog_step(
+    hvae::HVAE,
     x::AbstractMatrix{T},
     z::AbstractMatrix{T},
     ρ::AbstractMatrix{T},
-    ϵ::Union{T,<:AbstractArray{T}},
-    ∇U::Function
+    ϵ::Union{T,<:AbstractArray{T}};
+    ∇U::Function,
+    ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
 ) where {T<:AbstractFloat}
     # Initialize matrices for updated position and momentum variables
     z̄ = similar(z)
