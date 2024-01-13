@@ -290,22 +290,28 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-        potential_energy(decoder::AbstractVariationalDecoder;
-                         decoder_dist::Function = MvDiagGaussianDecoder,
-                         prior::Function = SphericalPrior)
+                potential_energy(
+                    hvae::HVAE,
+                    x::AbstractVector{T},
+                    z::AbstractVector{T};
+                    decoder_dist::Function=MvDiagGaussianDecoder,
+                    prior::Function=SphericalPrior
+                ) where {T<:AbstractFloat}
 
 Compute the potential energy of a Hamiltonian Variational Autoencoder (HVAE). In
 the context of Hamiltonian Monte Carlo (HMC), the potential energy is defined as
-the negative log-posterior. This function returns a function `U` that computes
-the potential energy for given data `x` and latent variable `z`. It does this by
-computing the log-likelihood of `x` under the distribution defined by
-`decoder_dist(decoder, z)`, and the log-prior of `z` under the `prior`
+the negative log-posterior. This function computes the potential energy for
+given data `x` and latent variable `z`. It does this by computing the
+log-likelihood of `x` under the distribution defined by
+`decoder_dist(hvae.vae.decoder, z)`, and the log-prior of `z` under the `prior`
 distribution. The potential energy is then computed as the negative sum of the
 log-likelihood and the log-prior.
 
 # Arguments
-- `decoder::AbstractVariationalDecoder`: A decoder model that maps the latent
+- `hvae::HVAE`: An HVAE model that contains a decoder which maps the latent
   variables to the data space.
+- `x::AbstractVector{T}`: A vector representing the data.
+- `z::AbstractVector{T}`: A vector representing the latent variable.
 
 # Optional Keyword Arguments
 - `decoder_dist::Function=MvDiagGaussianDecoder`: A function representing the
@@ -314,48 +320,38 @@ log-likelihood and the log-prior.
   representing the latent variable. Default is `MvDiagGaussianDecoder`.
 - `prior::Function=SphericalPrior`: A function representing the prior
   distribution used in the autoencoder. The function must take as single input a
-  vector `z` representing the latent variable. Default is `SphericalPrior`.
+  vector `z` representing the latent variable. Default is `SphericalPrior`.  
 
 # Returns
-- `U::Function`: A function that computes the potential energy given an input
-  `x` and latent variable `z`.
+- `energy::AbstractFloat`: The computed potential energy for the given input `x`
+  and latent variable `z`.
 
 # Example
 ```julia
-# Define decoder
-decoder = JointLogDecoder(Flux.Chain(Dense(10, 5, relu), Dense(5, 2)))
+# Define HVAE
+hvae = ...build HVAE here...
 
 # Compute the potential energy
-U = potential_energy(decoder)
-
-# Use the function U to compute the potential energy for a given x and z
 x = rand(2)
 z = rand(2)
-energy = U(x, z)
+energy = potential_energy(hvae, x, z)
 ```
 """
 function potential_energy(
-    decoder::AbstractVariationalDecoder;
+    hvae::HVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T};
     decoder_dist::Function=MvDiagGaussianDecoder,
     prior::Function=SphericalPrior,
-)
-    # Define function to compute potential energy
-    function U(
-        x::AbstractVector{T}, z::AbstractVector{T}
-    ) where {T<:AbstractFloat}
-        # Compute log-likelihood
-        log_likelihood = Distributions.logpdf(decoder_dist(decoder, z), x)
+) where {T<:AbstractFloat}
+    # Compute log-likelihood
+    log_likelihood = Distributions.logpdf(decoder_dist(hvae.vae.decoder, z), x)
 
-        # Compute log-prior
-        log_prior = Distributions.logpdf(prior(z), z)
+    # Compute log-prior
+    log_prior = Distributions.logpdf(prior(z), z)
 
-        # Compute potential energy
-        energy = -log_likelihood - log_prior
-
-        return energy
-    end # function
-
-    return U
+    # Compute potential energy
+    return -log_likelihood - log_prior
 end # function
 
 # ------------------------------------------------------------------------------ 
@@ -411,6 +407,30 @@ gradient = ∇U(x, Ƶ)
 ```
 """
 function ∇potential_energy(
+    hvae::HVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T};
+    decoder_dist::Function=MvDiagGaussianDecoder,
+    prior::Function=SphericalPrior,
+) where {T<:AbstractFloat}
+    # Define potential energy
+    function U(z::AbstractVector{T})
+    # Compute log-likelihood
+    log_likelihood = Distributions.logpdf(decoder_dist(hvae.vae.decoder, z), x)
+
+    # Compute log-prior
+    log_prior = Distributions.logpdf(prior(z), z)
+
+    # Compute potential energy
+    return -log_likelihood - log_prior
+
+    # Define gradient of potential energy function
+    return Zygote.gradient(U, z)[1]
+end # function
+
+# ==============================================================================
+# ==============================================================================
+function ∇potential_energy_params(
     decoder::AbstractVariationalDecoder;
     potential_energy::Function=potential_energy,
     potential_energy_kwargs::Union{NamedTuple,Dict}=(
@@ -421,14 +441,16 @@ function ∇potential_energy(
     # Build potential energy function
     U = potential_energy(decoder; potential_energy_kwargs...)
 
-    # Define gradient of potential energy function
-    ∇U(x::AbstractVector{Float32}, Ƶ::AbstractVector{Float32}) = first(
-        Zygote.gradient(Ƶ -> U(x, Ƶ), Ƶ)
-    )
+    # Define gradient of potential energy function with respect to decoder parameters
+    ∇U_params(x::AbstractVector{Float32}, Ƶ::AbstractVector{Float32}) = Zygote.gradient(params -> begin
+            decoder = update_params(decoder, params)
+            U(x, Ƶ)
+        end, get_params(decoder))
 
-    return ∇U
-end # function
-
+    return ∇U_params
+end
+# ==============================================================================
+# ==============================================================================
 # ==============================================================================
 # Hamiltonian Dynamics
 # ==============================================================================
@@ -1072,12 +1094,18 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     )
 
     # Run leapfrog and tempering steps
-    step_dict = Zygote.ignore() do
-        leapfrog_tempering_step(
-            x, zₒ, K, ϵ, βₒ, ∇U;
-            tempering_schedule=tempering_schedule,
-        )
-    end # Zygote.ignore
+    # step_dict = Zygote.ignore() do
+    #     leapfrog_tempering_step(
+    #         x, zₒ, K, ϵ, βₒ, ∇U;
+    #         tempering_schedule=tempering_schedule,
+    #     )
+    # end # Zygote.ignore
+    step_dict = leapfrog_tempering_step(
+        x, zₒ, K, ϵ, βₒ, ∇U;
+        tempering_schedule=tempering_schedule,
+    )
+
+
 
     # Check if latent variables should be returned
     if latent
