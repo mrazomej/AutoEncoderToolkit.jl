@@ -495,13 +495,13 @@ function leapfrog_step(
     ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
 ) where {T<:AbstractFloat}
     # Update momentum variable with half-step
-    ρ̃ = ρ - ϵ .* ∇U(hvae, x, z; ∇U_kwargs...) / 2
+    ρ̃ = ρ - T(0.5) * ϵ .* ∇U(hvae, x, z; ∇U_kwargs...)
 
     # Update position variable with full-step
     z̄ = z + ϵ .* ρ̃
 
     # Update momentum variable with half-step
-    ρ̄ = ρ̃ - ϵ .* ∇U(hvae, x, z̄; ∇U_kwargs...) / 2
+    ρ̄ = ρ̃ - T(0.5) * ϵ .* ∇U(hvae, x, z̄; ∇U_kwargs...)
 
     return z̄, ρ̄
 end # function
@@ -514,7 +514,8 @@ end # function
         z::AbstractMatrix{T}, 
         ρ::AbstractMatrix{T}, 
         ϵ::Union{T,AbstractVector{T}},
-        ∇U::Function
+        ∇U::Function,
+        ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
     ) where {T<:AbstractFloat}
 
 Perform a single leapfrog step in Hamiltonian Monte Carlo (HMC) algorithm for
@@ -535,9 +536,12 @@ full-step update of the position, and another half-step update of the momentum.
   `x`.
 - `ϵ::Union{T,AbstractArray{T}}`: The step size for the HMC algorithm. This can
   be a scalar or an array.
-- `∇U::Function`: The gradient of the potential energy function used in the HMC
-  algorithm. This function must take two inputs: First, `x`, the data, then,
-  `Ƶ`, the latent variables.
+- `∇U::Function=∇potential_energy`: The gradient of the potential energy
+  function used in the HMC algorithm. This function must take three inputs:
+  First, an `HVAE` model, then, `x`, the data, and finally, `z`, the latent
+  variables.
+- `∇U_kwargs::Union{Dict,NamedTuple}=Dict()`: Additional keyword arguments to be
+  passed to the `∇U` function.
 
 # Returns
 - `z̄::AbstractMatrix{T}`: The updated position variables. Each column
@@ -549,11 +553,7 @@ full-step update of the position, and another half-step update of the momentum.
 
 # Example
 ```julia
-# Define a decoder
-decoder = JointDecoder(
-    Flux.Chain(Dense(10, 5, relu), Dense(5, 2)),
-    Flux.Dense(2, 2), Flux.Dense(2, 2)
-)
+hvae = ... Define HVAE here ...
 
 # Define input data, position, momentum, and step size
 x = rand(2, 100)
@@ -571,17 +571,21 @@ function leapfrog_step(
     z::AbstractMatrix{T},
     ρ::AbstractMatrix{T},
     ϵ::Union{T,<:AbstractArray{T}};
-    ∇U::Function,
+    ∇U::Function=∇potential_energy,
     ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
 ) where {T<:AbstractFloat}
-    # Initialize matrices for updated position and momentum variables
-    z̄ = similar(z)
-    ρ̄ = similar(ρ)
+    # Apply leapfrog_step to each column and collect the results
+    results = [
+        leapfrog_step(
+            hvae, x[:, i], z[:, i], ρ[:, i], ϵ;
+            ∇U=∇U, ∇U_kwargs=∇U_kwargs
+        )
+        for i in axes(z, 2)
+    ]
 
-    # Apply leapfrog_step to each column
-    for i in axes(z, 2)
-        z̄[:, i], ρ̄[:, i] = leapfrog_step(x[:, i], z[:, i], ρ[:, i], ϵ, ∇U)
-    end
+    # Split the results into separate matrices for z̄ and ρ̄
+    z̄ = reduce(hcat, [result[1] for result in results])
+    ρ̄ = reduce(hcat, [result[2] for result in results])
 
     return z̄, ρ̄
 end
@@ -741,8 +745,9 @@ function leapfrog_tempering_step(
     zₒ::AbstractVector{T},
     K::Int,
     ϵ::Union{T,<:AbstractVector{T}},
-    βₒ::T,
-    ∇U::Function;
+    βₒ::T;
+    ∇U::Function=∇potential_energy,
+    ∇U_kwargs::Union{Dict,NamedTuple}=Dict(),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:AbstractFloat}
     # Sample γₒ ~ N(0, I)
