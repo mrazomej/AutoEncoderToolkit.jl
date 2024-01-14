@@ -489,25 +489,44 @@ function reparameterize(
     # Check if logσ is provided
     if log
         # Sample result depending on type of prior distribution
-        result = if typeof(prior) <: Distributions.UnivariateDistribution
+        result = if isa(prior, Distributions.UnivariateDistribution)
             # Sample n_samples random latent variable point estimates given the
             # mean and standard deviation
             µ .+ Random.rand(prior, size(µ)..., n_samples) .* exp.(σ)
-        elseif typeof(prior) <: Distributions.MultivariateDistribution
+        elseif isa(prior, Distributions.MultivariateDistribution) &
+               isa(µ, AbstractVector)
             # Sample n_samples random latent variable point estimates given the
             # mean and standard deviation
             µ .+ Random.rand(prior, n_samples) .* exp.(σ)
+        elseif isa(prior, Distributions.MultivariateDistribution) &
+               isa(µ, AbstractMatrix)
+            # Sample n_samples random latent variable point estimates given the
+            # mean and standard deviation
+            µ .+ reshape(
+                reduce(hcat, Random.rand(prior, size(µ, 2), n_samples)),
+                :, size(µ, 2), n_samples
+            ) .* exp.(σ)
         end # if
     else
         # Sample result depending on type of prior distribution
-        result = if typeof(prior) <: Distributions.UnivariateDistribution
+        result = if isa(prior, Distributions.UnivariateDistribution)
             # Sample n_samples random latent variable point estimates given the
             # mean and standard deviation
             µ .+ Random.rand(prior, size(µ)..., n_samples) .* σ
-        elseif typeof(prior) <: Distributions.MultivariateDistribution
+        elseif isa(prior, Distributions.MultivariateDistribution) &
+               isa(µ, AbstractVector)
             # Sample n_samples random latent variable point estimates given the
             # mean and standard deviation
             µ .+ Random.rand(prior, n_samples) .* σ
+        elseif isa(prior, Distributions.MultivariateDistribution) &
+               isa(µ, AbstractMatrix)
+            # Sample n_samples random latent variable point estimates given the
+            # mean and standard deviation
+            µ .+ reshape(
+                reduce(hcat, Random.rand(prior, size(µ, 2), n_samples)),
+                :, size(µ, 2), n_samples
+            ) .* σ
+
         end # if
     end # if
 
