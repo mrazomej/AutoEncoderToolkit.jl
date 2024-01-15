@@ -244,21 +244,30 @@ function MvDiagGaussianDecoder(
     return decoder_dist
 end # function
 
+function MvDiagGaussianDecoder(
+    hvae::HVAE,
+    z::AbstractVector{T}
+) where {T<:AbstractFloat}
+    # Call method for corresponding decoder type
+    return MvDiagGaussianDecoder(hvae.vae.decoder, z)
+end
+
 # ==============================================================================
 # Function to construct prior distribution
 # ==============================================================================
 
 @doc raw"""
-        SphericalPrior(z::AbstractVector{T}, σ::T=1.0f0) where {T<:AbstractFloat}
+                SphericalPrior(encoder::JointLogEncoder, σ::T=1.0f0) where {T<:AbstractFloat}
 
-Generates a prior distribution as a spherical Gaussian. A spherical Gaussian is
-a multivariate Gaussian distribution with a diagonal covariance matrix where all
-the diagonal elements (variances) are the same. This results in a distribution
-that is symmetric (or "spherical") in all dimensions.
+Generates a prior distribution as a spherical Gaussian for a given
+`JointLogEncoder`. A spherical Gaussian is a multivariate Gaussian distribution
+with a diagonal covariance matrix where all the diagonal elements (variances)
+are the same. This results in a distribution that is symmetric (or "spherical")
+in all dimensions.
 
 # Arguments
-- `z::AbstractVector{T}`: A vector representing the latent variable, where `T`
-  is a subtype of `AbstractFloat`.
+- `encoder::JointLogEncoder`: The encoder from which the latent dimension is
+  extracted.
 - `σ::T=1.0f0`: The standard deviation of the spherical Gaussian distribution.
   Defaults to 1.0.
 
@@ -268,21 +277,32 @@ that is symmetric (or "spherical") in all dimensions.
 
 # Example
 ```julia
-# Define a latent variable
-z = rand(Float32, 2)
+# Define an encoder
+encoder = JointLogEncoder(...)
 # Define the standard deviation
 σ = 0.5f0
 # Generate the spherical Gaussian prior distribution
-prior = SphericalPrior(z, σ)
+prior = SphericalPrior(encoder, σ)
 ```
 """
 function SphericalPrior(
-    z::AbstractVector{T}, σ::T=1.0f0
+    encoder::JointLogEncoder, σ::T=1.0f0
 ) where {T<:AbstractFloat}
+    # Extract dimensionality of latent space
+    latent_dim = size(encoder.µ.weight, 1)
     # Generate prior distribution as spherical Gaussian
-    prior = Distributions.MvNormal(zeros(T, length(z)), σ .* ones(T, length(z)))
+    prior = Distributions.MvNormal(
+        zeros(T, latent_dim), σ .* ones(T, latent_dim)
+    )
     # Return prior
     return prior
+end # function
+
+function SphericalPrior(
+    hvae::HVAE, σ::T=1.0f0
+) where {T<:AbstractFloat}
+    # Call method for corresponding encoder type
+    SphericalPrior(hvae.vae.encoder, σ)
 end # function
 
 # ==============================================================================
@@ -290,13 +310,13 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-                potential_energy(
-                    hvae::HVAE,
-                    x::AbstractVector{T},
-                    z::AbstractVector{T};
-                    decoder_dist::Function=MvDiagGaussianDecoder,
-                    prior::Function=SphericalPrior
-                ) where {T<:AbstractFloat}
+    potential_energy(
+        hvae::HVAE,
+        x::AbstractVector{T},
+        z::AbstractVector{T};
+        decoder_dist::Function=MvDiagGaussianDecoder,
+        prior::Function=SphericalPrior
+    ) where {T<:AbstractFloat}
 
 Compute the potential energy of a Hamiltonian Variational Autoencoder (HVAE). In
 the context of Hamiltonian Monte Carlo (HMC), the potential energy is defined as
@@ -345,10 +365,14 @@ function potential_energy(
     prior::Function=SphericalPrior,
 ) where {T<:AbstractFloat}
     # Compute log-likelihood
-    log_likelihood = Distributions.logpdf(decoder_dist(hvae.vae.decoder, z), x)
+    μ, Σ = decoder_dist(hvae, z)
+    k = length(x)
+    log_likelihood = -0.5 * ((x - μ)' ./ Σ .* (x - μ) + sum(log.(Σ)) + k * log(2π))
 
     # Compute log-prior
-    log_prior = Distributions.logpdf(prior(z), z)
+    μ_prior, Σ_prior = prior(hvae)
+    k_prior = length(z)
+    log_prior = -0.5 * ((z - μ_prior)' ./ Σ_prior .* (z - μ_prior) + sum(log.(Σ_prior)) + k_prior * log(2π))
 
     # Compute potential energy
     return -log_likelihood - log_prior
@@ -413,11 +437,11 @@ function ∇potential_energy(
     function U(z::AbstractVector{T})
         # Compute log-likelihood
         log_likelihood = Distributions.logpdf(
-            decoder_dist(hvae.vae.decoder, z), x
+            decoder_dist(hvae, z), x
         )
 
         # Compute log-prior
-        log_prior = Distributions.logpdf(prior(z), z)
+        log_prior = Distributions.logpdf(prior(hvae), z)
 
         # Compute potential energy
         return -log_likelihood - log_prior
@@ -690,17 +714,17 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-                                leapfrog_tempering_step(
-                                                hvae::HVAE,
-                                                x::AbstractVecOrMat{T},
-                                                zₒ::AbstractVecOrMat{T},
-                                                K::Int,
-                                                ϵ::Union{T,<:AbstractVector{T}},
-                                                βₒ::T;
-                                                ∇U::Function=∇potential_energy,
-                                                ∇U_kwargs::Union{Dict,NamedTuple}=Dict(),
-                                                tempering_schedule::Function=quadratic_tempering,
-                                ) where {T<:AbstractFloat}
+    leapfrog_tempering_step(
+        hvae::HVAE,
+        x::AbstractVecOrMat{T},
+        zₒ::AbstractVecOrMat{T},
+        K::Int,
+        ϵ::Union{T,<:AbstractVector{T}},
+        βₒ::T;
+        ∇U::Function=∇potential_energy,
+        ∇U_kwargs::Union{Dict,NamedTuple}=Dict(),
+        tempering_schedule::Function=quadratic_tempering,
+    ) where {T<:AbstractFloat}
 
 Combines the leapfrog and tempering steps into a single function for the
 Hamiltonian Variational Autoencoder (HVAE).
@@ -759,13 +783,12 @@ function leapfrog_tempering_step(
     ∇U_kwargs::Union{Dict,NamedTuple}=Dict(),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:AbstractFloat}
-    # Check zₒ type
+    # Sample γₒ ~ N(0, I)
+    γₒ = Random.rand(SphericalPrior(hvae.vae.encoder), size(zₒ, 2))
+
+    # Convert to vector if needed
     if isa(zₒ, AbstractVector)
-        # Sample γₒ ~ N(0, I)
-        γₒ = Random.rand(SphericalPrior(zₒ))
-    elseif isa(zₒ, AbstractMatrix)
-        # Sample γₒ ~ N(0, I)
-        γₒ = Random.rand(SphericalPrior(zₒ[:, 1]), size(zₒ, 2))
+        γₒ = dropdims(γₒ, dims=2)
     end # if
 
     # Define ρₒ = γₒ / √βₒ
@@ -879,9 +902,9 @@ function (hvae::HVAE{VAE{JointLogEncoder,SimpleDecoder}})(
     ϵ::Union{T,<:AbstractVector{T}},
     βₒ::T;
     ∇U::Function,
-    ∇U_kwargs::Union{Dict,NamedTuple}=Dict(
-        :decoder_dist => MvDiagGaussianDecoder,
-        :prior => SphericalPrior,
+    ∇U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_dist=MvDiagGaussianDecoder,
+        prior=SphericalPrior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
@@ -892,7 +915,7 @@ function (hvae::HVAE{VAE{JointLogEncoder,SimpleDecoder}})(
     # Run reparametrization trick to generate latent variable zₒ
     zₒ = reparameterize(
         encoder_µ, encoder_logσ;
-        prior=∇U_kwargs[:prior](encoder_µ[:, 1]),
+        prior=∇U_kwargs[:prior](hvae.vae.encoder),
         n_samples=1,
         log=true
     )
@@ -923,19 +946,19 @@ end # function
 # ------------------------------------------------------------------------------ 
 
 @doc raw"""
-                (hvae::HVAE{VAE{JointLogEncoder,D}})(
-                        x::AbstractVecOrMat{T},
-                        K::Int,
-                        ϵ::Union{T,<:AbstractVector{T}},
-                        βₒ::T;
-                        ∇U::Function,
-                        ∇U_kwargs::Union{Dict,NamedTuple}=Dict(
-                                :decoder_dist => MvDiagGaussianDecoder,
-                                :prior => SphericalPrior,
-                        ),
-                        tempering_schedule::Function=quadratic_tempering,
-                        latent::Bool=false,
-                ) where {D<:AbstractGaussianLogDecoder,T<:Float32}
+    (hvae::HVAE{VAE{JointLogEncoder,D}})(
+        x::AbstractVecOrMat{T},
+        K::Int,
+        ϵ::Union{T,<:AbstractVector{T}},
+        βₒ::T;
+        ∇U::Function,
+        ∇U_kwargs::Union{Dict,NamedTuple}=Dict(
+                :decoder_dist => MvDiagGaussianDecoder,
+                :prior => SphericalPrior,
+        ),
+        tempering_schedule::Function=quadratic_tempering,
+        latent::Bool=false,
+    ) where {D<:AbstractGaussianLogDecoder,T<:Float32}
 
 This function performs the forward pass of the Hamiltonian Variational
 Autoencoder (HVAE) with a `JointLogEncoder` and an `AbstractGaussianLogDecoder`.
@@ -998,9 +1021,9 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     ϵ::Union{T,<:AbstractVector{T}},
     βₒ::T;
     ∇U::Function=∇potential_energy,
-    ∇U_kwargs::Union{Dict,NamedTuple}=Dict(
-        :decoder_dist => MvDiagGaussianDecoder,
-        :prior => SphericalPrior,
+    ∇U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_dist=MvDiagGaussianDecoder,
+        prior=SphericalPrior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
@@ -1011,7 +1034,7 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     # Run reparametrization trick to generate latent variable zₒ
     zₒ = reparameterize(
         encoder_µ, encoder_logσ;
-        prior=∇U_kwargs[:prior](encoder_µ[:, 1]),
+        prior=∇U_kwargs[:prior](hvae.vae.encoder),
         n_samples=1,
         log=true
     )
@@ -1120,9 +1143,9 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     ϵ::Union{T,<:AbstractVector{T}},
     βₒ::T;
     ∇U::Function=∇potential_energy,
-    ∇U_kwargs::Union{Dict,NamedTuple}=Dict(
-        :decoder_dist => MvDiagGaussianDecoder,
-        :prior => SphericalPrior,
+    ∇U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_dist=MvDiagGaussianDecoder,
+        prior=SphericalPrior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
@@ -1133,7 +1156,7 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     # Run reparametrization trick to generate latent variable zₒ
     zₒ = reparameterize(
         encoder_µ, encoder_logσ;
-        prior=∇U_kwargs[:prior](encoder_µ[:, 1]),
+        prior=∇U_kwargs[:prior](hvae.vae.encoder),
         n_samples=1,
         log=true
     )
@@ -1169,20 +1192,21 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    hamiltonian_elbo(
-        hvae::HVAE,
-        ∇U::Function,
-        x::AbstractVector{T};
-        K::Int=3,
-        ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
-        βₒ::T=0.3f0,
-        potential_energy::Function=potential_energy,
-        potential_energy_kwargs::Dict=Dict(
-            :decoder_dist => MvDiagGaussianDecoder, :prior => SphericalPrior
-        ),
-        tempering_schedule::Function=quadratic_tempering,
-        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0)
-    ) where {T<:AbstractFloat}
+        hamiltonian_elbo(
+                hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
+                x::AbstractVector{T};
+                K::Int=3,
+                ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+                βₒ::T=0.3f0,
+                U::Function=potential_energy,
+                ∇U::Function=∇potential_energy,
+                U_kwargs::Union{Dict,NamedTuple}=Dict(
+                        :decoder_dist => MvDiagGaussianDecoder,
+                        :prior => SphericalPrior,
+                ),
+                tempering_schedule::Function=quadratic_tempering,
+                return_outputs::Bool=false,
+        ) where {T<:Float32}
 
 Compute the Hamiltonian Monte Carlo (HMC) estimate of the evidence lower bound
 (ELBO) for a Hamiltonian Variational Autoencoder (HVAE).
@@ -1195,295 +1219,31 @@ estimate `log p̄` and the log variational estimate `log q̄`.
 # Arguments
 - `hvae::HVAE`: The HVAE used to encode the input data and decode the latent
   space.
+- `x::AbstractVector{T}`: The input data, where `T` is a subtype of
+  `AbstractFloat`.
+
+## Optional Keyword Arguments
 - `U::Function`: The potential energy. This function must takes both `x` and `z`
   as arguments.
 - `∇U::Function`: The gradient function of the potential energy. This function
   must takes both `x` and `z` as arguments, but only computes the gradient with
   respect to `z`.
-- `x::AbstractVector{T}`: The input data, where `T` is a subtype of
-  `AbstractFloat`.
-
-## Optional Keyword Arguments
+- `U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+  to the `U` and `∇U` function. Defaults to a dictionary with `:decoder_dist`
+  set to `MvDiagGaussianDecoder` and `:prior` set to `SphericalPrior`.
 - `K::Int`: The number of HMC steps (default is 3).
 - `ϵ::Union{T,<:AbstractVector{T}}`: The step size for the leapfrog integrator
   (default is 0.001).
 - `βₒ::T`: The initial inverse temperature (default is 0.3).
-- `potential_energy::Function`: The potential energy function used in the HMC
-  (default is `potential_energy`).
-- `potential_energy_kwargs::Dict`: A dictionary of keyword arguments for the
-  potential energy function (default is `Dict(:decoder_dist =>
-  MvDiagGaussianDecoder, :prior => SphericalPrior)`).
 - `tempering_schedule::Function`: The tempering schedule function used in the
   HMC (default is `quadratic_tempering`).
-- `prior::Distributions.Sampleable`: The prior distribution for the latent
-  variables. Defaults to a standard normal distribution.
 - `return_outputs::Bool`: Whether to return the outputs of the HVAE. Defaults to
   `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
 
 # Returns
-- `elbo::T`: The HMC estimate of the ELBO.
-
-# Example
-```julia
-# Define a VAE
-vae = VAE(
-    JointLogEncoder(
-        Flux.Chain(Flux.Dense(784, 400, relu)), 
-        Flux.Dense(400, 20), 
-        Flux.Dense(400, 20)
-    ),
-    AbstractVariationalDecoder()
-)
-
-# Define an HVAE
-hvae = HVAE(vae)
-
-# Define input data
-x = rand(Float32, 784)
-
-# Compute the Hamiltonian ELBO
-elbo = hamiltonian_elbo(hvae, x, K=3, ϵ=0.001f0, βₒ=0.3f0)
-```
-"""
-function hamiltonian_elbo(
-    hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-    U::Function,
-    ∇U::Function,
-    x::AbstractVector{T};
-    K::Int=3,
-    ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
-    βₒ::T=0.3f0,
-    tempering_schedule::Function=quadratic_tempering,
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-    return_outputs::Bool=false,
-) where {T<:AbstractFloat}
-    # Forward Pass (run input through reconstruct function)
-    hvae_outputs = hvae(
-        x, K, ϵ, βₒ, ∇U;
-        tempering_schedule=tempering_schedule,
-        prior=prior,
-        latent=true
-    )
-
-    # Unpack position and momentum variables
-    zₒ = hvae_outputs.z_init
-    zₖ = hvae_outputs.z_final
-    ρₒ = hvae_outputs.ρ_init
-    ρₖ = hvae_outputs.ρ_final
-
-    # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
-
-    # log p̄ = log p(x, zₖ) + log p(ρₖ)
-    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    # log p̄ = - U(x, zₖ) + log p(ρₖ)
-    log_p̄ = -U(x, zₖ) + Distributions.logpdf(SphericalPrior(ρₖ), ρₖ)
-
-    # log q̄ = log q(zₒ) + log p(ρₒ)
-    log_q̄ = Distributions.logpdf(
-        Distributions.MvNormal(
-            hvae_outputs.encoder_µ, exp.(hvae_outputs.encoder_logσ)
-        ),
-        zₒ
-    ) + Distributions.logpdf(SphericalPrior(ρₒ, βₒ^-1), ρₒ) -
-             0.5f0 * length(zₒ) * log(βₒ)
-
-    if return_outputs
-        return log_p̄ - log_q̄, hvae_outputs
-    else
-        return log_p̄ - log_q̄
-    end # if
-end # function
-
-# ------------------------------------------------------------------------------ 
-
-@doc raw"""
-    hamiltonian_elbo(
-        hvae::HVAE,
-        U::Function,
-        ∇U::Function,
-        x::AbstractVector{T};
-        K::Int=3,
-        ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
-        βₒ::T=0.3f0,
-        potential_energy::Function=potential_energy,
-        potential_energy_kwargs::Dict=Dict(
-            :decoder_dist => MvDiagGaussianDecoder, :prior => SphericalPrior
-        ),
-        tempering_schedule::Function=quadratic_tempering,
-        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0)
-    ) where {T<:AbstractFloat}
-
-Compute the Hamiltonian Monte Carlo (HMC) estimate of the evidence lower bound
-(ELBO) for a Hamiltonian Variational Autoencoder (HVAE).
-
-This function takes as input an HVAE and a vector of input data `x`. It performs
-`K` HMC steps with a leapfrog integrator and a tempering schedule to estimate
-the ELBO. The ELBO is computed as the difference between the log evidence
-estimate `log p̄` and the log variational estimate `log q̄`.
-
-# Arguments
-- `hvae::HVAE`: The HVAE used to encode the input data and decode the latent
-  space.
-- `U::Function`: The potential energy. This function must takes both `x` and `z`
-  as arguments.
-- `∇U::Function`: The gradient function of the potential energy. This function
-  must takes both `x` and `z` as arguments, but only computes the gradient with
-  respect to `z`.
-- `x::AbstractMatrix{T}`: The input data, where `T` is a subtype of
-  `AbstractFloat`. Each column represents a single data point.
-
-## Optional Keyword Arguments
-- `K::Int`: The number of HMC steps (default is 3).
-- `ϵ::Union{T,<:AbstractVector{T}}`: The step size for the leapfrog integrator
-  (default is 0.001).
-- `βₒ::T`: The initial inverse temperature (default is 0.3).
-- `potential_energy::Function`: The potential energy function used in the HMC
-  (default is `potential_energy`).
-- `potential_energy_kwargs::Dict`: A dictionary of keyword arguments for the
-  potential energy function (default is `Dict(:decoder_dist =>
-  MvDiagGaussianDecoder, :prior => SphericalPrior)`).
-- `tempering_schedule::Function`: The tempering schedule function used in the
-  HMC (default is `quadratic_tempering`).
-- `prior::Distributions.Sampleable`: The prior distribution for the latent
-  variables. Defaults to a standard normal distribution.
-- `return_outputs::Bool`: Whether to return the outputs of the HVAE. Defaults
-  to `false`. NOTE: This is necessary to avoid computing the forward pass twice
-  when computing the loss function with regularization.
-
-# Returns
-- `elbo::T`: The HMC estimate of the ELBO.
-
-# Example
-```julia
-# Define a VAE
-vae = VAE(
-    JointLogEncoder(
-        Flux.Chain(Flux.Dense(784, 400, relu)), 
-        Flux.Dense(400, 20), 
-        Flux.Dense(400, 20)
-    ),
-    AbstractVariationalDecoder()
-)
-
-# Define an HVAE
-hvae = HVAE(vae)
-
-# Define input data
-x = rand(Float32, 784)
-
-# Compute the Hamiltonian ELBO
-elbo = hamiltonian_elbo(hvae, x, K=3, ϵ=0.001f0, βₒ=0.3f0)
-```
-"""
-function hamiltonian_elbo(
-    hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-    U::Function,
-    ∇U::Function,
-    x::AbstractMatrix{Float32};
-    K::Int=3,
-    ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
-    βₒ::Float32=0.3f0,
-    tempering_schedule::Function=quadratic_tempering,
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-    return_outputs::Bool=false,
-)
-    # Forward Pass (run input through reconstruct function)
-    hvae_outputs = hvae(
-        x, K, ϵ, βₒ, ∇U;
-        tempering_schedule=tempering_schedule,
-        prior=prior,
-        latent=true
-    )
-
-    # Unpack position and momentum variables
-    zₒ = hvae_outputs.z_init
-    zₖ = hvae_outputs.z_final
-    ρₒ = hvae_outputs.ρ_init
-    ρₖ = hvae_outputs.ρ_final
-
-    # Initialize value to save ELBO
-    elbo = zero(Float32)
-
-    # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
-
-    # Loop through each column of input data
-    for i in axes(x, 2)
-        # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-        # log p̄ = - U(x, zₖ) + log p(ρₖ)
-        log_p̄ = -U(x[:, i], zₖ[:, i]) + Distributions.logpdf(
-            SphericalPrior(ρₖ[:, i]), ρₖ[:, i]
-        )
-
-        # log q̄ = log q(zₒ) + log p(ρₒ)
-        log_q̄ = Distributions.logpdf(
-            Distributions.MvNormal(
-                hvae_outputs.encoder_µ[:, i],
-                exp.(hvae_outputs.encoder_logσ[:, i])
-            ),
-            zₒ[:, i]
-        ) + Distributions.logpdf(SphericalPrior(ρₒ[:, i], βₒ^-1), ρₒ[:, i]) -
-                 0.5f0 * size(zₒ, 1) * log(βₒ)
-
-        # Update ELBO
-        elbo += log_p̄ - log_q̄
-    end # for
-
-    if return_outputs
-        return elbo / size(x, 2), hvae_outputs
-    else
-        # Return ELBO normalized by number of samples
-        return elbo / size(x, 2)
-    end # if
-end # function
-
-# ------------------------------------------------------------------------------ 
-
-@doc raw"""
-        hamiltonian_elbo(
-            hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-            x::AbstractVecOrMat{Float32};
-            K::Int=3,
-            ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
-            βₒ::Float32=0.3f0,
-            tempering_schedule::Function=quadratic_tempering,
-            prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-            return_outputs::Bool=false,
-        )
-
-Compute the Hamiltonian Monte Carlo (HMC) estimate of the evidence lower bound
-(ELBO) for a Hamiltonian Variational Autoencoder (HVAE).
-
-This function takes as input an HVAE and a vector of input data `x`. It performs
-`K` HMC steps with a leapfrog integrator and a tempering schedule to estimate
-the ELBO. The ELBO is computed as the difference between the log evidence
-estimate `log p̄` and the log variational estimate `log q̄`.
-
-If no potential energy `U` and its gradient `∇U` functions are provided, it
-creates default ones using the decoder of the `hvae`.
-
-# Arguments
-- `hvae::HVAE`: The HVAE used to encode the input data and decode the latent
-    space.
-- `x::AbstractVecOrMat{Float32}`: The input data. If a vector is provided, that
-  represents a single datum. If a column is provided, each column represents a
-  single data point.
-
-## Optional Keyword Arguments
-- `K::Int`: The number of HMC steps (default is 3).
-- `ϵ::Union{Float32,<:AbstractVector{Float32}}`: The step size for the leapfrog
-    integrator (default is 0.001).
-- `βₒ::Float32`: The initial inverse temperature (default is 0.3).
-- `tempering_schedule::Function`: The tempering schedule function used in the
-    HMC (default is `quadratic_tempering`).
-- `prior::Distributions.Sampleable`: The prior distribution for the latent
-    variables. Defaults to a standard normal distribution.
-- `return_outputs::Bool`: Whether to return the outputs of the HVAE. Defaults to
-    `false`. NOTE: This is necessary to avoid computing the forward pass twice
-    when computing the loss function with regularization.
-
-# Returns
-- `elbo::Float32`: The HMC estimate of the ELBO.
+- `elbo::T`: The HMC estimate of the ELBO. If `return_outputs` is `true`, also
+    returns the outputs of the HVAE.
 
 # Example
 ```julia
@@ -1509,27 +1269,199 @@ elbo = hamiltonian_elbo(hvae, x, K=3, ϵ=0.001f0, βₒ=0.3f0)
 """
 function hamiltonian_elbo(
     hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
-    x::AbstractVecOrMat{Float32};
+    x::AbstractVector{T};
     K::Int=3,
-    ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
-    βₒ::Float32=0.3f0,
+    ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+    βₒ::T=0.3f0,
+    U::Function=potential_energy,
+    ∇U::Function=∇potential_energy,
+    U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_dist=MvDiagGaussianDecoder,
+        prior=SphericalPrior,
+    ),
     tempering_schedule::Function=quadratic_tempering,
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     return_outputs::Bool=false,
-)
-    # Define default potential energy
-    U = potential_energy(hvae.vae.decoder)
-    # Define default gradient of potential energy
-    ∇U = ∇potential_energy(hvae.vae.decoder)
-
-    # Call previously defined methods as needed
-    return hamiltonian_elbo(
-        hvae, U, ∇U, x;
-        K=K, ϵ=ϵ, βₒ=βₒ,
+) where {T<:Float32}
+    # Forward Pass (run input through reconstruct function)
+    hvae_outputs = hvae(
+        x, K, ϵ, βₒ;
+        ∇U=∇U, ∇U_kwargs=U_kwargs,
         tempering_schedule=tempering_schedule,
-        prior=prior,
-        return_outputs=return_outputs
+        latent=true
     )
+
+    # Unpack position and momentum variables
+    zₒ = hvae_outputs.z_init
+    zₖ = hvae_outputs.z_final
+    ρₒ = hvae_outputs.ρ_init
+    ρₖ = hvae_outputs.ρ_final
+
+    # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
+
+    # log p̄ = log p(x, zₖ) + log p(ρₖ)
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
+    # log p̄ = - U(x, zₖ) + log p(ρₖ)
+    log_p̄ = -U(hvae, x, zₖ; U_kwargs...) +
+             Distributions.logpdf(SphericalPrior(hvae.vae.encoder), ρₖ)
+
+    # log q̄ = log q(zₒ) + log p(ρₒ)
+    log_q̄ = Distributions.logpdf(
+        Distributions.MvNormal(
+            hvae_outputs.encoder_µ, exp.(hvae_outputs.encoder_logσ)
+        ),
+        zₒ
+    ) + Distributions.logpdf(SphericalPrior(hvae.vae.encoder, βₒ^-1), ρₒ) -
+             0.5f0 * length(zₒ) * log(βₒ)
+
+    if return_outputs
+        return log_p̄ - log_q̄, hvae_outputs
+    else
+        return log_p̄ - log_q̄
+    end # if
+end # function
+
+# ------------------------------------------------------------------------------ 
+
+@doc raw"""
+        hamiltonian_elbo(
+                hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
+                x::AbstractMatrix{T};
+                K::Int=3,
+                ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+                βₒ::T=0.3f0,
+                U::Function=potential_energy,
+                ∇U::Function=∇potential_energy,
+                U_kwargs::Union{Dict,NamedTuple}=Dict(
+                        :decoder_dist => MvDiagGaussianDecoder,
+                        :prior => SphericalPrior,
+                ),
+                tempering_schedule::Function=quadratic_tempering,
+                return_outputs::Bool=false,
+        ) where {T<:Float32}
+
+Compute the Hamiltonian Monte Carlo (HMC) estimate of the evidence lower bound
+(ELBO) for a Hamiltonian Variational Autoencoder (HVAE).
+
+This function takes as input an HVAE and a matrix of input data `x`. It performs
+`K` HMC steps with a leapfrog integrator and a tempering schedule to estimate
+the ELBO. The ELBO is computed as the difference between the log evidence
+estimate `log p̄` and the log variational estimate `log q̄`.
+
+# Arguments
+- `hvae::HVAE`: The HVAE used to encode the input data and decode the latent
+    space.
+- `x::AbstractMatrix{T}`: The input data, where `T` is a subtype of
+    `AbstractFloat`. Each column represents a single data point.
+
+## Optional Keyword Arguments
+- `U::Function`: The potential energy. This function must takes both `x` and `z`
+  as arguments.
+- `∇U::Function`: The gradient function of the potential energy. This function
+  must takes both `x` and `z` as arguments, but only computes the gradient with
+  respect to `z`.
+- `U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+  to the `U` and `∇U` function. Defaults to a dictionary with `:decoder_dist`
+  set to `MvDiagGaussianDecoder` and `:prior` set to `SphericalPrior`.
+- `K::Int`: The number of HMC steps (default is 3).
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size for the leapfrog integrator
+  (default is 0.001).
+- `βₒ::T`: The initial inverse temperature (default is 0.3).
+- `tempering_schedule::Function`: The tempering schedule function used in the
+  HMC (default is `quadratic_tempering`).
+- `return_outputs::Bool`: Whether to return the outputs of the HVAE. Defaults to
+  `false`. NOTE: This is necessary to avoid computing the forward pass twice
+  when computing the loss function with regularization.
+
+# Returns
+- `elbo::T`: The HMC estimate of the ELBO. If `return_outputs` is `true`, also
+    returns the outputs of the HVAE.
+
+# Example
+```julia
+# Define a VAE
+vae = VAE(
+        JointLogEncoder(
+                Flux.Chain(Flux.Dense(784, 400, relu)), 
+                Flux.Dense(400, 20), 
+                Flux.Dense(400, 20)
+        ),
+        AbstractVariationalDecoder()
+)
+
+# Define an HVAE
+hvae = HVAE(vae)
+
+# Define input data
+x = rand(Float32, 784, 100)  # 100 data points
+
+# Compute the Hamiltonian ELBO
+elbo = hamiltonian_elbo(hvae, x, K=3, ϵ=0.001f0, βₒ=0.3f0)
+```
+"""
+function hamiltonian_elbo(
+    hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
+    x::AbstractMatrix{T};
+    K::Int=3,
+    ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+    βₒ::T=0.3f0,
+    U::Function=potential_energy,
+    ∇U::Function=∇potential_energy,
+    U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_dist=MvDiagGaussianDecoder,
+        prior=SphericalPrior,
+    ),
+    tempering_schedule::Function=quadratic_tempering,
+    return_outputs::Bool=false,
+) where {T<:Float32}
+    # Forward Pass (run input through reconstruct function)
+    hvae_outputs = hvae(
+        x, K, ϵ, βₒ;
+        ∇U=∇U, ∇U_kwargs=U_kwargs,
+        tempering_schedule=tempering_schedule,
+        latent=true
+    )
+
+    # Unpack position and momentum variables
+    zₒ = hvae_outputs.z_init
+    zₖ = hvae_outputs.z_final
+    ρₒ = hvae_outputs.ρ_init
+    ρₖ = hvae_outputs.ρ_final
+
+    # Initialize value to save ELBO
+    elbo = zero(Float32)
+
+    # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
+
+    # Loop through each column of input data
+    for i in axes(x, 2)
+        # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
+        # log p̄ = - U(x, zₖ) + log p(ρₖ)
+        log_p̄ = -U(hvae, x[:, i], zₖ[:, i]; U_kwargs...) +
+                 Distributions.logpdf(
+            SphericalPrior(hvae.vae.encoder), ρₖ[:, i]
+        )
+
+        # log q̄ = log q(zₒ) + log p(ρₒ)
+        log_q̄ = Distributions.logpdf(
+            Distributions.MvNormal(
+                hvae_outputs.encoder_µ[:, i],
+                exp.(hvae_outputs.encoder_logσ[:, i])
+            ),
+            zₒ[:, i]
+        ) + Distributions.logpdf(
+            SphericalPrior(hvae.vae.encoder, βₒ^-1), ρₒ[:, i]
+        ) - 0.5f0 * size(zₒ, 1) * log(βₒ)
+
+        # Update ELBO
+        elbo += log_p̄ - log_q̄
+    end # for
+
+    if return_outputs
+        return elbo / size(x, 2), hvae_outputs
+    else
+        # Return ELBO normalized by number of samples
+        return elbo / size(x, 2)
+    end # if
 end # function
 
 # ==============================================================================
@@ -1588,41 +1520,28 @@ Compute the loss for a Hamiltonian Variational Autoencoder (HVAE).
 function loss(
     hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
     x::AbstractVecOrMat{Float32};
-    energy_functions::NamedTuple=NamedTuple(),
     K::Int=3,
     ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
     βₒ::Float32=0.3f0,
+    U::Function=potential_energy,
+    ∇U::Function=∇potential_energy,
+    U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_dist=MvDiagGaussianDecoder,
+        prior=SphericalPrior,
+    ),
     tempering_schedule::Function=quadratic_tempering,
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
 )
-    # Check if energy functions are provided
-    if length(energy_functions) == 0
-        # Define default potential energy
-        U = potential_energy(hvae.vae.decoder)
-        # Define default gradient of potential energy
-        ∇U = ∇potential_energy(hvae.vae.decoder)
-    elseif !(:U in keys(energy_functions) && :∇U in keys(energy_functions))
-        # Check that energy_functions contains U and ∇U
-        throw(ArgumentError(
-            "energy_functions must contain both U and ∇U"
-        ))
-    else
-        # Unpack energy functions
-        U = energy_functions.U
-        ∇U = energy_functions.∇U
-    end # if
-
     # Check if there is regularization
     if reg_function !== nothing
         # Compute ELBO and regularization term
         elbo, hvae_outputs = hamiltonian_elbo(
-            hvae, U, ∇U, x;
+            hvae, x;
             K=K, ϵ=ϵ, βₒ=βₒ,
+            U=U, ∇U=∇U, U_kwargs=U_kwargs,
             tempering_schedule=tempering_schedule,
-            prior=prior,
             return_outputs=true
         )
 
@@ -1633,10 +1552,10 @@ function loss(
     else
         # Compute ELBO
         return -hamiltonian_elbo(
-            hvae, U, ∇U, x;
+            hvae, x;
             K=K, ϵ=ϵ, βₒ=βₒ,
-            tempering_schedule=tempering_schedule,
-            prior=prior
+            U=U, ∇U=∇U, U_kwargs=U_kwargs,
+            tempering_schedule=tempering_schedule
         )
     end # if
 end # function
@@ -1695,3 +1614,41 @@ function train!(
     # Update parameters
     Flux.Optimisers.update!(opt, hvae, ∇loss_[1])
 end # function
+
+## =============================================================================
+# Flux.gradient(hvae) do hvae_model
+#     HVAEs.potential_energy(hvae, x_vec, z_vec)
+# end
+
+
+## =============================================================================
+# function ∇∇potential_energy(
+#     hvae::HVAE,
+#     x::AbstractVector{T},
+#     z::AbstractVector{T};
+#     decoder_dist::Function=MvDiagGaussianDecoder,
+#     prior::Function=SphericalPrior,
+# ) where {T<:AbstractFloat}
+#     # Function to compute the first gradient
+#     function first_grad_function(hvae)
+#         # Define potential energy using the modified decoder
+#         function U(z::AbstractVector{T})
+#             log_likelihood = Distributions.logpdf(
+#                 decoder_dist(hvae.vae.decoder, z), x
+#             )
+#             log_prior = Distributions.logpdf(prior(hvae.vae.encoder), z)
+#             return -log_likelihood - log_prior
+#         end
+
+#         # Compute and return the first gradient
+#         Zygote.gradient(U, z)[1]
+#     end
+
+#     # Extract parameters of the decoder
+#     # decoder_params = ... # Get the parameters of the decoder from `hvae`
+
+#     # Compute the gradient of the first gradient function with respect to the decoder parameters
+#     second_grad = Zygote.gradient(first_grad_function, hvae)[1]
+
+#     return second_grad
+# end
