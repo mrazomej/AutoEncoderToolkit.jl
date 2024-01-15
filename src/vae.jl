@@ -250,6 +250,60 @@ end # struct
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor VAE
 
+@doc raw"""
+    (vae::VAE)(
+        x::AbstractVecOrMat{Float32};
+        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
+        latent::Bool=false,
+        n_samples::Int=1
+    )
+
+Perform the forward pass of a Variational Autoencoder (VAE).
+
+This function takes as input a VAE and a vector or matrix of input data `x`. It
+first runs the input through the encoder to obtain the mean and log standard
+deviation of the latent variables. It then uses the reparameterization trick to
+sample from the latent distribution. Finally, it runs the latent sample through
+the decoder to obtain the output.
+
+# Arguments
+- `vae::VAE`: The VAE used to encode the input data and decode the latent space.
+- `x::AbstractVecOrMat{Float32}`: The input data, where `Float32` is a subtype
+  of `AbstractFloat`. If a matrix is provided, each column should represent a
+  single data point.
+
+# Optional Keyword Arguments
+- `prior::Distributions.Sampleable`: The prior distribution for the latent
+  variables. Defaults to a standard normal distribution.
+- `latent::Bool`: Whether to return the latent variables along with the decoder
+  output. If `true`, the function returns a tuple containing the encoder
+  outputs, the latent sample, and the decoder outputs. If `false`, the function
+  only returns the decoder outputs. Defaults to `false`.  
+- `n_samples::Int`: The number of samples to draw from the latent distribution.
+  Defaults to `1`.
+
+# Returns
+- If `latent` is `true`, returns a tuple containing:
+  - `encoder`: The outputs of the encoder.
+  - `z`: The latent sample.
+  - `decoder`: The outputs of the decoder.
+- If `latent` is `false`, returns the outputs of the decoder.
+
+# Example
+```julia
+# Define a VAE
+vae = VAE(
+    encoder=Flux.Chain(Flux.Dense(784, 400, relu), Flux.Dense(400, 20)),
+    decoder=Flux.Chain(Flux.Dense(20, 400, relu), Flux.Dense(400, 784))
+)
+
+# Define input data
+x = rand(Float32, 784)
+
+# Perform the forward pass
+outputs = vae(x, latent=true)
+```
+"""
 function (vae::VAE)(
     x::AbstractVecOrMat{Float32};
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
