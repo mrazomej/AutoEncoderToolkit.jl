@@ -71,6 +71,44 @@ encoders, or other specialized Gaussian encoder types.
 """
 abstract type AbstractGaussianEncoder <: AbstractVariationalEncoder end
 
+@doc raw"""
+    AbstractGaussianLinearEncoder <: AbstractGaussianEncoder
+
+An abstract type representing a Gaussian linear encoder in a variational autoencoder.
+
+# Description
+A Gaussian linear encoder is a type of encoder that maps inputs to a Gaussian distribution in the latent space. Unlike a standard Gaussian encoder, which typically returns the log of the standard deviation of the Gaussian distribution, a Gaussian linear encoder returns the standard deviation directly.
+
+This abstract type is used as a base for all Gaussian linear encoders. Specific implementations of Gaussian linear encoders should subtype this abstract type and implement the necessary methods.
+
+# Note
+When implementing a subtype, ensure that the encoder returns the standard deviation of the Gaussian distribution directly, not the log of the standard deviation.
+"""
+abstract type AbstractGaussianLinearEncoder <: AbstractGaussianEncoder end
+
+@doc raw"""
+    AbstractGaussianLogEncoder <: AbstractGaussianEncoder
+
+An abstract type representing a Gaussian log encoder in a variational
+autoencoder.
+
+# Description
+A Gaussian log encoder is a type of encoder that maps inputs to a Gaussian
+distribution in the latent space. Unlike a Gaussian linear encoder, which
+returns the standard deviation of the Gaussian distribution directly, a Gaussian
+log encoder returns the log of the standard deviation.
+
+This abstract type is used as a base for all Gaussian log encoders. Specific
+implementations of Gaussian log encoders should subtype this abstract type and
+implement the necessary methods.
+
+# Note
+When implementing a subtype, ensure that the encoder returns the log of the
+standard deviation of the Gaussian distribution, not the standard deviation
+directly.
+"""
+abstract type AbstractGaussianLogEncoder <: AbstractGaussianEncoder end
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Concrete Deterministic Encoders
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -223,7 +261,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-`struct JointLogEncoder <: AbstractGaussianEncoder`
+`struct JointLogEncoder <: AbstractGaussianLogEncoder`
 
 Default encoder function for variational autoencoders where the same `encoder`
 network is used to map to the latent space mean `µ` and log standard deviation
@@ -243,7 +281,7 @@ enc = JointLogEncoder(
     Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
 )
 """
-mutable struct JointLogEncoder <: AbstractGaussianEncoder
+mutable struct JointLogEncoder <: AbstractGaussianLogEncoder
     encoder::Flux.Chain
     µ::Flux.Dense
     logσ::Flux.Dense
@@ -460,7 +498,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-`struct JointEncoder <: AbstractGaussianEncoder`
+`struct JointEncoder <: AbstractGaussianLinearEncoder`
 
 Encoder function for variational autoencoders where the same `encoder` network
 is used to map to the latent space mean `µ` and standard deviation `σ`.
@@ -479,7 +517,7 @@ enc = JointEncoder(
     Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
 )
 """
-mutable struct JointEncoder <: AbstractGaussianEncoder
+mutable struct JointEncoder <: AbstractGaussianLinearEncoder
     encoder::Flux.Chain
     µ::Flux.Dense
     σ::Flux.Dense
