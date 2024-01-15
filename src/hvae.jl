@@ -1,6 +1,7 @@
 # Import ML libraries
 import Flux
 import Zygote
+import ForwardDiff
 
 # Import basic math
 import Random
@@ -16,7 +17,8 @@ import CUDA
 
 using ..AutoEncode: Float32Array, AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractVariationalDecoder,
-    AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder,
+    AbstractGaussianDecoder, AbstractGaussianLogDecoder,
+    AbstractGaussianLinearDecoder,
     JointLogEncoder, SimpleDecoder, JointLogDecoder,
     SplitLogDecoder, JointDecoder, SplitDecoder, VAE
 
@@ -102,207 +104,107 @@ end
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 # ==============================================================================
-# Functions to construct decoder distribution
+# Functions to compute decoder log likelihood
 # ==============================================================================
 
-@doc raw"""
-        MvDiagGaussianDecoder(decoder, z; σ=1.0f0)
-
-Constructs a multivariate diagonal Gaussian distribution for decoding.
-
-# Arguments
-- `decoder::SimpleDecoder`: A `SimpleDecoder` struct representing the decoder
-  model.
-- `z::AbstractVector{T}`: An abstract vector of type `AbstractVector{T}`
-  representing the latent variable, where `T` is a subtype of `AbstractFloat`.
-
-# Optional Keyword Arguments
-- `σ::T`: A float of type `T` representing the standard deviation of the
-  Gaussian distribution. Default is 1.0f0.
-
-# Returns
-- `decoder_dist`: A `Distributions.MvNormal{T}` object representing the
-  multivariate diagonal Gaussian distribution, where `T` is the type of elements
-  in `z`.
-
-# Example
-```julia
-# Define a decoder
-decoder = SimpleDecoder(Flux.Chain(Dense(10, 5, relu), Dense(5, 2)))
-
-# Define a latent variable
-z = rand(Float32, 2)
-
-# Construct the decoder distribution
-decoder_dist = MvDiagGaussianDecoder(decoder, z, σ=1.0f0)
-```
-"""
-function MvDiagGaussianDecoder(
+function decoder_loglikelihood(
     decoder::SimpleDecoder,
+    x::AbstractVector{T},
     z::AbstractVector{T};
     σ::T=1.0f0,
-) where {T<:AbstractFloat}
+) where {T<:Float32}
     # Compute the mean of the decoder output given the latent variable z
     μ = decoder(z)
 
-    # Create a multivariate diagonal Gaussian distribution with mean μ and standard deviation σ
-    decoder_dist = Distributions.MvNormal(μ, σ)
+    # Compute variance
+    σ² = σ^2
 
-    # Return the decoder distribution
-    return decoder_dist
+    # Compute log-likelihood
+    log_likelihood = -0.5f0 * sum(abs2, (x - μ) / σ²) -
+                     0.5f0 * length(x) * (log(σ²) + log(2.0f0 * π))
+    return log_likelihood
 end # function
 
-# ------------------------------------------------------------------------------ 
-
-@doc raw"""
-        MvDiagGaussianDecoder(decoder, z)
-
-Constructs a multivariate diagonal Gaussian distribution for decoding.
-
-# Arguments
-- `decoder::AbstractGaussianLogDecoder`: A `AbstractGaussianLogDecoder`
-    struct representing the decoder model. This assumes that the decoder maps
-    the latent variables to the mean and the log of the standard deviation of a
-    Gaussian distribution.
-- `z::AbstractVector{T}`: A vector representing the latent variable, where `T`
-  is a subtype of `AbstractFloat`.
-
-# Returns
-- `decoder_dist`: A `Distributions.MvNormal{T}` object representing the
-  multivariate diagonal Gaussian distribution, where `T` is the type of elements
-  in `z`.
-
-# Example
-```julia
-# Define a decoder
-decoder = JointLogDecoder(Flux.Chain(Dense(10, 5, relu), Dense(5, 2)), Flux.Dense(2, 2), Flux.Dense(2, 2))
-
-# Define a latent variable
-z = rand(Float32, 2)
-
-# Construct the decoder distribution
-decoder_dist = MvDiagGaussianDecoder(decoder, z)
-```
-"""
-function MvDiagGaussianDecoder(
+function decoder_loglikelihood(
     decoder::AbstractGaussianLogDecoder,
-    z::AbstractVector{T}
-) where {T<:AbstractFloat}
-    # Compute mean and log std
+    x::AbstractVector{T},
+    z::AbstractVector{T};
+) where {T<:Float32}
+    # Compute the mean and log standard deviation of the decoder output given the
+    # latent variable z
     μ, logσ = decoder(z)
 
-    # Construct multivariate diagonal Gaussian distribution
-    decoder_dist = Distributions.MvNormal(μ, exp.(logσ))
+    # Compute variance
+    σ² = exp.(2.0f0 .* logσ)
 
-    # Return decoder distribution
-    return decoder_dist
-end # function
+    # Compute log-likelihood
+    log_likelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ²) -
+                     sum(logσ) -
+                     0.5f0 * length(x) * log(2.0f0 * π)
 
-# ------------------------------------------------------------------------------ 
+    return log_likelihood
+end # functionn
 
-@doc raw"""
-        MvDiagGaussianDecoder(decoder, z)
-
-Constructs a multivariate diagonal Gaussian distribution for decoding.
-
-# Arguments
-- `decoder::AbstractGaussianLinearDecoder`: A
-  `AbstractGaussianLinearDecoder` struct representing the decoder model. This
-  assumes that the decoder maps the latent variables to the mean and the
-  standard deviation of a Gaussian distribution.
-- `z::AbstractVector{T}`: A vector representing the latent variable, where `T`
-  is a subtype of `AbstractFloat`.
-
-# Returns
-- `decoder_dist`: A `Distributions.MvNormal{T}` object representing the
-  multivariate diagonal Gaussian distribution, where `T` is the type of elements
-  in `z`.
-
-# Example
-```julia
-# Define a decoder
-decoder = JointDecoder(Flux.Chain(Dense(10, 5, relu), Dense(5, 2)), Flux.Dense(2, 2), Flux.Dense(2, 2))
-
-# Define a latent variable
-z = rand(Float32, 2)
-
-# Construct the decoder distribution
-decoder_dist = MvDiagGaussianDecoder(decoder, z)
-```
-"""
-function MvDiagGaussianDecoder(
+function decoder_loglikelihood(
     decoder::AbstractGaussianLinearDecoder,
-    z::AbstractVector{T}
-) where {T<:AbstractFloat}
-    # Compute mean and log std
+    x::AbstractVector{T},
+    z::AbstractVector{T};
+) where {T<:Float32}
+    # Compute the mean and standard deviation of the decoder output given the
+    # latent variable z
     μ, σ = decoder(z)
 
-    # Construct multivariate diagonal Gaussian distribution
-    decoder_dist = Distributions.MvNormal(μ, σ)
+    # Compute variance
+    σ² = σ .^ 2.0f0
 
-    # Return decoder distribution
-    return decoder_dist
+    # Compute log-likelihood
+    log_likelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ²) -
+                     0.5f0 * sum(log.(σ²)) -
+                     0.5f0 * length(x) * log(2.0f0 * π)
+
+    return log_likelihood
 end # function
 
-function MvDiagGaussianDecoder(
-    hvae::HVAE,
-    z::AbstractVector{T}
-) where {T<:AbstractFloat}
-    # Call method for corresponding decoder type
-    return MvDiagGaussianDecoder(hvae.vae.decoder, z)
-end
-
 # ==============================================================================
-# Function to construct prior distribution
 # ==============================================================================
 
-@doc raw"""
-                SphericalPrior(encoder::JointLogEncoder, σ::T=1.0f0) where {T<:AbstractFloat}
+# function hessian_wrt_z_and_decoder_params(
+#     decoder::AbstractVariationalDecoder,
+#     x::AbstractVector{T},
+#     z::AbstractVector{T}
+# ) where {T<:Float32}
+#     # Get the parameters of the decoder
+#     p = Flux.params(decoder)
 
-Generates a prior distribution as a spherical Gaussian for a given
-`JointLogEncoder`. A spherical Gaussian is a multivariate Gaussian distribution
-with a diagonal covariance matrix where all the diagonal elements (variances)
-are the same. This results in a distribution that is symmetric (or "spherical")
-in all dimensions.
+#     # Define a closure that takes z and the parameters as input and computes the
+#     # log-likelihood
+#     log_likelihood_z_p(z, p) = decoder_loglikelihood(decoder, x, z)
 
-# Arguments
-- `encoder::JointLogEncoder`: The encoder from which the latent dimension is
-  extracted.
-- `σ::T=1.0f0`: The standard deviation of the spherical Gaussian distribution.
-  Defaults to 1.0.
+#     # Compute the gradient with respect to z and the parameters
+#     grad_z_p, back = Zygote.gradient(log_likelihood_z_p, z, p)
 
-# Returns
-- `prior`: A `Distributions.MvNormal{T}` object representing the multivariate
-  spherical Gaussian distribution, where `T` is the type of elements in `z`.
+#     # Compute the Hessian by taking the gradient of the gradient
+#     hessian_z_p = Zygote.gradient(() -> sum(grad_z_p), z, p)
 
-# Example
-```julia
-# Define an encoder
-encoder = JointLogEncoder(...)
-# Define the standard deviation
-σ = 0.5f0
-# Generate the spherical Gaussian prior distribution
-prior = SphericalPrior(encoder, σ)
-```
-"""
-function SphericalPrior(
-    encoder::JointLogEncoder, σ::T=1.0f0
-) where {T<:AbstractFloat}
-    # Extract dimensionality of latent space
-    latent_dim = size(encoder.µ.weight, 1)
-    # Generate prior distribution as spherical Gaussian
-    prior = Distributions.MvNormal(
-        zeros(T, latent_dim), σ .* ones(T, latent_dim)
-    )
-    # Return prior
-    return prior
-end # function
+#     # return hessian_z_p
+# end
 
-function SphericalPrior(
-    hvae::HVAE, σ::T=1.0f0
-) where {T<:AbstractFloat}
-    # Call method for corresponding encoder type
-    SphericalPrior(hvae.vae.encoder, σ)
+# ==============================================================================
+# ==============================================================================
+
+# ==============================================================================
+# Function to compute log prior
+# ==============================================================================
+
+function spherical_logprior(
+    z::AbstractVector{T},
+    σ::T=1.0f0,
+) where {T<:Float32}
+    # Compute log-prior
+    log_prior = -0.5f0 * sum(z .^ 2.0f0 / σ^2) -
+                0.5f0 * length(z) * (log(σ^2) + log(2.0f0 * π))
+
+    return log_prior
 end # function
 
 # ==============================================================================
@@ -314,8 +216,8 @@ end # function
         hvae::HVAE,
         x::AbstractVector{T},
         z::AbstractVector{T};
-        decoder_dist::Function=MvDiagGaussianDecoder,
-        prior::Function=SphericalPrior
+        decoder_dist::Function=decoder_loglikelihood,
+        prior::Function=spherical_logprior
     ) where {T<:AbstractFloat}
 
 Compute the potential energy of a Hamiltonian Variational Autoencoder (HVAE). In
@@ -361,21 +263,17 @@ function potential_energy(
     hvae::HVAE,
     x::AbstractVector{T},
     z::AbstractVector{T};
-    decoder_dist::Function=MvDiagGaussianDecoder,
-    prior::Function=SphericalPrior,
-) where {T<:AbstractFloat}
+    decoder_loglikelihood::Function=decoder_loglikelihood,
+    log_prior::Function=spherical_logprior,
+) where {T<:Float32}
     # Compute log-likelihood
-    μ, Σ = decoder_dist(hvae, z)
-    k = length(x)
-    log_likelihood = -0.5 * ((x - μ)' ./ Σ .* (x - μ) + sum(log.(Σ)) + k * log(2π))
+    log_likelihood = decoder_loglikelihood(hvae.vae.decoder, x, z)
 
     # Compute log-prior
-    μ_prior, Σ_prior = prior(hvae)
-    k_prior = length(z)
-    log_prior = -0.5 * ((z - μ_prior)' ./ Σ_prior .* (z - μ_prior) + sum(log.(Σ_prior)) + k_prior * log(2π))
+    log_p = log_prior(z)
 
     # Compute potential energy
-    return -log_likelihood - log_prior
+    return -log_likelihood - log_p
 end # function
 
 # ------------------------------------------------------------------------------ 
@@ -430,24 +328,23 @@ function ∇potential_energy(
     hvae::HVAE,
     x::AbstractVector{T},
     z::AbstractVector{T};
-    decoder_dist::Function=MvDiagGaussianDecoder,
-    prior::Function=SphericalPrior,
+    decoder_loglikelihood::Function=decoder_loglikelihood,
+    log_prior::Function=spherical_logprior,
 ) where {T<:AbstractFloat}
     # Define potential energy
     function U(z::AbstractVector{T})
         # Compute log-likelihood
-        log_likelihood = Distributions.logpdf(
-            decoder_dist(hvae, z), x
-        )
+        log_likelihood = decoder_loglikelihood(hvae.vae.decoder, x, z)
 
         # Compute log-prior
-        log_prior = Distributions.logpdf(prior(hvae), z)
+        log_p = log_prior(z)
 
         # Compute potential energy
-        return -log_likelihood - log_prior
+        return -log_likelihood - log_p
     end # function
     # Define gradient of potential energy function
     return Zygote.gradient(U, z)[1]
+    # return ForwardDiff.gradient(U, z)
 end # function
 
 # ==============================================================================
@@ -516,7 +413,10 @@ function leapfrog_step(
     ρ::AbstractVector{T},
     ϵ::Union{T,<:AbstractArray{T}};
     ∇U::Function=∇potential_energy,
-    ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
+    ∇U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+    )
 ) where {T<:AbstractFloat}
     # Update momentum variable with half-step
     ρ̃ = ρ - T(0.5) * ϵ .* ∇U(hvae, x, z; ∇U_kwargs...)
@@ -596,7 +496,10 @@ function leapfrog_step(
     ρ::AbstractMatrix{T},
     ϵ::Union{T,<:AbstractArray{T}};
     ∇U::Function=∇potential_energy,
-    ∇U_kwargs::Union{Dict,NamedTuple}=Dict()
+    ∇U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+    )
 ) where {T<:AbstractFloat}
     # Apply leapfrog_step to each column and collect the results
     results = [
@@ -775,16 +678,24 @@ either vectors or matrices.
 function leapfrog_tempering_step(
     hvae::HVAE,
     x::AbstractVecOrMat{T},
-    zₒ::AbstractVecOrMat{T},
-    K::Int,
-    ϵ::Union{T,<:AbstractVector{T}},
-    βₒ::T;
+    zₒ::AbstractVecOrMat{T};
+    K::Int=3,
+    ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+    βₒ::T=0.3f0,
     ∇U::Function=∇potential_energy,
-    ∇U_kwargs::Union{Dict,NamedTuple}=Dict(),
+    ∇U_kwargs::Union{Dict,NamedTuple}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+    ),
     tempering_schedule::Function=quadratic_tempering,
-) where {T<:AbstractFloat}
+) where {T<:Float32}
+    # Extract latent-space dimensionality
+    ldim = size(zₒ, 1)
+
     # Sample γₒ ~ N(0, I)
-    γₒ = Random.rand(SphericalPrior(hvae.vae.encoder), size(zₒ, 2))
+    γₒ = Random.rand(
+        Distributions.MvNormal(zeros(T, ldim), ones(T, ldim)), size(zₒ, 2)
+    )
 
     # Convert to vector if needed
     if isa(zₒ, AbstractVector)
@@ -903,8 +814,8 @@ function (hvae::HVAE{VAE{JointLogEncoder,SimpleDecoder}})(
     βₒ::T;
     ∇U::Function,
     ∇U_kwargs::Union{Dict,NamedTuple}=(
-        decoder_dist=MvDiagGaussianDecoder,
-        prior=SphericalPrior,
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
@@ -915,15 +826,15 @@ function (hvae::HVAE{VAE{JointLogEncoder,SimpleDecoder}})(
     # Run reparametrization trick to generate latent variable zₒ
     zₒ = reparameterize(
         encoder_µ, encoder_logσ;
-        prior=∇U_kwargs[:prior](hvae.vae.encoder),
         n_samples=1,
         log=true
     )
 
     # Run leapfrog and tempering steps
     step_dict = leapfrog_tempering_step(
-        hvae, x, zₒ, K, ϵ, βₒ;
-        ∇U=∇U, ∇U_kwargs=∇U_kwargs, tempering_schedule=tempering_schedule
+        hvae, x, zₒ;
+        K=K, ϵ=ϵ, βₒ=βₒ, ∇U=∇U, ∇U_kwargs=∇U_kwargs,
+        tempering_schedule=tempering_schedule
     )
 
     # Check if latent variables should be returned
@@ -1022,8 +933,8 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     βₒ::T;
     ∇U::Function=∇potential_energy,
     ∇U_kwargs::Union{Dict,NamedTuple}=(
-        decoder_dist=MvDiagGaussianDecoder,
-        prior=SphericalPrior,
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
@@ -1034,15 +945,15 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     # Run reparametrization trick to generate latent variable zₒ
     zₒ = reparameterize(
         encoder_µ, encoder_logσ;
-        prior=∇U_kwargs[:prior](hvae.vae.encoder),
         n_samples=1,
         log=true
     )
 
     # Run leapfrog and tempering steps
     step_dict = leapfrog_tempering_step(
-        hvae, x, zₒ, K, ϵ, βₒ;
-        ∇U=∇U, ∇U_kwargs=∇U_kwargs, tempering_schedule=tempering_schedule
+        hvae, x, zₒ;
+        K=K, ϵ=ϵ, βₒ=βₒ, ∇U=∇U, ∇U_kwargs=∇U_kwargs,
+        tempering_schedule=tempering_schedule
     )
 
     # Check if latent variables should be returned
@@ -1144,8 +1055,8 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     βₒ::T;
     ∇U::Function=∇potential_energy,
     ∇U_kwargs::Union{Dict,NamedTuple}=(
-        decoder_dist=MvDiagGaussianDecoder,
-        prior=SphericalPrior,
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
@@ -1156,15 +1067,15 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     # Run reparametrization trick to generate latent variable zₒ
     zₒ = reparameterize(
         encoder_µ, encoder_logσ;
-        prior=∇U_kwargs[:prior](hvae.vae.encoder),
         n_samples=1,
         log=true
     )
 
     # Run leapfrog and tempering steps
     step_dict = leapfrog_tempering_step(
-        hvae, x, zₒ, K, ϵ, βₒ;
-        ∇U=∇U, ∇U_kwargs=∇U_kwargs, tempering_schedule=tempering_schedule
+        hvae, x, zₒ;
+        K=K, ϵ=ϵ, βₒ=βₒ, ∇U=∇U, ∇U_kwargs=∇U_kwargs,
+        tempering_schedule=tempering_schedule
     )
 
     # Check if latent variables should be returned
@@ -1268,7 +1179,7 @@ elbo = hamiltonian_elbo(hvae, x, K=3, ϵ=0.001f0, βₒ=0.3f0)
 ```
 """
 function hamiltonian_elbo(
-    hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractVariationalDecoder}},
+    hvae::HVAE{<:VAE{<:JointLogEncoder,<:AbstractGaussianDecoder}},
     x::AbstractVector{T};
     K::Int=3,
     ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
@@ -1276,8 +1187,8 @@ function hamiltonian_elbo(
     U::Function=potential_energy,
     ∇U::Function=∇potential_energy,
     U_kwargs::Union{Dict,NamedTuple}=(
-        decoder_dist=MvDiagGaussianDecoder,
-        prior=SphericalPrior,
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
@@ -1301,16 +1212,19 @@ function hamiltonian_elbo(
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
     # log p̄ = - U(x, zₖ) + log p(ρₖ)
-    log_p̄ = -U(hvae, x, zₖ; U_kwargs...) +
-             Distributions.logpdf(SphericalPrior(hvae.vae.encoder), ρₖ)
+    log_p̄ = -U(hvae, x, zₖ; U_kwargs...) + spherical_logprior(ρₖ)
 
     # log q̄ = log q(zₒ) + log p(ρₒ)
-    log_q̄ = Distributions.logpdf(
-        Distributions.MvNormal(
-            hvae_outputs.encoder_µ, exp.(hvae_outputs.encoder_logσ)
-        ),
-        zₒ
-    ) + Distributions.logpdf(SphericalPrior(hvae.vae.encoder, βₒ^-1), ρₒ) -
+
+    # Extract mean and standard deviation from the encoder outputs
+    μ = hvae_outputs.encoder_µ
+    logσ = hvae_outputs.encoder_logσ
+    σ² = exp.(2 .* logσ)
+
+    log_q̄ = -0.5f0 * sum(abs2, (zₒ - μ) ./ σ²) -
+             sum(logσ) -
+             0.5f0 * length(zₒ) * log(2.0f0 * π) +
+             spherical_logprior(ρₒ, βₒ^-1) -
              0.5f0 * length(zₒ) * log(βₒ)
 
     if return_outputs
@@ -1407,8 +1321,8 @@ function hamiltonian_elbo(
     U::Function=potential_energy,
     ∇U::Function=∇potential_energy,
     U_kwargs::Union{Dict,NamedTuple}=(
-        decoder_dist=MvDiagGaussianDecoder,
-        prior=SphericalPrior,
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
@@ -1437,20 +1351,20 @@ function hamiltonian_elbo(
         # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
         # log p̄ = - U(x, zₖ) + log p(ρₖ)
         log_p̄ = -U(hvae, x[:, i], zₖ[:, i]; U_kwargs...) +
-                 Distributions.logpdf(
-            SphericalPrior(hvae.vae.encoder), ρₖ[:, i]
-        )
+                 spherical_logprior(ρₖ[:, i])
 
         # log q̄ = log q(zₒ) + log p(ρₒ)
-        log_q̄ = Distributions.logpdf(
-            Distributions.MvNormal(
-                hvae_outputs.encoder_µ[:, i],
-                exp.(hvae_outputs.encoder_logσ[:, i])
-            ),
-            zₒ[:, i]
-        ) + Distributions.logpdf(
-            SphericalPrior(hvae.vae.encoder, βₒ^-1), ρₒ[:, i]
-        ) - 0.5f0 * size(zₒ, 1) * log(βₒ)
+
+        # Extract mean and standard deviation from the encoder outputs
+        μ = hvae_outputs.encoder_µ
+        logσ = hvae_outputs.encoder_logσ
+        σ² = exp.(2 .* logσ)
+
+        log_q̄ = -0.5f0 * sum(abs2, (zₒ[:, 1] - μ[:, 1]) ./ σ²[:, 1]) -
+                 sum(logσ[:, 1]) -
+                 0.5f0 * size(zₒ, 1) * log(2.0f0 * π) +
+                 spherical_logprior(ρₒ[:, 1], βₒ^-1) -
+                 0.5f0 * size(zₒ, 1) * log(βₒ)
 
         # Update ELBO
         elbo += log_p̄ - log_q̄
@@ -1526,8 +1440,8 @@ function loss(
     U::Function=potential_energy,
     ∇U::Function=∇potential_energy,
     U_kwargs::Union{Dict,NamedTuple}=(
-        decoder_dist=MvDiagGaussianDecoder,
-        prior=SphericalPrior,
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     reg_function::Union{Function,Nothing}=nothing,
