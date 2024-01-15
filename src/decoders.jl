@@ -262,11 +262,11 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 # ==============================================================================
-# struct SimpleDecoder <: AbstractVariationalDecoder
+# struct SimpleDecoder <: AbstractGaussianDecoder
 # ==============================================================================
 
 @doc raw"""
-    SimpleDecoder <: AbstractVariationalDecoder
+    SimpleDecoder <: AbstractGaussianDecoder
 
 A straightforward decoder structure for variational autoencoders (VAEs) that
 contains only a single decoder network.
@@ -281,7 +281,7 @@ the latent space's mean (`µ`) or log standard deviation (`logσ`). It's commonl
 used when the VAE's latent space distribution is implicitly defined, and there's
 no need for separate paths or operations on the mean or log standard deviation.
 """
-mutable struct SimpleDecoder <: AbstractVariationalDecoder
+mutable struct SimpleDecoder <: AbstractGaussianDecoder
     decoder::Flux.Chain
 end # struct
 
