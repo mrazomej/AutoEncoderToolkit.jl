@@ -60,7 +60,7 @@ posterior distributions compared to a standard VAE, which assumes a simple
 Gaussian posterior. This can lead to more accurate reconstructions and better
 disentanglement of latent variables.
 """
-mutable struct HVAE{
+struct HVAE{
     V<:VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}
 } <: AbstractVariationalAutoEncoder
     vae::V
@@ -920,21 +920,21 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     zₒ = reparameterize(hvae.vae.encoder, encoder_outputs, n_samples=1)
 
     # Run leapfrog and tempering steps
-    phase_space_coord = leapfrog_tempering_step(
+    phase_space = leapfrog_tempering_step(
         hvae, x, zₒ;
         K=K, ϵ=ϵ, βₒ=βₒ, ∇U=∇U, ∇U_kwargs=∇U_kwargs,
         tempering_schedule=tempering_schedule
     )
 
     # Run final zₖ through decoder
-    decoder_outputs = hvae.vae.decoder(phase_space_coord.z_final)
+    decoder_outputs = hvae.vae.decoder(phase_space.z_final)
 
     # Check if latent variables should be returned
     if latent
         return (
             encoder=encoder_outputs,
             decoder=decoder_outputs,
-            phase_space=phase_space_coord,
+            phase_space=phase_space,
         )
     else
         return decoder_outputs
@@ -1124,17 +1124,6 @@ end # function
 
 # ------------------------------------------------------------------------------
 
-function log_p̄(
-    hvae::HVAE,
-    x::AbstractVector{T},
-    hvae_outputs::NamedTuple,
-) where {T<:Float32}
-    # Call right method
-    return log_p̄(hvae.vae.decoder, x, hvae_outputs)
-end # function
-
-# ------------------------------------------------------------------------------
-
 @doc raw"""
     log_q̄(
         encoder::AbstractGaussianLogEncoder,
@@ -1187,17 +1176,6 @@ function log_q̄(
     log_ρ = spherical_logprior(ρₒ, βₒ^-1)
 
     return log_q + log_ρ - 0.5f0 * length(zₒ) * log(βₒ)
-end # function
-
-# ------------------------------------------------------------------------------
-
-function log_q̄(
-    hvae::HVAE,
-    hvae_outputs::NamedTuple,
-    βₒ::T
-) where {T<:Float32}
-    # Call right method
-    return log_q̄(hvae.vae.encoder, hvae_outputs, βₒ)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -1303,10 +1281,10 @@ function hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = log_p̄(hvae, x, hvae_outputs)
+    log_p = log_p̄(hvae.vae.decoder, x, hvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = log_q̄(hvae, hvae_outputs, βₒ)
+    log_q = log_q̄(hvae.vae.encoder, hvae_outputs, βₒ)
 
     # Check if HVAE outputs should be returned
     if return_outputs
