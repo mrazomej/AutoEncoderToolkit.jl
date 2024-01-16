@@ -128,7 +128,7 @@ is used to map the input data directly into the latent space representation.
 enc = Encoder(Flux.Chain(Dense(784, 400, relu), Dense(400, 20)))
 ```
 """
-mutable struct Encoder <: AbstractDeterministicEncoder
+struct Encoder <: AbstractDeterministicEncoder
     encoder::Flux.Chain
 end # struct
 
@@ -281,7 +281,7 @@ enc = JointLogEncoder(
     Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
 )
 """
-mutable struct JointLogEncoder <: AbstractGaussianLogEncoder
+struct JointLogEncoder <: AbstractGaussianLogEncoder
     encoder::Flux.Chain
     µ::Flux.Dense
     logσ::Flux.Dense
@@ -517,7 +517,7 @@ enc = JointEncoder(
     Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
 )
 """
-mutable struct JointEncoder <: AbstractGaussianLinearEncoder
+struct JointEncoder <: AbstractGaussianLinearEncoder
     encoder::Flux.Chain
     µ::Flux.Dense
     σ::Flux.Dense

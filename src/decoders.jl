@@ -134,7 +134,7 @@ data space.
 dec = Decoder(Flux.Chain(Dense(20, 400, relu), Dense(400, 784)))
 ```
 """
-mutable struct Decoder <: AbstractDeterministicDecoder
+struct Decoder <: AbstractDeterministicDecoder
     decoder::Flux.Chain
 end # struct
 
@@ -281,7 +281,7 @@ the latent space's mean (`µ`) or log standard deviation (`logσ`). It's commonl
 used when the VAE's latent space distribution is implicitly defined, and there's
 no need for separate paths or operations on the mean or log standard deviation.
 """
-mutable struct SimpleDecoder <: AbstractGaussianDecoder
+struct SimpleDecoder <: AbstractGaussianDecoder
     decoder::Flux.Chain
 end # struct
 
@@ -446,7 +446,7 @@ mapping from the latent space to both its mean (`µ`) and log standard deviation
 is used initially, and then splits into two separate paths for determining both
 the mean and log standard deviation of the latent space.
 """
-mutable struct JointLogDecoder <: AbstractGaussianLogDecoder
+struct JointLogDecoder <: AbstractGaussianLogDecoder
     decoder::Flux.Chain
     µ::Flux.Dense
     logσ::Flux.Dense
@@ -725,7 +725,7 @@ mapping from the latent space to both its mean (`µ`) and standard deviation
 is used initially, and then splits into two separate paths for determining both
 the mean and standard deviation of the latent space.
 """
-mutable struct JointDecoder <: AbstractGaussianLinearDecoder
+struct JointDecoder <: AbstractGaussianLinearDecoder
     decoder::Flux.Chain
     µ::Flux.Dense
     σ::Flux.Dense
@@ -1001,7 +1001,7 @@ networks are preferred for computing the mean and log standard deviation,
 ensuring that each has its own distinct set of parameters and transformation
 logic.
 """
-mutable struct SplitLogDecoder <: AbstractGaussianLogDecoder
+struct SplitLogDecoder <: AbstractGaussianLogDecoder
     µ::Flux.Chain
     logσ::Flux.Chain
 end
@@ -1202,7 +1202,7 @@ networks are preferred for computing the mean and log standard deviation,
 ensuring that each has its own distinct set of parameters and transformation
 logic.
 """
-mutable struct SplitDecoder <: AbstractGaussianLinearDecoder
+struct SplitDecoder <: AbstractGaussianLinearDecoder
     µ::Flux.Chain
     σ::Flux.Chain
 end

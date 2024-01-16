@@ -239,7 +239,7 @@ in between. The encoder compresses the input into a low-dimensional
 probabilistic representation q(z|x). The decoder tries to reconstruct the
 original input from a sampled point in the latent space p(x|z). 
 """
-mutable struct VAE{
+struct VAE{
     E<:AbstractVariationalEncoder,
     D<:AbstractVariationalDecoder
 } <: AbstractVariationalAutoEncoder
