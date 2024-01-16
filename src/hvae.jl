@@ -104,7 +104,7 @@ standard deviation.
   `1.0f0`.
 
 # Returns
-- `log_likelihood::Float32`: The computed log-likelihood of the observed data
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data
   `x` given the latent variable `z`.
 
 # Description
@@ -129,9 +129,9 @@ function decoder_loglikelihood(
     μ = decoder(z).µ
 
     # Compute log-likelihood
-    log_likelihood = -0.5f0 * sum(abs2, (x - μ) / σ) -
-                     0.5f0 * length(x) * (2.0f0 * log(σ) + log(2.0f0π))
-    return log_likelihood
+    loglikelihood = -0.5f0 * sum(abs2, (x - μ) / σ) -
+                    0.5f0 * length(x) * (2.0f0 * log(σ) + log(2.0f0π))
+    return loglikelihood
 end # function
 
 # ------------------------------------------------------------------------------
@@ -156,7 +156,7 @@ decoder.
   `x`.
 
 # Returns
-- `log_likelihood::Float32`: The computed log-likelihood of the observed data
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data
   `x` given the latent variable `z`.
 
 # Description
@@ -184,11 +184,11 @@ function decoder_loglikelihood(
     σ = exp.(logσ)
 
     # Compute log-likelihood
-    log_likelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
-                     sum(logσ) -
-                     0.5f0 * length(x) * log(2.0f0π)
+    loglikelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+                    sum(logσ) -
+                    0.5f0 * length(x) * log(2.0f0π)
 
-    return log_likelihood
+    return loglikelihood
 end # function
 
 @doc raw"""
@@ -211,7 +211,7 @@ decoder.
   `x`.
 
 # Returns
-- `log_likelihood::Float32`: The computed log-likelihood of the observed data
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data
   `x` given the latent variable `z`.
 
 # Description
@@ -235,11 +235,11 @@ function decoder_loglikelihood(
     μ, σ = decoder(z)
 
     # Compute log-likelihood
-    log_likelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
-                     sum(log, σ) -
-                     0.5f0 * length(x) * log(2.0f0π)
+    loglikelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+                    sum(log, σ) -
+                    0.5f0 * length(x) * log(2.0f0π)
 
-    return log_likelihood
+    return loglikelihood
 end # function
 
 # ==============================================================================
@@ -279,7 +279,7 @@ function spherical_logprior(
 ) where {T<:Float32}
     # Compute log-prior
     log_prior = -0.5f0 * sum(abs2, z / σ) -
-                0.5f0 * length(z) * (2.0f0 * log(σ) + log(2.0f0 * π))
+                0.5f0 * length(z) * (2.0f0 * log(σ) + log(2.0f0π))
 
     return log_prior
 end # function
@@ -346,13 +346,13 @@ function potential_energy(
     log_prior::Function=spherical_logprior,
 ) where {T<:Float32}
     # Compute log-likelihood
-    log_likelihood = decoder_loglikelihood(hvae.vae.decoder, x, z)
+    loglikelihood = decoder_loglikelihood(hvae.vae.decoder, x, z)
 
     # Compute log-prior
-    log_p = log_prior(z)
+    logprior = log_prior(z)
 
     # Compute potential energy
-    return -log_likelihood - log_p
+    return -loglikelihood - logprior
 end # function
 
 # ------------------------------------------------------------------------------ 
@@ -411,17 +411,17 @@ function ∇potential_energy(
     z::AbstractVector{T};
     decoder_loglikelihood::Function=decoder_loglikelihood,
     log_prior::Function=spherical_logprior,
-) where {T<:AbstractFloat}
+) where {T<:Float32}
     # Define potential energy
     function U(z::AbstractVector{T})
         # Compute log-likelihood
-        log_likelihood = decoder_loglikelihood(hvae.vae.decoder, x, z)
+        loglikelihood = decoder_loglikelihood(hvae.vae.decoder, x, z)
 
         # Compute log-prior
-        log_p = log_prior(z)
+        logprior = log_prior(z)
 
         # Compute potential energy
-        return -log_likelihood - log_p
+        return -loglikelihood - logprior
     end # function
     # Define gradient of potential energy function
     return Zygote.gradient(U, z)[1]
@@ -503,15 +503,15 @@ function leapfrog_step(
     )
 ) where {T<:Float32}
     # Update momentum variable with half-step
-    ρ̃ = ρ - 0.5f0 * ϵ .* ∇U(hvae, x, z; ∇U_kwargs...)
+    ρ̃ = ρ - (0.5f0 * ϵ) .* ∇U(hvae, x, z; ∇U_kwargs...)
 
     # Update position variable with full-step
     z̄ = z + ϵ .* ρ̃
 
     # Update momentum variable with half-step
-    ρ̄ = ρ̃ - 0.5f0 * ϵ .* ∇U(hvae, x, z̄; ∇U_kwargs...)
+    ρ̄ = ρ̃ - (0.5f0 * ϵ) .* ∇U(hvae, x, z̄; ∇U_kwargs...)
 
-    return (z=z̄, ρ=ρ̄)
+    return z̄, ρ̄
 end # function
 
 # ------------------------------------------------------------------------------ 
@@ -604,7 +604,7 @@ function leapfrog_step(
     z̄ = reduce(hcat, [result[1] for result in results])
     ρ̄ = reduce(hcat, [result[2] for result in results])
 
-    return (z=z̄, ρ=ρ̄)
+    return z̄, ρ̄
 end # function
 
 # ==============================================================================
@@ -821,7 +821,8 @@ function leapfrog_tempering_step(
         # iteration. The momentum variable is updated with tempering. Also, note
         # this is the last step as well, thus we return zₖ₋₁, ρₖ₋₁ as the final
         # points.
-        zₖ₋₁, ρₖ₋₁ = zₖ, ρₖ .* √(βₖ₋₁ / βₖ)
+        zₖ₋₁ = zₖ
+        ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
     end # for
 
     return (
@@ -919,21 +920,21 @@ function (hvae::HVAE{VAE{JointLogEncoder,D}})(
     zₒ = reparameterize(hvae.vae.encoder, encoder_outputs, n_samples=1)
 
     # Run leapfrog and tempering steps
-    step_dict = leapfrog_tempering_step(
+    phase_space_coord = leapfrog_tempering_step(
         hvae, x, zₒ;
         K=K, ϵ=ϵ, βₒ=βₒ, ∇U=∇U, ∇U_kwargs=∇U_kwargs,
         tempering_schedule=tempering_schedule
     )
 
     # Run final zₖ through decoder
-    decoder_outputs = hvae.vae.decoder(step_dict.z_final)
+    decoder_outputs = hvae.vae.decoder(phase_space_coord.z_final)
 
     # Check if latent variables should be returned
     if latent
         return (
             encoder=encoder_outputs,
             decoder=decoder_outputs,
-            phase_space=step_dict,
+            phase_space=phase_space_coord,
         )
     else
         return decoder_outputs
@@ -1635,11 +1636,11 @@ end # function
 #     function first_grad_function(hvae)
 #         # Define potential energy using the modified decoder
 #         function U(z::AbstractVector{T})
-#             log_likelihood = Distributions.logpdf(
+#             loglikelihood = Distributions.logpdf(
 #                 decoder_dist(hvae.vae.decoder, z), x
 #             )
 #             log_prior = Distributions.logpdf(prior(hvae.vae.encoder), z)
-#             return -log_likelihood - log_prior
+#             return -loglikelihood - log_prior
 #         end
 
 #         # Compute and return the first gradient
