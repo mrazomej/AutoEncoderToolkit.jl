@@ -5,8 +5,11 @@ import NearestNeighbors
 import StatsBase
 import Random
 
+# Import library for basic math
+import LinearAlgebra
+
 # Export functions
-export shuffle_data, cycle_anneal, locality_sampler
+export shuffle_data, cycle_anneal, locality_sampler, vec_to_ltri
 
 @doc raw"""
     `step_scheduler(epoch, epoch_change, learning_rates)`
@@ -184,3 +187,55 @@ function locality_sampler(
         return @view data[:, [idx_primary; idx_secondary]]
     end # if
 end # function
+
+@doc raw"""
+    vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T}, z::T=zero(T))
+
+Convert two one-dimensional vectors into a lower triangular matrix.
+
+# Arguments
+- `diag::AbstractVector{T}`: The input vector to be converted into the diagonal
+  of the matrix.
+- `lower::AbstractVector{T}`: The input vector to be converted into the lower
+  triangular part of the matrix. The length of this vector should be a
+  triangular number (i.e., the sum of the first `n` natural numbers for some
+  `n`).
+- `z::T=zero(T)`: The value to fill in the upper triangular part of the matrix.
+  Defaults to zero.
+
+# Returns
+- A lower triangular matrix constructed from `diag` and `lower`, with the upper
+  triangular part filled with `z`.
+
+# Example
+```julia
+diag = [1, 2, 3]
+lower = [4, 5, 6]
+vec_to_ltri(diag, lower)  # Returns a 3x3 lower triangular matrix
+```
+"""
+function vec_to_ltri(
+    diag::AbstractVector{T}, lower::AbstractVector{T}, z::T=zero(T)
+) where {T<:Number}
+    # Calculate length of diag and lower
+    d, l = length(diag), length(lower)
+
+    # Calculate the length of vector
+    n = d + l
+    # Calculate the side length of the square matrix that the vector will be converted into
+    s = round(Int, (sqrt(8n + 1) - 1) / 2)
+
+    # Check if the length of the lower vector is a triangular number
+    s * (s + 1) / 2 == n || error("length of vector is not triangular")
+
+    # Construct the lower triangular matrix
+    k = 0
+    LinearAlgebra.LowerTriangular(
+        [
+        i == j ? diag[i] :
+        (i > j ? (k += 1; lower[k]) : z)
+        for i = 1:s, j = 1:s
+    ]
+    )
+end # function
+
