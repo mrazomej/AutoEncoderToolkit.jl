@@ -31,6 +31,7 @@ using ..AutoEncode: VAE
 # Import functions from other modules
 using ..VAEs: reparameterize
 using ..utils: vec_to_ltri
+using ..HVAEs: decoder_loglikelihood, spherical_logprior
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #  Chadebec, C., Mantoux, C. & Allassonnière, S. Geometry-Aware Hamiltonian
@@ -360,9 +361,9 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    G_inv(
-        rhvae::RHVAE,
-        z::AbstractVector{Float32},
+    G_inv( 
+        rhvae::RHVAE, 
+        z::AbstractVector{Float32}
     )
 
 Compute the inverse of the metric tensor G for a given point in the latent
@@ -394,6 +395,60 @@ proportional to the identity matrix. The result is a matrix of the same size as
 the latent space.
 """
 function G_inv(
+    rhvae::RHVAE,
+    z::AbstractVector{Float32},
+)
+    # Compute Squared Euclidean distance between z and each centroid
+    distances = sum(abs2, z .- rhvae.centroids_latent, dims=1)
+
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Note: The reshape is necessary
+    # to broadcast the elemnt-wise product with each slice of M.
+    LLexp = rhvae.M .* reshape(exp.(-distances ./ rhvae.T^2), 1, 1, :)
+
+    # Return the sum of the LLexp slices plus the regularization term
+    return dropdims(sum(LLexp, dims=3); dims=3) +
+           rhvae.λ * LinearAlgebra.I(size(z, 1))
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    G_inv_fast( 
+        rhvae::RHVAE, 
+        z::AbstractVector{Float32}
+    )
+
+Compute the inverse of the metric tensor G for a given point in the latent
+space. These computations are performed in a fast manner, using mutating arrays,
+thus are not differentiable. The speed difference might only be noticed for a
+large number of centroids.
+
+This function takes a `RHVAE` instance and a point `z` in the latent space, and
+computes the inverse of the metric tensor G at that point. The computation is
+based on the centroids and the temperature of the `RHVAE` instance, as well as a
+regularization term. The inverse metric is computed as follows:
+
+G⁻¹(z) = ∑ᵢ₌₁ⁿ L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
+
+where L_ψᵢ is computed by the `MetricChain`, T is the temperature, λ is a
+regularization factor, and each column of `centroids_latent` are the cᵢ.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `z::AbstractVector{Float32}`: The point in the latent space.
+
+# Returns
+A matrix representing the inverse of the metric tensor G at the point `z`.
+
+# Notes
+
+The computation involves the squared Euclidean distance between z and each
+centroid of the RHVAE instance, the exponential of the negative of these
+distances divided by the square of the temperature, and a regularization term
+proportional to the identity matrix. The result is a matrix of the same size as
+the latent space.
+"""
+function G_inv_fast(
     rhvae::RHVAE,
     z::AbstractVector{Float32},
 )
@@ -485,3 +540,299 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Generalized Hamiltonian Dynamics
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+# ==============================================================================
+# Hamiltonian and gradient computations
+# ==============================================================================
+
+@doc raw"""
+    hamiltonian(
+        rhvae::RHVAE,
+        x::AbstractVector{T},
+        z::AbstractVector{T},
+        ρ::AbstractVector{T};
+        decoder_loglikelihood::Function=decoder_loglikelihood,
+        log_prior::Function=spherical_logprior,
+        G_inv::Function=G_inv,
+    ) where {T<:Float32}
+
+Compute the Hamiltonian for a given point in the latent space and a given
+momentum.
+
+This function takes a `RHVAE` instance, a point `x` in the data space, a point
+`z` in the latent space, and a momentum `ρ`, and computes the Hamiltonian. The
+computation is based on the log-likelihood of the decoder, the log-prior of the
+latent space, and the inverse of the metric tensor G at the point `z`.
+
+The Hamiltonian is computed as follows:
+
+Hₓ(z, ρ) = Uₓ(z) + 0.5 * log((2π)ᴰ det G(z)) + 0.5 * ρᵀ G(z)⁻¹ ρ,
+
+where Uₓ(z) is the potential energy, computed as the negative sum of the
+log-likelihood and the log-prior, D is the dimension of the latent space, and
+G(z) is the metric tensor at the point `z`.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `x::AbstractVector{T}`: The point in the data space.
+- `z::AbstractVector{T}`: The point in the latent space.
+- `ρ::AbstractVector{T}`: The momentum.
+- `decoder_loglikelihood::Function`: The function to compute the log-likelihood
+  of the decoder. Default is `decoder_loglikelihood`.
+- `log_prior::Function`: The function to compute the log-prior of the latent
+  space. Default is `spherical_logprior`.
+- `G_inv::Function`: The function to compute the inverse of the metric tensor G.
+  Default is `G_inv`.
+
+# Returns
+A scalar representing the Hamiltonian at the point `z` with the momentum `ρ`.
+"""
+function hamiltonian(
+    rhvae::RHVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T},
+    ρ::AbstractVector{T};
+    decoder_loglikelihood::Function=decoder_loglikelihood,
+    log_prior::Function=spherical_logprior,
+    G_inv::Function=G_inv,
+) where {T<:Float32}
+    # 1. Potntial energy U(z|x)
+
+    # Compute log-likelihood
+    loglikelihood = decoder_loglikelihood(rhvae.vae.decoder, x, z)
+
+    # Compute log-prior
+    logprior = log_prior(z)
+
+    # Define potential energy
+    U = -loglikelihood - logprior
+
+    # 2. Kinetic energy K(ρ)
+
+    # Compute the inverse metric tensor. This must be ignored by Zygote.
+    G⁻¹ = G_inv(rhvae, z)
+
+    # Compute the log determinant of the metric tensor
+    logdetG = -LinearAlgebra.logdet(G⁻¹)
+
+    # Compute kinetic energy
+    κ = 0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) +
+        0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+
+    # Return Hamiltonian
+    return U + κ
+end # function
+
+# ------------------------------------------------------------------------------
+
+
+@doc raw"""
+    ∇hamiltonian(
+        rhvae::RHVAE,
+        x::AbstractVector{T},
+        z::AbstractVector{T},
+        ρ::AbstractVector{T},
+        var::Symbol;
+        decoder_loglikelihood::Function=decoder_loglikelihood,
+        log_prior::Function=spherical_logprior,
+        G_inv::Function=G_inv,
+    ) where {T<:Float32}
+
+Compute the gradient of the Hamiltonian with respect to a given variable.
+
+This function takes a `RHVAE` instance, a point `x` in the data space, a point
+`z` in the latent space, a momentum `ρ`, and a variable `var` (:z or :ρ), and
+computes the gradient of the Hamiltonian with respect to `var` using `Zygote.jl`
+AutoDiff. The computation is based on the log-likelihood of the decoder, the
+log-prior of the latent space, and the inverse of the metric tensor G at the
+point `z`.
+
+The Hamiltonian is computed as follows:
+
+Hₓ(z, ρ) = Uₓ(z) + 0.5 * log((2π)ᴰ det G(z)) + 0.5 * ρᵀ G(z)⁻¹ ρ,
+
+where Uₓ(z) is the potential energy, computed as the negative sum of the
+log-likelihood and the log-prior, D is the dimension of the latent space, and
+G(z) is the metric tensor at the point `z`.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `x::AbstractVector{T}`: The point in the data space.
+- `z::AbstractVector{T}`: The point in the latent space.
+- `ρ::AbstractVector{T}`: The momentum.
+- `var::Symbol`: The variable with respect to which the gradient is computed.
+  Must be :z or :ρ.
+- `decoder_loglikelihood::Function`: The function to compute the log-likelihood
+  of the decoder. Default is `decoder_loglikelihood`.
+- `log_prior::Function`: The function to compute the log-prior of the latent
+  space. Default is `spherical_logprior`.
+- `G_inv::Function`: The function to compute the inverse of the metric tensor G.
+  Default is `G_inv`.
+
+# Returns
+A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
+respect to variable `var`.
+"""
+function ∇hamiltonian(
+    rhvae::RHVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T},
+    ρ::AbstractVector{T},
+    var::Symbol;
+    decoder_loglikelihood::Function=decoder_loglikelihood,
+    log_prior::Function=spherical_logprior,
+    G_inv::Function=G_inv,
+) where {T<:Float32}
+    # Check that var is a valid variable
+    if var ∉ (:z, :ρ)
+        error("var must be :z or :ρ")
+    end # if
+    # Define function to compute Hamiltonian.
+    function H(z::AbstractVector{T}, ρ::AbstractVector{T})
+        # 1. Potntial energy U(z|x)
+        # Compute log-likelihood
+        loglikelihood = decoder_loglikelihood(rhvae.vae.decoder, x, z)
+        # Compute log-prior
+        logprior = log_prior(z)
+        # Define potential energy
+        U = -loglikelihood - logprior
+
+        # 2. Kinetic energy K(ρ)
+        # Compute the inverse metric tensor
+        G⁻¹ = G_inv(rhvae, z)
+
+        # Compute the log determinant of the metric tensor
+        logdetG = -LinearAlgebra.logdet(G⁻¹)
+        # # Compute kinetic energy
+        κ = 0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) +
+            0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+        # Return Hamiltonian
+        return U + κ
+    end # function
+
+    # Compute gradient with respect to var
+    if var == :z
+        return Zygote.gradient(z -> H(z, ρ), z)[1]
+    elseif var == :ρ
+        return Zygote.gradient(ρ -> H(z, ρ), ρ)[1]
+    end # if
+end # function
+
+# ==============================================================================
+# Generalized Leapfrog Integrator
+# ==============================================================================
+
+@doc raw"""
+    _leapfrog_first_step(
+        rhvae::RHVAE,
+        x::AbstractVector{T},
+        z::AbstractVector{T},
+        ρ::AbstractVector{T},
+        ϵ::Union{T,<:AbstractVector{T}};
+        steps::Int=1,
+        ∇H::Function=∇hamiltonian,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+            decoder_loglikelihood=decoder_loglikelihood,
+            log_prior=spherical_logprior,
+            G_inv=G_inv,
+        ),
+    ) where {T<:Float32}
+
+Perform the first step of the generalized leapfrog integrator for Hamiltonian
+dynamics, defined as
+
+ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ * ∇z_H(z(t), ρ(t + ϵ/2)).
+
+This function is part of the generalized leapfrog integrator used in Hamiltonian
+dynamics. Unlike the standard leapfrog integrator, the generalized leapfrog
+integrator is implicit, which means it requires the use of fixed-point
+iterations to be solved.
+
+The function takes a `RHVAE` instance, a point `x` in the data space, a point
+`z` in the latent space, a momentum `ρ`, a step size `ϵ`, and optionally the
+number of fixed-point iterations to perform (`steps`), a function to compute the
+gradient of the Hamiltonian (`∇H`), and a set of keyword arguments for `∇H`
+(`∇H_kwargs`).
+
+The function performs the following update for `steps` times:
+
+ρ̃ = ρ̃ - 0.5 * ϵ * ∇H(rhvae, x, z, ρ̃, :z; ∇H_kwargs...)
+
+where `∇H` is the gradient of the Hamiltonian with respect to the position
+variables `z`. The result is returned as ρ̃.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `x::AbstractVector{T}`: The point in the data space.
+- `z::AbstractVector{T}`: The point in the latent space.
+- `ρ::AbstractVector{T}`: The momentum.
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size.
+
+# Optional Keyword Arguments
+- `steps::Int=3`: The number of fixed-point iterations to perform. Default is 1.
+  Typically, 3 iterations are sufficient.
+- `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
+  Hamiltonian. Default is `∇hamiltonian`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
+  is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+
+# Returns
+A vector representing the updated momentum after performing the first step of
+the generalized leapfrog integrator.
+"""
+function _leapfrog_first_step(
+    rhvae::RHVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T},
+    ρ::AbstractVector{T},
+    ϵ::Union{T,<:AbstractVector{T}};
+    steps::Int=1,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+        G_inv=G_inv,
+    ),
+) where {T<:Float32}
+    # Copy ρ to iterate over it
+    # ρ̃ = deepcopy(ρ)
+
+    return ρ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
+
+    # Loop over steps
+    # for _ in 1:steps
+    #     # Update momentum variable into a new temporary variable
+    #     ρ̃_ = ρ̃ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ̃, :z; ∇H_kwargs...)
+
+    #     # Update momentum variable for next cycle
+    #     ρ̃ = ρ̃_
+    # end # for
+
+    # return ρ̃
+end # function
+
+# ------------------------------------------------------------------------------
+
+# function _leapfrog_second_step(
+#     rhvae::RHVAE,
+#     x::AbstractVector{T},
+#     z::AbstractVector{T},
+#     ρ::AbstractVector{T},
+#     ϵ::Union{T,<:AbstractVector{T}};
+#     steps::Int=1,
+#     ∇H::Function=∇hamiltonian,
+#     ∇H_kwargs::Union{NamedTuple,Dict}=(
+#         decoder_loglikelihood=decoder_loglikelihood,
+#         log_prior=spherical_logprior,
+#         G_inv=G_inv,
+#     ),
+# ) where {T<:Float32}
+#     # Copy z to iterate over it
+#     z̄ = deepcopy(z)
+
+#     # Loop over steps
+#     for _ in 1:steps
+#         z̄ = z̄ + (0.5f0 * ϵ) .* ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...)
+#     end # for
+#     end # for
+# end # function
