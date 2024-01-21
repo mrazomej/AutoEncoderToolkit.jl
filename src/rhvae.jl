@@ -1,3 +1,6 @@
+# Import FillArrays
+using FillArrays: Fill
+
 # Import ML libraries
 import Flux
 import Zygote
@@ -442,30 +445,14 @@ function G_inv(
     rhvae::RHVAE,
     z::AbstractVector{Float32},
 )
-    # Compute Squared Euclidean distance between z and each centroid
-    # ‖z - cᵢ‖₂² / T²
-    distances = sum(abs2, (z .- rhvae.centroids_latent) ./ rhvae.T, dims=1)
-
-    # Initialize L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
-    LLexp = zeros(Float32, size(z, 1), size(z, 1))
-
-    # Loop over distances
-    for (i, d) in enumerate(distances)
-        # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
-        LLexp += rhvae.M[:, :, i] .* exp(-d)
-    end # for
-
-    # # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²).
-    # LLexp = reduce(
-    #     (x, y) -> cat(x, y, dims=3),
-    #     [
-    #         rhvae.M[:, :, i] .* exp.(-distances[i])
-    #         for i in 1:size(rhvae.M, 3)
-    #     ]
-    # )
-
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). 
+    LLexp = sum([
+        rhvae.M[:, :, i] .*
+        exp(-sum(abs2, (z - rhvae.centroids_latent[:, i]) ./ rhvae.T))
+        for i in 1:size(rhvae.M, 3)
+    ])
     # Return the sum of the LLexp slices plus the regularization term
-    return LLexp# + LinearAlgebra.diagm(rhvae.λ * ones(Float32, size(z, 1)))
+    return LLexp + LinearAlgebra.diagm(rhvae.λ * ones(Float32, size(z, 1)))
 end # function
 
 # ------------------------------------------------------------------------------
@@ -598,6 +585,27 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Generalized Hamiltonian Dynamics
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+# ==============================================================================
+# Define Zygote.@adjoint for FillArrays.fill
+# ==============================================================================
+
+# Note: This is needed because the specific type of FillArrays.fill does not
+# have a Zygote.@adjoint function defined. This causes an error when trying to
+# backpropagate through the RHVAE.
+
+# Define the Zygote.@adjoint function for the FillArrays.fill method.
+# The function takes a matrix `x` of type Float32 and a size `sz` as input.
+Zygote.@adjoint function (::Type{T})(x::Matrix{Float32}, sz) where {T<:Fill}
+    # Define the backpropagation function for the adjoint.
+    # The function takes a gradient `Δ` as input and returns the sum of the gradient and `nothing`.
+    back(Δ::AbstractArray) = (sum(Δ), nothing)
+    # Define the backpropagation function for the adjoint.
+    # The function takes a gradient `Δ` as input and returns the value of `Δ` and `nothing`.
+    back(Δ::NamedTuple) = (Δ.value, nothing)
+    # Return the result of the FillArrays.fill method and the backpropagation function.
+    return Fill(x, sz), back
+end # @adjoint
 
 # ==============================================================================
 # Hamiltonian and gradient computations
@@ -747,7 +755,7 @@ function ∇hamiltonian(
     end # if
     # Define function to compute Hamiltonian.
     function H(z::AbstractVector{T}, ρ::AbstractVector{T})
-        # 1. Potntial energy U(z|x)
+        # 1. Potential energy U(z|x)
         # Compute log-likelihood
         loglikelihood = decoder_loglikelihood(rhvae.vae.decoder, x, z)
         # Compute log-prior
@@ -758,13 +766,13 @@ function ∇hamiltonian(
         # 2. Kinetic energy K(ρ)
         # Compute the inverse metric tensor
         G⁻¹ = G_inv(rhvae, z)
-
         # Compute the log determinant of the metric tensor
         logdetG = -LinearAlgebra.logdet(G⁻¹)
-        # # Compute kinetic energy
+        # Compute kinetic energy
         κ = 0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) +
-            0.5f0 * ρ' * G⁻¹ * ρ
-        # 0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+            0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+        # 0.5f0 * ρ' * G⁻¹ * ρ
+
         # Return Hamiltonian
         return U + κ
     end # function
