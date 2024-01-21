@@ -306,32 +306,76 @@ Flux.@functor RHVAE (vae, metric,)
 # ==============================================================================
 
 @doc raw"""
-    update_metric!(
+    update_metric(
         rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}
     )
 
-Update the `centroids_latent` and `L` fields of a `RHVAE` instance in place.
-
-This function takes a `RHVAE` instance as input and modifies its
-`centroids_latent` and `L` fields. The `centroids_latent` field is updated by
-running the `centroids_data` through the encoder of the underlying VAE and
-extracting the mean (µ) of the resulting Gaussian distribution. The `L` field is
-updated by running each column of the `centroids_data` through the
-`metric_chain` and concatenating the results along the third dimension.
+Compute the `centroids_latent` and `M` field of a `RHVAE` instance without
+modifying the instance. This method is used when needing to backpropagate
+through the RHVAE during training.
 
 # Arguments
 - `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}`:
   The `RHVAE` instance to be updated.
 
-# Usage
-```julia
-update_metric!(rhvae)
-```
-# Notes
+# Returns
+- NamedTuple with the following fields:
+  - `centroids_latent::Matrix{Float32}`: A matrix where each column represents a
+    centroid cᵢ in the inverse metric computation.
+  - `M::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ L_ψᵢᵀ.
+"""
+function update_metric(
+    rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}
+)
+    # Extract centroids_data
+    centroids_data = rhvae.centroids_data
+    # Run centroids_data through encoder and update centroids_latent
+    centroids_latent = rhvae.vae.encoder(centroids_data).µ
+    # Run centroids_data through metric_chain and update L
+    L = reduce(
+        (x, y) -> cat(x, y, dims=3),
+        [
+            rhvae.metric_chain(centroid, matrix=true)
+            for centroid in eachcol(centroids_data)
+        ]
+    )
+    # Update M by multiplying L by its transpose
+    M = reduce(
+        (x, y) -> cat(x, y, dims=3),
+        [
+            l * LinearAlgebra.transpose(l)
+            for l in eachslice(L, dims=3)
+        ]
+    )
 
+    return (centroids_latent=centroids_latent, M=M,)
+end # function
+
+@doc raw"""
+    update_metric!(
+        rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}
+    )
+
+Update the `centroids_latent`, `L`, and `M` fields of a `RHVAE` instance in
+place.
+
+This function takes a `RHVAE` instance as input and modifies its
+`centroids_latent` `L` and `M` fields. The `centroids_latent` field is updated
+by running the `centroids_data` through the encoder of the underlying VAE and
+extracting the mean (µ) of the resulting Gaussian distribution. The `L` field is
+updated by running each column of the `centroids_data` through the
+`metric_chain` and concatenating the results along the third dimension. The `M`
+field is updated by multiplying each slice of `L` by its transpose and concating
+the results along the third dimension.
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}`:
+  The `RHVAE` instance to be updated.
+
+# Notes
 This function modifies the `RHVAE` instance in place, so it does not return
-anything. The changes are made directly to the `centroids_latent` and `L` fields
-of the input `RHVAE` instance.
+anything. The changes are made directly to the `centroids_latent`, `L`, and `M`
+fields of the input `RHVAE` instance.
 """
 function update_metric!(
     rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}
@@ -399,15 +443,29 @@ function G_inv(
     z::AbstractVector{Float32},
 )
     # Compute Squared Euclidean distance between z and each centroid
-    distances = sum(abs2, z .- rhvae.centroids_latent, dims=1)
+    # ‖z - cᵢ‖₂² / T²
+    distances = sum(abs2, (z .- rhvae.centroids_latent) ./ rhvae.T, dims=1)
 
-    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Note: The reshape is necessary
-    # to broadcast the elemnt-wise product with each slice of M.
-    LLexp = rhvae.M .* reshape(exp.(-distances ./ rhvae.T^2), 1, 1, :)
+    # Initialize L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
+    LLexp = zeros(Float32, size(z, 1), size(z, 1))
+
+    # Loop over distances
+    for (i, d) in enumerate(distances)
+        # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
+        LLexp += rhvae.M[:, :, i] .* exp(-d)
+    end # for
+
+    # # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²).
+    # LLexp = reduce(
+    #     (x, y) -> cat(x, y, dims=3),
+    #     [
+    #         rhvae.M[:, :, i] .* exp.(-distances[i])
+    #         for i in 1:size(rhvae.M, 3)
+    #     ]
+    # )
 
     # Return the sum of the LLexp slices plus the regularization term
-    return dropdims(sum(LLexp, dims=3); dims=3) +
-           rhvae.λ * LinearAlgebra.I(size(z, 1))
+    return LLexp# + LinearAlgebra.diagm(rhvae.λ * ones(Float32, size(z, 1)))
 end # function
 
 # ------------------------------------------------------------------------------
@@ -469,7 +527,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    G_inv(
+    G_inv_fast(
         rhvae::RHVAE,
         z::AbstractMatrix{Float32},
     )
@@ -505,7 +563,7 @@ these distances divided by the square of the temperature, and a regularization
 term proportional to the identity matrix. The result is a 4D array where each 3D
 array is of the same size as the latent space.
 """
-function G_inv(
+function G_inv_fast(
     rhvae::RHVAE,
     z::AbstractMatrix{Float32},
 )
@@ -705,7 +763,8 @@ function ∇hamiltonian(
         logdetG = -LinearAlgebra.logdet(G⁻¹)
         # # Compute kinetic energy
         κ = 0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) +
-            0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+            0.5f0 * ρ' * G⁻¹ * ρ
+        # 0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
         # Return Hamiltonian
         return U + κ
     end # function
@@ -786,7 +845,7 @@ function _leapfrog_first_step(
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     ϵ::Union{T,<:AbstractVector{T}};
-    steps::Int=1,
+    steps::Int=3,
     ∇H::Function=∇hamiltonian,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         decoder_loglikelihood=decoder_loglikelihood,
@@ -794,10 +853,10 @@ function _leapfrog_first_step(
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
-    # Copy ρ to iterate over it
-    # ρ̃ = deepcopy(ρ)
 
-    return ρ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
+    # return ρ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
+    return ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
+
 
     # Loop over steps
     # for _ in 1:steps
@@ -813,26 +872,27 @@ end # function
 
 # ------------------------------------------------------------------------------
 
-# function _leapfrog_second_step(
-#     rhvae::RHVAE,
-#     x::AbstractVector{T},
-#     z::AbstractVector{T},
-#     ρ::AbstractVector{T},
-#     ϵ::Union{T,<:AbstractVector{T}};
-#     steps::Int=1,
-#     ∇H::Function=∇hamiltonian,
-#     ∇H_kwargs::Union{NamedTuple,Dict}=(
-#         decoder_loglikelihood=decoder_loglikelihood,
-#         log_prior=spherical_logprior,
-#         G_inv=G_inv,
-#     ),
-# ) where {T<:Float32}
-#     # Copy z to iterate over it
-#     z̄ = deepcopy(z)
+function _leapfrog_second_step(
+    rhvae::RHVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T},
+    ρ::AbstractVector{T},
+    ϵ::Union{T,<:AbstractVector{T}};
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+        G_inv=G_inv,
+    ),
+) where {T<:Float32}
+    # Copy z to iterate over it
+    z̄ = deepcopy(z)
 
-#     # Loop over steps
-#     for _ in 1:steps
-#         z̄ = z̄ + (0.5f0 * ϵ) .* ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...)
-#     end # for
-#     end # for
-# end # function
+    # Loop over steps
+    for _ in 1:steps
+        z̄ = z̄ + (0.5f0 * ϵ) .* ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...)
+    end # for
+
+    return z̄
+end # function
