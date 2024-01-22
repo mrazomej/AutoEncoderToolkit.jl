@@ -34,7 +34,8 @@ using ..AutoEncode: VAE
 # Import functions from other modules
 using ..VAEs: reparameterize
 using ..utils: vec_to_ltri
-using ..HVAEs: decoder_loglikelihood, spherical_logprior
+using ..HVAEs: decoder_loglikelihood, spherical_logprior,
+    quadratic_tempering, null_tempering
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #  Chadebec, C., Mantoux, C. & Allassonnière, S. Geometry-Aware Hamiltonian
@@ -242,7 +243,6 @@ regularization factor, and each column of `centroids` are the cᵢ.
   the encoder.
 - `centroids_latent::Matrix{Float32}`: A matrix where each column represents a
   centroid cᵢ in the inverse metric computation.
-- `L::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ.
 - `M::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ L_ψᵢᵀ.
 - `T::Float32`: The temperature parameter in the inverse metric computation.  
 - `λ::Float32`: The regularization factor in the inverse metric computation.
@@ -267,7 +267,6 @@ struct RHVAE{
     metric_chain::MetricChain
     centroids_data::Matrix{Float32}
     centroids_latent::Matrix{Float32}
-    L::Array{Float32,3}
     M::Array{Float32,3}
     T::Float32
     λ::Float32
@@ -296,7 +295,7 @@ struct RHVAE{
 
         # Initialize RHVAE
         new{typeof(vae)}(
-            vae, metric_chain, centroids_data, centroids_latent, L, M, T, λ,
+            vae, metric_chain, centroids_data, centroids_latent, M, T, λ,
         )
     end # function
 end # struct
@@ -354,22 +353,61 @@ function update_metric(
     return (centroids_latent=centroids_latent, M=M,)
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    update_metric!(
+        rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}},
+        params::NamedTuple
+    )
+
+Update the `centroids_latent` and `M` fields of a `RHVAE` instance in place.
+
+This function takes a `RHVAE` instance and a named tuple `params` containing the
+new values for `centroids_latent` and `M`. It updates the `centroids_latent` and
+`M` fields of the `RHVAE` instance with the provided values.
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}`:
+  The `RHVAE` instance to update.
+- `params::NamedTuple`: A named tuple containing the new values for
+  `centroids_latent` and `M`. Must have the keys `:centroids_latent` and `:M`.
+
+# Returns
+Nothing. The `RHVAE` instance is updated in place.
+"""
+function update_metric!(
+    rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}},
+    params::NamedTuple
+)
+    # Check that params contains centroids_latent and M
+    if !(:centroids_latent in keys(params) && :M in keys(params))
+        error("params must contain centroids_latent and M")
+    end # if
+
+    # Update centroid_latent values in place
+    rhvae.centroids_latent .= params.centroids_latent
+    # Update M values in place
+    rhvae.M .= params.M
+end # function
+
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     update_metric!(
         rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}
     )
 
-Update the `centroids_latent`, `L`, and `M` fields of a `RHVAE` instance in
-place.
+Update the `centroids_latent`, and `M` fields of a `RHVAE` instance in place.
 
 This function takes a `RHVAE` instance as input and modifies its
-`centroids_latent` `L` and `M` fields. The `centroids_latent` field is updated
-by running the `centroids_data` through the encoder of the underlying VAE and
-extracting the mean (µ) of the resulting Gaussian distribution. The `L` field is
+`centroids_latent` and `M` fields. The `centroids_latent` field is updated by
+running the `centroids_data` through the encoder of the underlying VAE and
+extracting the mean (µ) of the resulting Gaussian distribution. The `M` field is
 updated by running each column of the `centroids_data` through the
-`metric_chain` and concatenating the results along the third dimension. The `M`
-field is updated by multiplying each slice of `L` by its transpose and concating
-the results along the third dimension.
+`metric_chain` and concatenating the results along the third dimension, then
+each slice is updated by multiplying each slice of `L` by its transpose and
+concating the results along the third dimension.
 
 # Arguments
 - `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}`:
@@ -790,7 +828,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    _leapfrog_first_step(
+    _leapfrog_ρ_step(
         rhvae::RHVAE,
         x::AbstractVector{T},
         z::AbstractVector{T},
@@ -847,7 +885,7 @@ variables `z`. The result is returned as ρ̃.
 A vector representing the updated momentum after performing the first step of
 the generalized leapfrog integrator.
 """
-function _leapfrog_first_step(
+function _leapfrog_ρ_step(
     rhvae::RHVAE,
     x::AbstractVector{T},
     z::AbstractVector{T},
@@ -861,26 +899,83 @@ function _leapfrog_first_step(
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
-
-    # return ρ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
-    return ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
-
+    # Copy ρ to iterate over it
+    ρ̃ = deepcopy(ρ)
 
     # Loop over steps
-    # for _ in 1:steps
-    #     # Update momentum variable into a new temporary variable
-    #     ρ̃_ = ρ̃ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ̃, :z; ∇H_kwargs...)
+    for _ in 1:steps
+        # Update momentum variable into a new temporary variable
+        ρ̃_ = ρ̃ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ̃, :z; ∇H_kwargs...)
+        # Update momentum variable for next cycle
+        ρ̃ = ρ̃_
+    end # for
 
-    #     # Update momentum variable for next cycle
-    #     ρ̃ = ρ̃_
-    # end # for
-
-    # return ρ̃
+    return ρ̃
 end # function
 
 # ------------------------------------------------------------------------------
 
-function _leapfrog_second_step(
+@doc raw"""
+        _leapfrog_z_step(
+                rhvae::RHVAE,
+                x::AbstractVector{T},
+                z::AbstractVector{T},
+                ρ::AbstractVector{T},
+                ϵ::Union{T,<:AbstractVector{T}};
+                steps::Int=3,
+                ∇H::Function=∇hamiltonian,
+                ∇H_kwargs::Union{NamedTuple,Dict}=(
+                        decoder_loglikelihood=decoder_loglikelihood,
+                        log_prior=spherical_logprior,
+                        G_inv=G_inv,
+                ),
+        ) where {T<:Float32}
+
+Perform the second step of the generalized leapfrog integrator for Hamiltonian
+dynamics, defined as
+
+z(t + ϵ) = z(t) + 0.5 * ϵ * [∇ρ_H(z(t), ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
+
+This function is part of the generalized leapfrog integrator used in Hamiltonian
+dynamics. Unlike the standard leapfrog integrator, the generalized leapfrog
+integrator is implicit, which means it requires the use of fixed-point
+iterations to be solved.
+
+The function takes a `RHVAE` instance, a point `x` in the data space, a point
+`z` in the latent space, a momentum `ρ`, a step size `ϵ`, and optionally the
+number of fixed-point iterations to perform (`steps`), a function to compute the
+gradient of the Hamiltonian (`∇H`), and a set of keyword arguments for `∇H`
+(`∇H_kwargs`).
+
+The function performs the following update for `steps` times:
+
+z̄ = z̄ + 0.5 * ϵ * (
+    ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...) + ∇H(rhvae, x, z, ρ, :ρ; ∇H_kwargs...)
+)
+
+where `∇H` is the gradient of the Hamiltonian with respect to the momentum
+variables `ρ`. The result is returned as z̄.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `x::AbstractVector{T}`: The point in the data space.
+- `z::AbstractVector{T}`: The point in the latent space.
+- `ρ::AbstractVector{T}`: The momentum.
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size.
+
+# Optional Keyword Arguments
+- `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
+  Typically, 3 iterations are sufficient.
+- `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
+  Hamiltonian. Default is `∇hamiltonian`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
+  is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+
+# Returns
+A vector representing the updated position after performing the second step of
+the generalized leapfrog integrator.
+"""
+function _leapfrog_z_step(
     rhvae::RHVAE,
     x::AbstractVector{T},
     z::AbstractVector{T},
@@ -894,13 +989,319 @@ function _leapfrog_second_step(
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
+    # Compute Hamiltonian gradient for initial point not to repeat it at each
+    # iteration 
+    ∇H_ = ∇H(rhvae, x, z, ρ, :ρ; ∇H_kwargs...)
+
     # Copy z to iterate over it
     z̄ = deepcopy(z)
 
     # Loop over steps
     for _ in 1:steps
-        z̄ = z̄ + (0.5f0 * ϵ) .* ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...)
+        # Update position variable into a new temporary variable
+        z̄_ = z̄ + (0.5f0 * ϵ) .* (∇H_ + ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...))
+        # Update position variable for next cycle
+        z̄ = z̄_
     end # for
 
     return z̄
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        general_leapfrog_step(
+                rhvae::RHVAE,
+                x::AbstractVector{T},
+                z::AbstractVector{T},
+                ρ::AbstractVector{T},
+                ϵ::Union{T,<:AbstractVector{T}};
+                steps::Int=3,
+                ∇H::Function=∇hamiltonian,
+                ∇H_kwargs::Union{NamedTuple,Dict}=(
+                        decoder_loglikelihood=decoder_loglikelihood,
+                        log_prior=spherical_logprior,
+                        G_inv=G_inv,
+                ),
+        ) where {T<:Float32}
+
+Perform a full step of the generalized leapfrog integrator for Hamiltonian dynamics.
+
+The leapfrog integrator is a numerical integration scheme used to simulate Hamiltonian dynamics. It consists of three steps:
+
+1. Half update of the momentum variable:
+        ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ * ∇z_H(z(t), ρ(t + ϵ/2)).
+2. Full update of the position variable:
+        z(t + ϵ) = z(t) + 0.5 * ϵ * 
+        [∇ρ_H(z(t), ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
+3. Half update of the momentum variable:
+        ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ * ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
+
+This function performs these three steps in sequence, using the `_leapfrog_ρ_step` and `_leapfrog_z_step` helper functions.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `x::AbstractVector{T}`: The point in the data space.
+- `z::AbstractVector{T}`: The point in the latent space.
+- `ρ::AbstractVector{T}`: The momentum.
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size.
+
+# Optional Keyword Arguments
+- `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
+    Typically, 3 iterations are sufficient.
+- `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
+    Hamiltonian. Default is `∇hamiltonian`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
+    is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+
+# Returns
+A tuple `(z̄, ρ̄)` representing the updated position and momentum after performing the full leapfrog step.
+"""
+function general_leapfrog_step(
+    rhvae::RHVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T},
+    ρ::AbstractVector{T},
+    ϵ::Union{T,<:AbstractVector{T}};
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+        G_inv=G_inv,
+    ),
+) where {T<:Float32}
+    # Update momentum variable with half step
+    ρ̃ = _leapfrog_ρ_step(
+        rhvae, x, z, ρ, ϵ; steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+    )
+
+    # Update position variable with full step
+    z̄ = _leapfrog_z_step(
+        rhvae, x, z, ρ̃, ϵ; steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+    )
+
+    # Update momentum variable with half step
+    ρ̄ = _leapfrog_ρ_step(
+        rhvae, x, z̄, ρ̃, ϵ; steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+    )
+
+    return z̄, ρ̄
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    general_leapfrog_step(
+        rhvae::RHVAE,
+        x::AbstractMatrix{T},
+        z::AbstractMatrix{T},
+        ρ::AbstractMatrix{T},
+        ϵ::Union{T,<:AbstractArray{T}};
+        steps::Int=3,
+        ∇H::Function=∇hamiltonian,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+            decoder_loglikelihood=decoder_loglikelihood,
+            log_prior=spherical_logprior,
+            G_inv=G_inv,
+        ),
+    ) where {T<:Float32}
+
+Perform a full step of the generalized leapfrog integrator for Hamiltonian dynamics on each column of the input matrices.
+
+The leapfrog integrator is a numerical integration scheme used to simulate Hamiltonian dynamics. It consists of three steps:
+
+1. Half update of the momentum variable:
+    ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ * ∇z_H(z(t), ρ(t + ϵ/2)).
+2. Full update of the position variable:
+    z(t + ϵ) = z(t) + 0.5 * ϵ * 
+    [∇ρ_H(z(t), ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
+3. Half update of the momentum variable:
+    ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ * ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
+
+This function performs these three steps in sequence for each column of the input matrices, using the `_leapfrog_ρ_step` and `_leapfrog_z_step` helper functions.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `x::AbstractMatrix{T}`: The points in the data space. Each column represents a point.
+- `z::AbstractMatrix{T}`: The points in the latent space. Each column represents a point.
+- `ρ::AbstractMatrix{T}`: The momenta. Each column represents a momentum.
+- `ϵ::Union{T,<:AbstractArray{T}}`: The step size.
+
+# Optional Keyword Arguments
+- `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
+    Typically, 3 iterations are sufficient.
+- `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
+    Hamiltonian. Default is `∇hamiltonian`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
+    is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+
+# Returns
+Two matrices `(z̄, ρ̄)` representing the updated positions and momenta after performing the full leapfrog step on each column of the input matrices.
+"""
+function general_leapfrog_step(
+    rhvae::RHVAE,
+    x::AbstractMatrix{T},
+    z::AbstractMatrix{T},
+    ρ::AbstractMatrix{T},
+    ϵ::Union{T,<:AbstractArray{T}};
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+        G_inv=G_inv,
+    ),
+) where {T<:Float32}
+    # Apply general_leapfrog_step to each column and collect the results
+    results = [
+        general_leapfrog_step(
+            rhvae, x[:, i], z[:, i], ρ[:, i], ϵ;
+            steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+        )
+        for i in axes(z, 2)
+    ]
+
+    # Split the results into separate matrices for z̄ and ρ̄
+    z̄ = reduce(hcat, [result[1] for result in results])
+    ρ̄ = reduce(hcat, [result[2] for result in results])
+
+    return z̄, ρ̄
+end # function
+
+# ------------------------------------------------------------------------------
+
+# ==============================================================================
+# Combining Leapfrog and Tempering Steps
+# ==============================================================================
+
+@doc raw"""
+        general_leapfrog_tempering_step(
+                rhvae::RHVAE,
+                x::AbstractVecOrMat{T},
+                zₒ::AbstractVecOrMat{T},
+                K::Int=3,
+                ϵ::Union{T,<:AbstractArray{T}}=0.001f0,
+                βₒ::T=0.3f0,
+                steps::Int=3,
+                ∇H::Function=∇hamiltonian,
+                ∇H_kwargs::Union{NamedTuple,Dict}=(
+                        decoder_loglikelihood=decoder_loglikelihood,
+                        log_prior=spherical_logprior,
+                        G_inv=G_inv,
+                ),
+                tempering_schedule::Function=quadratic_tempering,
+        ) where {T<:Float32}
+
+Combines the leapfrog and tempering steps into a single function for the Relaxed
+Hamiltonian Variational Autoencoder (RHVAE).
+
+# Arguments
+- `rhvae::RHVAE`: The Relaxed Hamiltonian Variational Autoencoder model.
+- `x::AbstractVecOrMat{T}`: The data to be processed. Can be a vector or a
+  matrix.
+- `zₒ::AbstractVecOrMat{T}`: The initial latent variable. Can be a vector or a
+  matrix.  
+
+# Optional Keyword Arguments
+- `K::Int`: The number of leapfrog steps to perform in the Hamiltonian Monte
+  Carlo (HMC) algorithm. Default is 3.
+- `ϵ::Union{T,<:AbstractArray{T}}`: The step size for the leapfrog steps in the
+  HMC algorithm. This can be a scalar or an array. Default is 0.001f0.  
+- `βₒ::T`: The initial inverse temperature for the tempering schedule. Default
+  is 0.3f0.
+- `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
+- `∇H::Function`: The function to compute the gradient of the Hamiltonian.
+  Default is `∇hamiltonian`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+  to the `∇H` function. Default is a NamedTuple with `decoder_loglikelihood`,
+  `log_prior`, and `G_inv`.  
+- `tempering_schedule::Function`: The function to compute the inverse
+  temperature at each step in the HMC algorithm. Defaults to
+  `quadratic_tempering`. This function must take three arguments: First, `βₒ`,
+  an initial inverse temperature, second, `k`, the current step in the tempering
+  schedule, and third, `K`, the total number of steps in the tempering schedule.
+
+# Returns
+- A `NamedTuple` with the following keys:
+    - `z_init`: The initial latent variable.
+    - `ρ_init`: The initial momentum variable.
+    - `z_final`: The final latent variable after `K` leapfrog steps.
+    - `ρ_final`: The final momentum variable after `K` leapfrog steps.
+
+# Description
+The function first samples a random momentum variable `γₒ` from a standard
+normal distribution and scales it by the inverse square root of the initial
+inverse temperature `βₒ` to obtain the initial momentum variable `ρₒ`. Then, it
+performs `K` leapfrog steps, each followed by a tempering step, to generate a
+new sample from the latent space.
+
+# Note
+Ensure the input data `x` and the initial latent variable `zₒ` match the
+expected input dimensionality for the RHVAE model. Both `x` and `zₒ` can be
+either vectors or matrices.
+"""
+function general_leapfrog_tempering_step(
+    rhvae::RHVAE,
+    x::AbstractVecOrMat{T},
+    zₒ::AbstractVecOrMat{T};
+    K::Int=3,
+    ϵ::Union{T,<:AbstractArray{T}}=0.001f0,
+    βₒ::T=0.3f0,
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        log_prior=spherical_logprior,
+        G_inv=G_inv,
+    ),
+    tempering_schedule::Function=quadratic_tempering,
+) where {T<:Float32}
+    # Extract latent-space dimensionality
+    ldim = size(zₒ, 1)
+
+    # Sample γₒ ~ N(0, I)
+    if isa(zₒ, AbstractVector)
+        γₒ = Random.rand(Distributions.MvNormal(zeros(T, ldim), ones(T, ldim)))
+    else
+        γₒ = Random.rand(
+            Distributions.MvNormal(zeros(T, ldim), ones(T, ldim)), size(zₒ, 2)
+        )
+    end # if
+
+    # Define ρₒ = γₒ / √βₒ
+    ρₒ = γₒ ./ √(βₒ)
+
+    # Define initial value of z and ρ before loop
+    zₖ₋₁ = deepcopy(zₒ)
+    ρₖ₋₁ = deepcopy(ρₒ)
+
+    # Loop over K steps
+    for k = 1:K
+        # 1) Leapfrog step
+        zₖ, ρₖ = general_leapfrog_step(
+            rhvae, x, zₖ₋₁, ρₖ₋₁, ϵ;
+            steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+        )
+
+        # 2) Tempering step
+        # Compute previous step's inverse temperature
+        βₖ₋₁ = tempering_schedule(βₒ, k - 1, K)
+        # Compute current step's inverse temperature
+        βₖ = tempering_schedule(βₒ, k, K)
+
+        # Update momentum variable with tempering Update zₖ₋₁, ρₖ₋₁ for next
+        # iteration. The momentum variable is updated with tempering. Also, note
+        # this is the last step as well, thus we return zₖ₋₁, ρₖ₋₁ as the final
+        # points.
+        zₖ₋₁ = zₖ
+        ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
+    end # for
+
+    return (
+        z_init=zₒ,
+        ρ_init=ρₒ,
+        z_final=zₖ₋₁,
+        ρ_final=ρₖ₋₁,
+    )
 end # function
