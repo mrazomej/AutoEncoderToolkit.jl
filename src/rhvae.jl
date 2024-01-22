@@ -483,7 +483,9 @@ function G_inv(
     rhvae::RHVAE,
     z::AbstractVector{Float32},
 )
-    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). 
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Note: We do not use Distances.jl
+    # because that performs in-place operations on the input, and this is not
+    # compatible with Zygote.jl.
     LLexp = sum([
         rhvae.M[:, :, i] .*
         exp(-sum(abs2, (z - rhvae.centroids_latent[:, i]) ./ rhvae.T))
@@ -646,6 +648,63 @@ Zygote.@adjoint function (::Type{T})(x::Matrix{Float32}, sz) where {T<:Fill}
 end # @adjoint
 
 # ==============================================================================
+# Functions to compute Riemannian log-prior
+# ==============================================================================
+
+@doc raw"""
+    riemannian_logprior(
+        rhvae::RHVAE,
+        z::AbstractVector{Float32},
+        ρ::AbstractVector{Float32};
+        G_inv::Function=G_inv,
+    )
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric.
+
+# Arguments
+- `rhvae::RHVAE`: The Relaxed Hamiltonian Variational Autoencoder (RHVAE) model.
+- `z::AbstractVector{Float32}`: The latent variable vector.
+- `ρ::AbstractVector{Float32}`: The momentum vector.
+
+# Optional Keyword Arguments
+- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
+  metric tensor. This function should take two arguments: the RHVAE model and
+  the latent variable vector, and return the inverse of the Riemannian metric
+  tensor.
+
+# Returns
+The log-prior of the Gaussian distribution.
+
+# Description
+This function computes the log-prior of a Gaussian distribution with a
+covariance matrix given by the Riemannian metric. It first computes the inverse
+of the Riemannian metric tensor using the provided `G_inv` function, then
+computes the log determinant of the metric tensor, and finally computes and
+returns the log-prior.
+
+# Notes
+Ensure that the dimensions of `z` match the dimensions of the latent space of
+the RHVAE model.
+"""
+function riemannian_logprior(
+    rhvae::RHVAE,
+    z::AbstractVector{Float32},
+    ρ::AbstractVector{Float32};
+    G_inv::Function=G_inv,
+)
+    # Compute the inverse metric tensor
+    G⁻¹ = G_inv(rhvae, z)
+
+    # Compute the log determinant of the metric tensor
+    logdetG = -LinearAlgebra.logdet(G⁻¹)
+
+    # Return the log-prior
+    return 0.5f0 * (length(z) * log(2.0f0π) + logdetG) +
+           0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+end # function
+
+# ==============================================================================
 # Hamiltonian and gradient computations
 # ==============================================================================
 
@@ -656,7 +715,7 @@ end # @adjoint
         z::AbstractVector{T},
         ρ::AbstractVector{T};
         decoder_loglikelihood::Function=decoder_loglikelihood,
-        log_prior::Function=spherical_logprior,
+        position_logprior::Function=spherical_logprior,
         G_inv::Function=G_inv,
     ) where {T<:Float32}
 
@@ -682,11 +741,21 @@ G(z) is the metric tensor at the point `z`.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder_loglikelihood::Function`: The function to compute the log-likelihood
-  of the decoder. Default is `decoder_loglikelihood`.
-- `log_prior::Function`: The function to compute the log-prior of the latent
-  space. Default is `spherical_logprior`.
-- `G_inv::Function`: The function to compute the inverse of the metric tensor G.
-  Default is `G_inv`.
+  of the decoder. Default is `decoder_loglikelihood`. This function must take as
+  input the decoder, the point `x` in the data space, and the point `z` in the
+  latent space.
+- `position_logprior::Function`: The function to compute the log-prior of the
+  latent space position. Default is `spherical_logprior`. This function must
+  take as input the point `z` in the latent space.
+- `momentum_logprior::Function`: The function to compute the log-prior of the
+  latent space momentum. Default is `riemannian_logprior`. This function must
+  take as input the RHVAE model, the point `z` in the latent space, and the
+  momentum `ρ`. As an optional keyword argument, it can take a function `G_inv`.
+- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
+  metric tensor. This function should take two arguments: the RHVAE model and
+  the latent variable vector, and return the inverse of the Riemannian metric
+  tensor.
+
 
 # Returns
 A scalar representing the Hamiltonian at the point `z` with the momentum `ρ`.
@@ -697,7 +766,8 @@ function hamiltonian(
     z::AbstractVector{T},
     ρ::AbstractVector{T};
     decoder_loglikelihood::Function=decoder_loglikelihood,
-    log_prior::Function=spherical_logprior,
+    position_logprior::Function=spherical_logprior,
+    momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
 ) where {T<:Float32}
     # 1. Potntial energy U(z|x)
@@ -706,22 +776,13 @@ function hamiltonian(
     loglikelihood = decoder_loglikelihood(rhvae.vae.decoder, x, z)
 
     # Compute log-prior
-    logprior = log_prior(z)
+    z_logprior = position_logprior(z)
 
     # Define potential energy
-    U = -loglikelihood - logprior
+    U = -loglikelihood - z_logprior
 
     # 2. Kinetic energy K(ρ)
-
-    # Compute the inverse metric tensor. This must be ignored by Zygote.
-    G⁻¹ = G_inv(rhvae, z)
-
-    # Compute the log determinant of the metric tensor
-    logdetG = -LinearAlgebra.logdet(G⁻¹)
-
-    # Compute kinetic energy
-    κ = 0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) +
-        0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+    κ = momentum_logprior(rhvae, z, ρ; G_inv=G_inv)
 
     # Return Hamiltonian
     return U + κ
@@ -738,7 +799,7 @@ end # function
         ρ::AbstractVector{T},
         var::Symbol;
         decoder_loglikelihood::Function=decoder_loglikelihood,
-        log_prior::Function=spherical_logprior,
+        position_logprior::Function=spherical_logprior,
         G_inv::Function=G_inv,
     ) where {T<:Float32}
 
@@ -767,11 +828,20 @@ G(z) is the metric tensor at the point `z`.
 - `var::Symbol`: The variable with respect to which the gradient is computed.
   Must be :z or :ρ.
 - `decoder_loglikelihood::Function`: The function to compute the log-likelihood
-  of the decoder. Default is `decoder_loglikelihood`.
-- `log_prior::Function`: The function to compute the log-prior of the latent
-  space. Default is `spherical_logprior`.
-- `G_inv::Function`: The function to compute the inverse of the metric tensor G.
-  Default is `G_inv`.
+  of the decoder. Default is `decoder_loglikelihood`. This function must take as
+  input the decoder, the point `x` in the data space, and the point `z` in the
+  latent space.
+- `position_logprior::Function`: The function to compute the log-prior of the
+  latent space position. Default is `spherical_logprior`. This function must
+  take as input the point `z` in the latent space.
+- `momentum_logprior::Function`: The function to compute the log-prior of the
+  latent space momentum. Default is `riemannian_logprior`. This function must
+  take as input the RHVAE model, the point `z` in the latent space, and the
+  momentum `ρ`. As an optional keyword argument, it can take a function `G_inv`.
+- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
+  metric tensor. This function should take two arguments: the RHVAE model and
+  the latent variable vector, and return the inverse of the Riemannian metric
+  tensor.
 
 # Returns
 A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
@@ -784,7 +854,8 @@ function ∇hamiltonian(
     ρ::AbstractVector{T},
     var::Symbol;
     decoder_loglikelihood::Function=decoder_loglikelihood,
-    log_prior::Function=spherical_logprior,
+    position_logprior::Function=spherical_logprior,
+    momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
 ) where {T<:Float32}
     # Check that var is a valid variable
@@ -797,19 +868,12 @@ function ∇hamiltonian(
         # Compute log-likelihood
         loglikelihood = decoder_loglikelihood(rhvae.vae.decoder, x, z)
         # Compute log-prior
-        logprior = log_prior(z)
+        z_logprior = position_logprior(z)
         # Define potential energy
-        U = -loglikelihood - logprior
+        U = -loglikelihood - z_logprior
 
         # 2. Kinetic energy K(ρ)
-        # Compute the inverse metric tensor
-        G⁻¹ = G_inv(rhvae, z)
-        # Compute the log determinant of the metric tensor
-        logdetG = -LinearAlgebra.logdet(G⁻¹)
-        # Compute kinetic energy
-        κ = 0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) +
-            0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
-        # 0.5f0 * ρ' * G⁻¹ * ρ
+        κ = momentum_logprior(rhvae, z, ρ; G_inv=G_inv)
 
         # Return Hamiltonian
         return U + κ
@@ -838,7 +902,8 @@ end # function
         ∇H::Function=∇hamiltonian,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             decoder_loglikelihood=decoder_loglikelihood,
-            log_prior=spherical_logprior,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
             G_inv=G_inv,
         ),
     ) where {T<:Float32}
@@ -879,7 +944,8 @@ variables `z`. The result is returned as ρ̃.
 - `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
   Hamiltonian. Default is `∇hamiltonian`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
-  is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+  is a tuple with `decoder_loglikelihood`, `position_logprior`,
+  `momentum_logprior`, and `G_inv`.
 
 # Returns
 A vector representing the updated momentum after performing the first step of
@@ -895,7 +961,8 @@ function _leapfrog_ρ_step(
     ∇H::Function=∇hamiltonian,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         decoder_loglikelihood=decoder_loglikelihood,
-        log_prior=spherical_logprior,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
@@ -916,20 +983,21 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        _leapfrog_z_step(
-                rhvae::RHVAE,
-                x::AbstractVector{T},
-                z::AbstractVector{T},
-                ρ::AbstractVector{T},
-                ϵ::Union{T,<:AbstractVector{T}};
-                steps::Int=3,
-                ∇H::Function=∇hamiltonian,
-                ∇H_kwargs::Union{NamedTuple,Dict}=(
-                        decoder_loglikelihood=decoder_loglikelihood,
-                        log_prior=spherical_logprior,
-                        G_inv=G_inv,
-                ),
-        ) where {T<:Float32}
+    _leapfrog_z_step(
+            rhvae::RHVAE,
+            x::AbstractVector{T},
+            z::AbstractVector{T},
+            ρ::AbstractVector{T},
+            ϵ::Union{T,<:AbstractVector{T}};
+            steps::Int=3,
+            ∇H::Function=∇hamiltonian,
+            ∇H_kwargs::Union{NamedTuple,Dict}=(
+                    decoder_loglikelihood=decoder_loglikelihood,
+                    position_logprior=spherical_logprior,
+                    momentum_logprior=riemannian_logprior,
+                    G_inv=G_inv,
+            ),
+    ) where {T<:Float32}
 
 Perform the second step of the generalized leapfrog integrator for Hamiltonian
 dynamics, defined as
@@ -949,9 +1017,8 @@ gradient of the Hamiltonian (`∇H`), and a set of keyword arguments for `∇H`
 
 The function performs the following update for `steps` times:
 
-z̄ = z̄ + 0.5 * ϵ * (
-    ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...) + ∇H(rhvae, x, z, ρ, :ρ; ∇H_kwargs...)
-)
+z̄ = z̄ + 0.5 * ϵ * ( ∇H(rhvae, x, z̄, ρ, :ρ; ∇H_kwargs...) + ∇H(rhvae, x, z, ρ,
+    :ρ; ∇H_kwargs...) )
 
 where `∇H` is the gradient of the Hamiltonian with respect to the momentum
 variables `ρ`. The result is returned as z̄.
@@ -969,7 +1036,8 @@ variables `ρ`. The result is returned as z̄.
 - `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
   Hamiltonian. Default is `∇hamiltonian`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
-  is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+  is a tuple with `decoder_loglikelihood`, `position_logprior`,
+  `momentum_logprior`, and `G_inv`.
 
 # Returns
 A vector representing the updated position after performing the second step of
@@ -985,7 +1053,8 @@ function _leapfrog_z_step(
     ∇H::Function=∇hamiltonian,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         decoder_loglikelihood=decoder_loglikelihood,
-        log_prior=spherical_logprior,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
@@ -1020,24 +1089,27 @@ end # function
                 ∇H::Function=∇hamiltonian,
                 ∇H_kwargs::Union{NamedTuple,Dict}=(
                         decoder_loglikelihood=decoder_loglikelihood,
-                        log_prior=spherical_logprior,
+                        position_logprior=spherical_logprior,
+                        momentum_logprior=riemannian_logprior,
                         G_inv=G_inv,
                 ),
         ) where {T<:Float32}
 
-Perform a full step of the generalized leapfrog integrator for Hamiltonian dynamics.
+Perform a full step of the generalized leapfrog integrator for Hamiltonian
+dynamics.
 
-The leapfrog integrator is a numerical integration scheme used to simulate Hamiltonian dynamics. It consists of three steps:
+The leapfrog integrator is a numerical integration scheme used to simulate
+Hamiltonian dynamics. It consists of three steps:
 
-1. Half update of the momentum variable:
-        ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ * ∇z_H(z(t), ρ(t + ϵ/2)).
-2. Full update of the position variable:
-        z(t + ϵ) = z(t) + 0.5 * ϵ * 
-        [∇ρ_H(z(t), ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
-3. Half update of the momentum variable:
-        ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ * ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
+1. Half update of the momentum variable: ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ *
+        ∇z_H(z(t), ρ(t + ϵ/2)).
+2. Full update of the position variable: z(t + ϵ) = z(t) + 0.5 * ϵ * [∇ρ_H(z(t),
+        ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
+3. Half update of the momentum variable: ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ *
+        ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
 
-This function performs these three steps in sequence, using the `_leapfrog_ρ_step` and `_leapfrog_z_step` helper functions.
+This function performs these three steps in sequence, using the
+`_leapfrog_ρ_step` and `_leapfrog_z_step` helper functions.
 
 # Arguments
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -1052,10 +1124,12 @@ This function performs these three steps in sequence, using the `_leapfrog_ρ_st
 - `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
     Hamiltonian. Default is `∇hamiltonian`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
-    is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+    is a tuple with `decoder_loglikelihood`, `position_logprior`,
+    `momentum_logprior` and `G_inv`.
 
 # Returns
-A tuple `(z̄, ρ̄)` representing the updated position and momentum after performing the full leapfrog step.
+A tuple `(z̄, ρ̄)` representing the updated position and momentum after
+performing the full leapfrog step.
 """
 function general_leapfrog_step(
     rhvae::RHVAE,
@@ -1067,7 +1141,8 @@ function general_leapfrog_step(
     ∇H::Function=∇hamiltonian,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         decoder_loglikelihood=decoder_loglikelihood,
-        log_prior=spherical_logprior,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
@@ -1097,36 +1172,42 @@ end # function
         x::AbstractMatrix{T},
         z::AbstractMatrix{T},
         ρ::AbstractMatrix{T},
-        ϵ::Union{T,<:AbstractArray{T}};
+        ϵ::Union{T,<:AbstractVector{T}};
         steps::Int=3,
         ∇H::Function=∇hamiltonian,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             decoder_loglikelihood=decoder_loglikelihood,
-            log_prior=spherical_logprior,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
             G_inv=G_inv,
         ),
     ) where {T<:Float32}
 
-Perform a full step of the generalized leapfrog integrator for Hamiltonian dynamics on each column of the input matrices.
+Perform a full step of the generalized leapfrog integrator for Hamiltonian
+dynamics on each column of the input matrices.
 
-The leapfrog integrator is a numerical integration scheme used to simulate Hamiltonian dynamics. It consists of three steps:
+The leapfrog integrator is a numerical integration scheme used to simulate
+Hamiltonian dynamics. It consists of three steps:
 
-1. Half update of the momentum variable:
-    ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ * ∇z_H(z(t), ρ(t + ϵ/2)).
-2. Full update of the position variable:
-    z(t + ϵ) = z(t) + 0.5 * ϵ * 
-    [∇ρ_H(z(t), ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
-3. Half update of the momentum variable:
-    ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ * ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
+1. Half update of the momentum variable: ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ *
+    ∇z_H(z(t), ρ(t + ϵ/2)).
+2. Full update of the position variable: z(t + ϵ) = z(t) + 0.5 * ϵ * [∇ρ_H(z(t),
+    ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
+3. Half update of the momentum variable: ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ *
+    ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
 
-This function performs these three steps in sequence for each column of the input matrices, using the `_leapfrog_ρ_step` and `_leapfrog_z_step` helper functions.
+This function performs these three steps in sequence for each column of the
+input matrices, using the `_leapfrog_ρ_step` and `_leapfrog_z_step` helper
+functions.
 
 # Arguments
 - `rhvae::RHVAE`: The `RHVAE` instance.
-- `x::AbstractMatrix{T}`: The points in the data space. Each column represents a point.
-- `z::AbstractMatrix{T}`: The points in the latent space. Each column represents a point.
+- `x::AbstractMatrix{T}`: The points in the data space. Each column represents a
+  point.
+- `z::AbstractMatrix{T}`: The points in the latent space. Each column represents
+  a point.
 - `ρ::AbstractMatrix{T}`: The momenta. Each column represents a momentum.
-- `ϵ::Union{T,<:AbstractArray{T}}`: The step size.
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size.
 
 # Optional Keyword Arguments
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
@@ -1134,22 +1215,25 @@ This function performs these three steps in sequence for each column of the inpu
 - `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
     Hamiltonian. Default is `∇hamiltonian`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
-    is a tuple with `decoder_loglikelihood`, `log_prior`, and `G_inv`.
+    is a tuple with `decoder_loglikelihood`, `position_logprior`,
+    `momentum_logprior`, and `G_inv`.
 
 # Returns
-Two matrices `(z̄, ρ̄)` representing the updated positions and momenta after performing the full leapfrog step on each column of the input matrices.
+Two matrices `(z̄, ρ̄)` representing the updated positions and momenta after
+performing the full leapfrog step on each column of the input matrices.
 """
 function general_leapfrog_step(
     rhvae::RHVAE,
     x::AbstractMatrix{T},
     z::AbstractMatrix{T},
     ρ::AbstractMatrix{T},
-    ϵ::Union{T,<:AbstractArray{T}};
+    ϵ::Union{T,<:AbstractVector{T}};
     steps::Int=3,
     ∇H::Function=∇hamiltonian,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         decoder_loglikelihood=decoder_loglikelihood,
-        log_prior=spherical_logprior,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
@@ -1169,8 +1253,6 @@ function general_leapfrog_step(
     return z̄, ρ̄
 end # function
 
-# ------------------------------------------------------------------------------
-
 # ==============================================================================
 # Combining Leapfrog and Tempering Steps
 # ==============================================================================
@@ -1181,13 +1263,14 @@ end # function
                 x::AbstractVecOrMat{T},
                 zₒ::AbstractVecOrMat{T},
                 K::Int=3,
-                ϵ::Union{T,<:AbstractArray{T}}=0.001f0,
+                ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
                 βₒ::T=0.3f0,
                 steps::Int=3,
                 ∇H::Function=∇hamiltonian,
                 ∇H_kwargs::Union{NamedTuple,Dict}=(
                         decoder_loglikelihood=decoder_loglikelihood,
-                        log_prior=spherical_logprior,
+                        position_logprior=spherical_logprior,
+                        momentum_logprior=riemannian_logprior,
                         G_inv=G_inv,
                 ),
                 tempering_schedule::Function=quadratic_tempering,
@@ -1206,7 +1289,7 @@ Hamiltonian Variational Autoencoder (RHVAE).
 # Optional Keyword Arguments
 - `K::Int`: The number of leapfrog steps to perform in the Hamiltonian Monte
   Carlo (HMC) algorithm. Default is 3.
-- `ϵ::Union{T,<:AbstractArray{T}}`: The step size for the leapfrog steps in the
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size for the leapfrog steps in the
   HMC algorithm. This can be a scalar or an array. Default is 0.001f0.  
 - `βₒ::T`: The initial inverse temperature for the tempering schedule. Default
   is 0.3f0.
@@ -1215,7 +1298,7 @@ Hamiltonian Variational Autoencoder (RHVAE).
   Default is `∇hamiltonian`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
   to the `∇H` function. Default is a NamedTuple with `decoder_loglikelihood`,
-  `log_prior`, and `G_inv`.  
+  `position_logprior`, `momentum_logprior`, and `G_inv`.  
 - `tempering_schedule::Function`: The function to compute the inverse
   temperature at each step in the HMC algorithm. Defaults to
   `quadratic_tempering`. This function must take three arguments: First, `βₒ`,
@@ -1243,16 +1326,17 @@ either vectors or matrices.
 """
 function general_leapfrog_tempering_step(
     rhvae::RHVAE,
-    x::AbstractVecOrMat{T},
-    zₒ::AbstractVecOrMat{T};
+    x::AbstractVector{T},
+    zₒ::AbstractVector{T};
     K::Int=3,
-    ϵ::Union{T,<:AbstractArray{T}}=0.001f0,
+    ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
     βₒ::T=0.3f0,
     steps::Int=3,
     ∇H::Function=∇hamiltonian,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         decoder_loglikelihood=decoder_loglikelihood,
-        log_prior=spherical_logprior,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
         G_inv=G_inv,
     ),
     tempering_schedule::Function=quadratic_tempering,
@@ -1304,4 +1388,528 @@ function general_leapfrog_tempering_step(
         z_final=zₖ₋₁,
         ρ_final=ρₖ₋₁,
     )
+end # function
+
+# ==============================================================================
+# Forward pass methods for RHVAE with Generalized Hamiltonian steps
+# ==============================================================================
+
+@doc raw"""
+        (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
+                x::AbstractVecOrMat{T};
+                K::Int=3,
+                ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+                βₒ::T=0.3f0,
+                ∇H::Function=∇hamiltonian,
+                ∇H_kwargs::Union{NamedTuple,Dict}=(
+                        decoder_loglikelihood=decoder_loglikelihood,
+                        position_logprior=spherical_logprior,
+                        momentum_logprior=riemannian_logprior,
+                        G_inv=G_inv,
+                ),
+                tempering_schedule::Function=quadratic_tempering,
+                latent::Bool=false,
+        ) where {D<:AbstractGaussianDecoder,T<:Float32}
+
+Run the Relaxed Hamiltonian Variational Autoencoder (RHVAE) on the given input.
+
+# Arguments
+- `x::AbstractVecOrMat{T}`: The input to the RHVAE. If it is a vector, it
+    represents a single data point. If it is a matrix, each column corresponds
+    to a specific data point, and each row corresponds to a dimension of the
+    input space.
+
+# Optional Keyword Arguments
+- `K::Int=3`: The number of leapfrog steps to perform in the Hamiltonian Monte
+  Carlo (HMC) part of the RHVAE.
+- `ϵ::Union{T,<:AbstractVector{T}}=0.001f0`: The step size for the leapfrog steps
+  in the HMC part of the RHVAE. If it is a scalar, the same step size is used
+  for all dimensions. If it is an array, each element corresponds to the step
+  size for a specific dimension.
+- `βₒ::T=0.3f0`: The initial inverse temperature for the tempering schedule.
+- `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
+  Hamiltonian in the HMC part of the RHVAE.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+  to the `∇H` function. Default is a NamedTuple with `decoder_loglikelihood`,
+  `position_logprior`, `momentum_logprior`, and `G_inv`.  
+- `tempering_schedule::Function=quadratic_tempering`: The function to compute
+  the tempering schedule in the RHVAE.
+- `latent::Bool=false`: If `true`, the function returns a NamedTuple containing
+  the outputs of the encoder and decoder, and the final state of the phase space
+  after the leapfrog and tempering steps. If `false`, the function only returns
+  the output of the decoder.
+
+# Returns
+If `latent=true`, the function returns a NamedTuple with the following fields:
+- `encoder`: The outputs of the encoder.
+- `decoder`: The output of the decoder.
+- `phase_space`: The final state of the phase space after the leapfrog and
+    tempering steps.
+
+If `latent=false`, the function only returns the output of the decoder.
+
+# Description
+This function runs the RHVAE on the given input. It first passes the input
+through the encoder to obtain the mean and log standard deviation of the latent
+space. It then uses the reparameterization trick to sample from the latent
+space. After that, it performs the leapfrog and tempering steps to refine the
+sample from the latent space. Finally, it passes the refined sample through the
+decoder to obtain the output.
+
+# Notes
+Ensure that the dimensions of `x` match the input dimensions of the RHVAE, and
+that the dimensions of `ϵ` match the dimensions of the latent space.
+"""
+function (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
+    x::AbstractVecOrMat{T};
+    K::Int=3,
+    ϵ::Union{T,<:AbstractVector{T}}=0.001f0,
+    βₒ::T=0.3f0,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
+        G_inv=G_inv,
+    ),
+    tempering_schedule::Function=quadratic_tempering,
+    latent::Bool=false,
+) where {D<:AbstractGaussianDecoder,T<:Float32}
+    # Run input through encoder
+    encoder_outputs = rhvae.vae.encoder(x)
+
+    # Run reparametrize trick to generate latent variable zₒ
+    zₒ = reparameterize(rhvae.vae.encoder, encoder_outputs, n_samples=1)
+
+    # Run leapfrog and tempering steps
+    phase_space = general_leapfrog_tempering_step(
+        rhvae, x, zₒ;
+        K=K, ϵ=ϵ, βₒ=βₒ, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+        tempering_schedule=tempering_schedule
+    )
+
+    # Run final zₖ through decoder
+    decoder_outputs = rhvae.vae.decoder(phase_space.z_final)
+
+    # Check if latent variables should be returned
+    if latent
+        return (
+            encoder=encoder_outputs,
+            decoder=decoder_outputs,
+            phase_space=phase_space,
+        )
+    else
+        return decoder_outputs
+    end # if
+end # function
+
+# ==============================================================================
+# Riemannian Hamiltonian ELBO
+# ==============================================================================
+
+@doc raw"""
+    _log_p̄(
+        rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,SimpleDecoder}},
+        x::AbstractVector{T},
+        hvae_outputs::NamedTuple,
+    ) where {T<:Float32}
+
+This is an internal function used in `riemannian_hamiltonian_elbo` to compute
+the numerator of the unbiased estimator of the marginal likelihood. The function
+computes the sum of the log likelihood of the data given the latent variables,
+the log prior of the latent variables, and the log prior of the momentum
+variables.
+
+    log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,SimpleDecoder}}`: The Riemannian
+  Hamiltonian Variational Autoencoder (RHVAE) model.
+- `x::AbstractVector{T}`: The input data, where `T` is a subtype of `Float32`.
+- `hvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
+  latent variables `zₖ` and the final momentum variables `ρₖ`.
+
+# Returns
+- `log_p̄::T`: The first term of the log of the unbiased estimator of the
+  marginal likelihood.
+
+# Note
+This is an internal function and should not be called directly. It is used as
+part of the `riemannian_hamiltonian_elbo` function.
+"""
+function _log_p̄(
+    rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,SimpleDecoder}},
+    x::AbstractVector{T},
+    hvae_outputs::NamedTuple,
+) where {T<:Float32}
+    # Unpack necessary variables
+    µ = hvae_outputs.decoder.µ
+    σ = 1.0f0
+    zₖ = hvae_outputs.phase_space.z_final
+    ρₖ = hvae_outputs.phase_space.ρ_final
+
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)   
+
+    # Compute log p(x | zₖ)
+    log_p_x_given_zₖ = -0.5f0 * sum(abs2, (x - μ) / σ) -
+                       0.5f0 * length(x) * (2.0f0 * log(σ) + log(2.0f0π))
+
+    # Compute log p(zₖ)
+    log_p_zₖ = spherical_logprior(zₖ)
+
+    # Compute log p(ρₖ)
+    log_p_ρₖ = riemannian_logprior(rhvae, zₖ, ρₖ)
+
+    return log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    _log_p̄(
+        rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,SimpleDecoder}},
+        x::AbstractMatrix{T},
+        hvae_outputs::NamedTuple,
+    ) where {T<:Float32}
+
+This is an internal function used in `riemannian_hamiltonian_elbo` to compute
+the numerator of the unbiased estimator of the marginal likelihood. The function
+computes the sum of the log likelihood of the data given the latent variables,
+the log prior of the latent variables, and the log prior of the momentum
+variables.
+
+    log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,SimpleDecoder}}`: The Riemannian
+  Hamiltonian Variational Autoencoder (RHVAE) model.
+- `x::AbstractMatrix{T}`: The input data, where `T` is a subtype of `Float32`.
+  Each column represents a data point.
+- `hvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
+  latent variables `zₖ` and the final momentum variables `ρₖ`.
+
+# Returns
+- `log_p̄::T`: The first term of the log of the unbiased estimator of the
+  marginal likelihood.
+
+# Note
+This is an internal function and should not be called directly. It is used as
+part of the `riemannian_hamiltonian_elbo` function.
+"""
+function _log_p̄(
+    rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,SimpleDecoder}},
+    x::AbstractMatrix{T},
+    hvae_outputs::NamedTuple,
+) where {T<:Float32}
+    # Unpack necessary variables
+    µ = hvae_outputs.decoder.µ
+    σ = 1.0f0
+    zₖ = hvae_outputs.phase_space.z_final
+    ρₖ = hvae_outputs.phase_space.ρ_final
+
+    # Initialize log_p
+    log_p = 0.0f0
+
+    # Iterate over columns
+    for i in axes(x, 2)
+        # Compute log p(x | zₖ)
+        log_p_x_given_zₖ = -0.5f0 * sum(abs2, (x[:, i] - µ[:, i]) / σ) -
+                           0.5f0 * size(x, 1) * (2.0f0 * log(σ) + log(2.0f0π))
+
+        # Compute log p(zₖ)
+        log_p_zₖ = spherical_logprior(zₖ[:, i])
+
+        # Compute log p(ρₖ)
+        log_p_ρₖ = riemannian_logprior(rhvae, zₖ[:, i], ρₖ[:, i])
+
+        # Accumulate results
+        log_p += log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
+    end # for
+
+    return log_p
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        _log_p̄(
+                rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}},
+                x::AbstractVector{T},
+                hvae_outputs::NamedTuple,
+        ) where {T<:Float32}
+
+This is an internal function used in `riemannian_hamiltonian_elbo` to compute
+the numerator of the unbiased estimator of the marginal likelihood. The function
+computes the sum of the log likelihood of the data given the latent variables,
+the log prior of the latent variables, and the log prior of the momentum
+variables.
+
+        log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}}`:
+    The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
+- `x::AbstractVector{T}`: The input data, where `T` is a subtype of `Float32`.
+- `hvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
+    latent variables `zₖ` and the final momentum variables `ρₖ`.
+
+# Returns
+- `log_p̄::T`: The first term of the log of the unbiased estimator of the
+    marginal likelihood.
+
+# Note
+This is an internal function and should not be called directly. It is used as
+part of the `riemannian_hamiltonian_elbo` function.
+"""
+function _log_p̄(
+    rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}},
+    x::AbstractVector{T},
+    hvae_outputs::NamedTuple,
+) where {T<:Float32}
+    # Unpack necessary variables
+    µ = hvae_outputs.decoder.µ
+    logσ = hvae_outputs.decoder.logσ
+    σ = exp.(logσ)
+    zₖ = hvae_outputs.phase_space.z_final
+    ρₖ = hvae_outputs.phase_space.ρ_final
+
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)   
+
+    # Compute log p(x | zₖ)
+    log_p_x_given_zₖ = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+                       sum(logσ) -
+                       0.5f0 * length(x) * log(2.0f0π)
+
+    # Compute log p(zₖ)
+    log_p_zₖ = spherical_logprior(zₖ)
+
+    # Compute log p(ρₖ)
+    log_p_ρₖ = riemannian_logprior(rhvae, zₖ, ρₖ)
+
+    return log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        _log_p̄(
+                rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}},
+                x::AbstractMatrix{T},
+                hvae_outputs::NamedTuple,
+        ) where {T<:Float32}
+
+This is an internal function used in `riemannian_hamiltonian_elbo` to compute
+the numerator of the unbiased estimator of the marginal likelihood. The function
+computes the sum of the log likelihood of the data given the latent variables,
+the log prior of the latent variables, and the log prior of the momentum
+variables.
+
+        log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}}`:
+  The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
+- `x::AbstractMatrix{T}`: The input data, where `T` is a subtype of `Float32`.
+  Each column represents a data point.
+- `hvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
+  latent variables `zₖ` and the final momentum variables `ρₖ`.
+
+# Returns
+- `log_p̄::T`: The first term of the log of the unbiased estimator of the
+  marginal likelihood.
+
+# Note
+This is an internal function and should not be called directly. It is used as
+part of the `riemannian_hamiltonian_elbo` function.
+"""
+function _log_p̄(
+    rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}},
+    x::AbstractMatrix{T},
+    hvae_outputs::NamedTuple,
+) where {T<:Float32}
+    # Unpack necessary variables
+    µ = hvae_outputs.decoder.µ
+    logσ = hvae_outputs.decoder.logσ
+    σ = exp.(logσ)
+    zₖ = hvae_outputs.phase_space.z_final
+    ρₖ = hvae_outputs.phase_space.ρ_final
+
+    # Initialize log_p
+    log_p = 0.0f0
+
+    # Iterate over columns
+    for i in axes(x, 2)
+        # Compute log p(x | zₖ)
+        log_p_x_given_zₖ = -0.5f0 * sum(abs2, (x[:, i] - µ[:, i]) ./ σ) -
+                           sum(logσ[:, i]) -
+                           0.5f0 * size(x, 1) * log(2.0f0π)
+
+        # Compute log p(zₖ)
+        log_p_zₖ = spherical_logprior(zₖ[:, i])
+
+        # Compute log p(ρₖ)
+        log_p_ρₖ = riemannian_logprior(rhvae, zₖ[:, i], ρₖ[:, i])
+
+        # Accumulate results
+        log_p += log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
+    end # for
+
+    return log_p
+end # function
+
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        _log_p̄(
+                rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLinearDecoder}},
+                x::AbstractVector{T},
+                hvae_outputs::NamedTuple,
+        ) where {T<:Float32}
+
+This is an internal function used in `riemannian_hamiltonian_elbo` to compute
+the numerator of the unbiased estimator of the marginal likelihood. The function
+computes the sum of the log likelihood of the data given the latent variables,
+the log prior of the latent variables, and the log prior of the momentum
+variables.
+
+        log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLinearDecoder}}`:
+    The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
+- `x::AbstractVector{T}`: The input data, where `T` is a subtype of `Float32`.
+- `hvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
+    latent variables `zₖ` and the final momentum variables `ρₖ`.
+
+# Returns
+- `log_p̄::T`: The first term of the log of the unbiased estimator of the
+    marginal likelihood.
+
+# Note
+This is an internal function and should not be called directly. It is used as
+part of the `riemannian_hamiltonian_elbo` function.
+"""
+function _log_p̄(
+    rhvae::RHVAE{
+        <:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLinearDecoder}
+    },
+    x::AbstractVector{T},
+    hvae_outputs::NamedTuple,
+) where {T<:Float32}
+    # Unpack necessary variables
+    µ = hvae_outputs.decoder.µ
+    σ = hvae_outputs.decoder.σ
+    zₖ = hvae_outputs.phase_space.z_final
+    ρₖ = hvae_outputs.phase_space.ρ_final
+
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)   
+
+    # Compute log p(x | zₖ)
+    log_p_x_given_zₖ = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+                       sum(log, σ) -
+                       0.5f0 * length(x) * log(2.0f0π)
+
+    # Compute log p(zₖ)
+    log_p_zₖ = spherical_logprior(zₖ)
+
+    # Compute log p(ρₖ)
+    log_p_ρₖ = riemannian_logprior(rhvae, zₖ, ρₖ)
+
+    return log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    _log_p̄(
+        rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLinearDecoder}},
+        x::AbstractMatrix{T},
+        hvae_outputs::NamedTuple,
+    ) where {T<:Float32}
+
+This is an internal function used in `riemannian_hamiltonian_elbo` to compute
+the numerator of the unbiased estimator of the marginal likelihood. The function
+computes the sum of the log likelihood of the data given the latent variables,
+the log prior of the latent variables, and the log prior of the momentum
+variables.
+
+    log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+
+# Arguments
+- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLinearDecoder}}`:
+  The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
+- `x::AbstractMatrix{T}`: The input data, where `T` is a subtype of `Float32`.
+  Each column represents a data point.
+- `hvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
+  latent variables `zₖ` and the final momentum variables `ρₖ`.
+
+# Returns
+- `log_p̄::T`: The first term of the log of the unbiased estimator of the
+  marginal likelihood.
+
+# Note
+This is an internal function and should not be called directly. It is used as
+part of the `riemannian_hamiltonian_elbo` function.
+"""
+function _log_p̄(
+    rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLinearDecoder}},
+    x::AbstractMatrix{T},
+    hvae_outputs::NamedTuple,
+) where {T<:Float32}
+    # Unpack necessary variables
+    µ = hvae_outputs.decoder.µ
+    σ = hvae_outputs.decoder.σ
+    zₖ = hvae_outputs.phase_space.z_final
+    ρₖ = hvae_outputs.phase_space.ρ_final
+
+    # Initialize log_p
+    log_p = 0.0f0
+
+    # Iterate over columns
+    for i in axes(x, 2)
+        # Compute log p(x | zₖ)
+        log_p_x_given_zₖ = -0.5f0 * sum(abs2, (x[:, i] - µ[:, i]) ./ σ) -
+                           sum(log, σ[:, i]) -
+                           0.5f0 * size(x, 1) * log(2.0f0π)
+
+        # Compute log p(zₖ)
+        log_p_zₖ = spherical_logprior(zₖ[:, i])
+
+        # Compute log p(ρₖ)
+        log_p_ρₖ = riemannian_logprior(rhvae, zₖ[:, i], ρₖ[:, i])
+
+        # Accumulate results
+        log_p += log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
+    end # for
+
+    return log_p
+end # function
+
+# ------------------------------------------------------------------------------
+
+function _log_q̄(
+    rhvae::RHVAE{
+        <:VAE{<:AbstractGaussianLogEncoder,<:AbstractVariationalDecoder}
+    },
+    x::AbstractVector{T},
+    hvae_outputs::NamedTuple,
+    βₒ::T
+) where {T<:Float32}
+    # Unpack necessary variables
+    µ = hvae_outputs.encoder.µ
+    logσ = hvae_outputs.encoder.logσ
+    zₒ = hvae_outputs.phase_space.z_init
+    ρₒ = hvae_outputs.phase_space.ρ_init
+
+    # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
+
+    # Compute log q(zₒ)
+    log_q_z = -0.5f0 * sum(abs2, (zₒ - μ) ./ exp.(logσ)) -
+              sum(logσ) - 0.5f0 * length(zₒ) * log(2.0f0π)
+
+    # Compute log p(ρₒ)
+    log_p_ρ = riemannian_logprior(rhvae, zₒ, ρₒ)
+
+    return log_q_z + log_p_ρ - 0.5f0 * length(zₒ) * log(βₒ)
 end # function
