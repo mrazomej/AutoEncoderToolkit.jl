@@ -892,7 +892,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    _leapfrog_ρ_step(
+    _leapfrog_first_step(
         rhvae::RHVAE,
         x::AbstractVector{T},
         z::AbstractVector{T},
@@ -951,7 +951,7 @@ variables `z`. The result is returned as ρ̃.
 A vector representing the updated momentum after performing the first step of
 the generalized leapfrog integrator.
 """
-function _leapfrog_ρ_step(
+function _leapfrog_first_step(
     rhvae::RHVAE,
     x::AbstractVector{T},
     z::AbstractVector{T},
@@ -983,7 +983,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    _leapfrog_z_step(
+    _leapfrog_second_step(
             rhvae::RHVAE,
             x::AbstractVector{T},
             z::AbstractVector{T},
@@ -1043,7 +1043,7 @@ variables `ρ`. The result is returned as z̄.
 A vector representing the updated position after performing the second step of
 the generalized leapfrog integrator.
 """
-function _leapfrog_z_step(
+function _leapfrog_second_step(
     rhvae::RHVAE,
     x::AbstractVector{T},
     z::AbstractVector{T},
@@ -1079,6 +1079,85 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
+    _leapfrog_third_step(
+        rhvae::RHVAE,
+        x::AbstractVector{T},
+        z::AbstractVector{T},
+        ρ::AbstractVector{T},
+        ϵ::Union{T,<:AbstractVector{T}};
+        steps::Int=1,
+        ∇H::Function=∇hamiltonian,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+            decoder_loglikelihood=decoder_loglikelihood,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
+            G_inv=G_inv,
+        ),
+    ) where {T<:Float32}
+
+Perform the third step of the generalized leapfrog integrator for Hamiltonian
+dynamics, defined as
+
+ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ * ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
+
+This function is part of the generalized leapfrog integrator used in Hamiltonian
+dynamics. Unlike the standard leapfrog integrator, the generalized leapfrog
+integrator is implicit, which means it requires the use of fixed-point
+iterations to be solved.
+
+The function takes a `RHVAE` instance, a point `x` in the data space, a point
+`z` in the latent space, a momentum `ρ`, a step size `ϵ`, and optionally the
+number of fixed-point iterations to perform (`steps`), a function to compute the
+gradient of the Hamiltonian (`∇H`), and a set of keyword arguments for `∇H`
+(`∇H_kwargs`).
+
+The function performs the following update:
+
+ρ̃ = ρ - 0.5 * ϵ * ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
+
+where `∇H` is the gradient of the Hamiltonian with respect to the position
+variables `z`. The result is returned as ρ̃.
+
+# Arguments
+- `rhvae::RHVAE`: The `RHVAE` instance.
+- `x::AbstractVector{T}`: The point in the data space.
+- `z::AbstractVector{T}`: The point in the latent space.
+- `ρ::AbstractVector{T}`: The momentum.
+- `ϵ::Union{T,<:AbstractVector{T}}`: The step size.
+
+# Optional Keyword Arguments
+- `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
+  Hamiltonian. Default is `∇hamiltonian`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
+  is a tuple with `decoder_loglikelihood`, `position_logprior`,
+  `momentum_logprior`, and `G_inv`.
+
+# Returns
+A vector representing the updated momentum after performing the first step of
+the generalized leapfrog integrator.
+"""
+function _leapfrog_third_step(
+    rhvae::RHVAE,
+    x::AbstractVector{T},
+    z::AbstractVector{T},
+    ρ::AbstractVector{T},
+    ϵ::Union{T,<:AbstractVector{T}};
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
+        G_inv=G_inv,
+    ),
+) where {T<:Float32}
+    # Update momentum variable with half step. No fixed-point iterations are
+    # needed.
+    return ρ - (0.5f0 * ϵ) .* ∇H(rhvae, x, z, ρ, :z; ∇H_kwargs...)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
         general_leapfrog_step(
                 rhvae::RHVAE,
                 x::AbstractVector{T},
@@ -1109,7 +1188,7 @@ Hamiltonian dynamics. It consists of three steps:
         ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
 
 This function performs these three steps in sequence, using the
-`_leapfrog_ρ_step` and `_leapfrog_z_step` helper functions.
+`_leapfrog_first_step` and `_leapfrog_second_step` helper functions.
 
 # Arguments
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -1147,18 +1226,18 @@ function general_leapfrog_step(
     ),
 ) where {T<:Float32}
     # Update momentum variable with half step
-    ρ̃ = _leapfrog_ρ_step(
+    ρ̃ = _leapfrog_first_step(
         rhvae, x, z, ρ, ϵ; steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
     )
 
     # Update position variable with full step
-    z̄ = _leapfrog_z_step(
+    z̄ = _leapfrog_second_step(
         rhvae, x, z, ρ̃, ϵ; steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
     )
 
     # Update momentum variable with half step
-    ρ̄ = _leapfrog_ρ_step(
-        rhvae, x, z̄, ρ̃, ϵ; steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+    ρ̄ = _leapfrog_third_step(
+        rhvae, x, z̄, ρ̃, ϵ; ∇H=∇H, ∇H_kwargs=∇H_kwargs,
     )
 
     return z̄, ρ̄
@@ -1197,7 +1276,7 @@ Hamiltonian dynamics. It consists of three steps:
     ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
 
 This function performs these three steps in sequence for each column of the
-input matrices, using the `_leapfrog_ρ_step` and `_leapfrog_z_step` helper
+input matrices, using the `_leapfrog_first_step` and `_leapfrog_second_step` helper
 functions.
 
 # Arguments
@@ -2046,3 +2125,4 @@ function _log_q̄(
 
     return log_q_z + log_p_ρ - 0.5f0 * length(zₒ) * log(βₒ)
 end # function
+Σ
