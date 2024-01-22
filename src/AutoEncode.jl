@@ -124,9 +124,9 @@ using .InfoMaxVAEs: InfoMaxVAE
 # Include module to fit a Radial Basis Function (RBF) network
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-module RBFs
-include("rbf.jl")
-end # submodule
+# module RBFs
+# include("rbf.jl")
+# end # submodule
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include module for Hamiltonian Variational Autoencoders (HVAEs)
@@ -134,6 +134,13 @@ end # submodule
 
 module HVAEs
 include("hvae.jl")
+end # submodule
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Include module for Riemannian Hamiltonian Variational Autoencoders (RHVAEs)
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+module RHVAEs
+include("rhvae.jl")
 end # submodule
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
