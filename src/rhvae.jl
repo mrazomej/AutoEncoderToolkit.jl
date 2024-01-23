@@ -1992,8 +1992,8 @@ end # function
                 tempering_schedule::Function=quadratic_tempering,
         ) where {T<:Float32}
 
-Combines the leapfrog and tempering steps into a single function for the Relaxed
-Hamiltonian Variational Autoencoder (RHVAE).
+Combines the leapfrog and tempering steps into a single function for the
+Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
 - `x::AbstractVector{T}`: The data to be processed. 
@@ -2124,8 +2124,8 @@ end # function
                 tempering_schedule::Function=quadratic_tempering,
         ) where {T<:Float32}
 
-Combines the leapfrog and tempering steps into a single function for the Relaxed
-Hamiltonian Variational Autoencoder (RHVAE).
+Combines the leapfrog and tempering steps into a single function for the
+Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
 - `x::AbstractMatrix{T}`: The data to be processed. Each column represents a
@@ -2265,13 +2265,13 @@ end # function
                 tempering_schedule::Function=quadratic_tempering,
         ) where {T<:Float32}
 
-Combines the leapfrog and tempering steps into a single function for the Relaxed
-Hamiltonian Variational Autoencoder (RHVAE).
+Combines the leapfrog and tempering steps into a single function for the
+Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
 - `x::AbstractVector{T}`: The data to be processed. 
 - `zₒ::AbstractVector{T}`: The initial latent variable. 
-- `rhvae::RHVAE`: The Relaxed Hamiltonian Variational Autoencoder model.
+- `rhvae::RHVAE`: The Riemannian Hamiltonian Variational Autoencoder model.
 
 # Optional Keyword Arguments
 - `ϵ::Union{T,<:AbstractVector{T}}`: The step size for the leapfrog steps in the
@@ -2394,15 +2394,15 @@ end # function
                 tempering_schedule::Function=quadratic_tempering,
         ) where {T<:Float32}
 
-Combines the leapfrog and tempering steps into a single function for the Relaxed
-Hamiltonian Variational Autoencoder (RHVAE).
+Combines the leapfrog and tempering steps into a single function for the
+Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
 - `x::AbstractMatrix{T}`: The data to be processed. Each column represents a
   point.
 - `zₒ::AbstractMatrix{T}`: The initial latent variable. Each column represents a
   point.
-- `rhvae::RHVAE`: The Relaxed Hamiltonian Variational Autoencoder model.
+- `rhvae::RHVAE`: The Riemannian Hamiltonian Variational Autoencoder model.
 
 # Optional Keyword Arguments
 - `ϵ::Union{T,<:AbstractVector{T}}`: The step size for the leapfrog steps in the
@@ -2653,7 +2653,8 @@ end # function
         latent::Bool=false,
     ) where {D<:AbstractGaussianDecoder,T<:Float32}
 
-Run the Relaxed Hamiltonian Variational Autoencoder (RHVAE) on the given input.
+Run the Riemannian Hamiltonian Variational Autoencoder (RHVAE) on the given
+input.
 
 # Arguments
 - `x::AbstractVecOrMat{T}`: The input to the RHVAE. If it is a vector, it
@@ -2664,10 +2665,10 @@ Run the Relaxed Hamiltonian Variational Autoencoder (RHVAE) on the given input.
 # Optional Keyword Arguments
 - `K::Int=3`: The number of leapfrog steps to perform in the Hamiltonian Monte
   Carlo (HMC) part of the RHVAE.
-- `ϵ::Union{T,<:AbstractVector{T}}=0.01f0`: The step size for the leapfrog
-  steps in the HMC part of the RHVAE. If it is a scalar, the same step size is
-  used for all dimensions. If it is an array, each element corresponds to the
-  step size for a specific dimension.
+- `ϵ::Union{T,<:AbstractVector{T}}=0.01f0`: The step size for the leapfrog steps
+  in the HMC part of the RHVAE. If it is a scalar, the same step size is used
+  for all dimensions. If it is an array, each element corresponds to the step
+  size for a specific dimension.
 - `βₒ::T=0.3f0`: The initial inverse temperature for the tempering schedule.
 - `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
 - `∇H::Function=∇hamiltonian`: The function to compute the gradient of the
@@ -3924,4 +3925,53 @@ function loss(
             tempering_schedule=tempering_schedule,
         )
     end # if
+end # function
+
+# ==============================================================================
+# train! function for RHVAEs
+# ==============================================================================
+
+@doc raw"""
+    train!(
+        rhvae::RHVAE, 
+        x::AbstractVecOrMat{Float32}, 
+        opt::NamedTuple; 
+        loss_function::Function=loss, 
+        loss_kwargs::Dict=Dict()
+    )
+
+Customized training function to update parameters of a Riemannian Hamiltonian Variational Autoencoder given a specified loss function.
+
+# Arguments
+- `rhvae::RHVAE`: A struct containing the elements of a Riemannian Hamiltonian Variational Autoencoder.
+- `x::AbstractVecOrMat{Float32}`: Data on which to evaluate the loss function. Columns represent individual samples.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically initialized using `Flux.Optimisers.update!`.
+
+# Optional Keyword Arguments
+- `loss_function::Function=loss`: The loss function used for training. It should accept the RHVAE model, data `x`, and keyword arguments in that order.
+- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`, `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending on the specific loss function in use.
+
+# Description
+Trains the RHVAE by:
+1. Computing the gradient of the loss w.r.t the RHVAE parameters.
+2. Updating the RHVAE parameters using the optimizer.
+3. Updating the metric parameters.
+"""
+function train!(
+    rhvae::RHVAE,
+    x::AbstractVecOrMat{Float32},
+    opt::NamedTuple;
+    loss_function::Function=loss,
+    loss_kwargs::Dict=Dict()
+)
+    # Compute VAE gradient
+    ∇loss_ = Flux.gradient(rhvae) do rhvae_model
+        loss_function(rhvae_model, x; loss_kwargs...)
+    end # do block
+
+    # Update parameters
+    Flux.Optimisers.update!(opt, rhvae, ∇loss_[1])
+
+    # Update metric
+    update_metric!(rhvae)
 end # function
