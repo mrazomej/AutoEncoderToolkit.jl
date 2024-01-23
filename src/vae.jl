@@ -212,7 +212,7 @@ function reparameterize(
     encoder_outputs::NamedTuple;
     prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     n_samples::Int=1
-) where {T<:AbstractVecOrMat{Float32}}
+)
     # Call reparameterize function with encoder outputs
     reparameterize(
         encoder_outputs.µ, encoder_outputs.logσ;
