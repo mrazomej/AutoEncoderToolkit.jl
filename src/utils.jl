@@ -1,5 +1,6 @@
 # Import library to find nearest neighbors
 import NearestNeighbors
+import Clustering
 
 # Import library for random sampling
 import StatsBase
@@ -9,7 +10,10 @@ import Random
 import LinearAlgebra
 
 # Export functions
-export shuffle_data, cycle_anneal, locality_sampler, vec_to_ltri
+export shuffle_data, cycle_anneal, locality_sampler, vec_to_ltri,
+    centroids_kmeans
+
+## =============================================================================
 
 @doc raw"""
     `step_scheduler(epoch, epoch_change, learning_rates)`
@@ -49,6 +53,8 @@ function step_scheduler(
         return learning_rates[end]
     end
 end # function
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     `cycle_anneal(epoch, n_epoch, n_cycles; frac=0.5, βmax=1, βmin=0)`
@@ -101,6 +107,8 @@ function cycle_anneal(
         return convert(Float32, βmax)
     end # if
 end # function
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
 `locality_sampler(data, dist_tree, n_primary, n_secondary, k_neighbors;
@@ -188,6 +196,8 @@ function locality_sampler(
     end # if
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T}, z::T=zero(T))
 
@@ -239,3 +249,48 @@ function vec_to_ltri(
     )
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    centroids_kmeans(x::AbstractMatrix{<:AbstractFloat}, n_centroids::Int; assign::Bool=false)
+
+Perform k-means clustering on the input and return the centers. This function
+can be used to down-sample the number of points used when computing the metric
+tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+# Arguments
+- `x::AbstractMatrix{<:AbstractFloat}`: The input data. Rows represent
+  individual samples.
+- `n_centroids::Int`: The number of centroids to compute.
+
+# Optional Keyword Arguments
+- `assign::Bool=false`: If true, also return the assignments of each point to a
+  centroid.
+
+# Returns
+- If `assign` is false, returns a matrix where each column is a centroid.
+- If `assign` is true, returns a tuple where the first element is the matrix of
+  centroids and the second element is a vector of assignments.
+
+# Examples
+```julia
+data = rand(100, 10)
+centroids = centroids_kmeans(data, 5)
+```
+"""
+function centroids_kmeans(
+    x::AbstractMatrix{<:AbstractFloat},
+    n_centroids::Int;
+    assign::Bool=false
+)
+    # Perform k-means clustering on the input and return the centers
+    if assign
+        # Compute clustering
+        clustering = Clustering.kmeans(x, n_centroids)
+        # Return centers and assignments
+        return (clustering.centers, Clustering.assignments(clustering))
+    else
+        # Return centers
+        return Clustering.kmeans(x, n_centroids).centers
+    end # if
+end # function
