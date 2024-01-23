@@ -1691,9 +1691,9 @@ end # function
 
 @doc raw"""
     general_leapfrog_step(
-        x::AbstractVector{T},
-        z::AbstractVector{T},
-        ρ::AbstractVector{T},
+        x::AbstractMatrix{T},
+        z::AbstractMatrix{T},
+        ρ::AbstractMatrix{T},
         decoder::AbstractVariationalDecoder,
         metric_param::NamedTuple;
         ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
@@ -3825,6 +3825,59 @@ end # function
 # RHVAE Loss function
 # ==============================================================================
 
+"""
+    loss(
+        rhvae::RHVAE{<:VAE{<:AbstractGaussianLogEncoder,<:AbstractGaussianDecoder}},
+        x::AbstractVecOrMat{Float32};
+        K::Int=3,
+        ϵ::Union{Float32,<:AbstractVector{Float32}}=0.001f0,
+        βₒ::Float32=0.3f0,
+        steps::Int=3,
+        ∇H::Function=∇hamiltonian,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+                decoder_loglikelihood=decoder_loglikelihood,
+                position_logprior=spherical_logprior,
+                momentum_logprior=riemannian_logprior,
+                G_inv=G_inv,
+        ),
+        tempering_schedule::Function=quadratic_tempering,
+        reg_function::Union{Function,Nothing}=nothing,
+        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_strength::Float32=1.0f0
+    )
+
+Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+# Arguments
+- `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
+  space.
+- `x::AbstractVecOrMat{Float32}`: The input data. If vector, the function
+  assumes a single data point. If matrix, the function assumes a batch of data
+  points.
+
+## Optional Keyword Arguments
+- `K::Int`: The number of HMC steps (default is 3).
+- `ϵ::Union{Float32,<:AbstractVector{Float32}}`: The step size for the leapfrog
+  integrator (default is 0.001).
+- `βₒ::Float32`: The initial inverse temperature (default is 0.3).
+- `steps::Int`: The number of steps in the leapfrog integrator (default is 3).
+- `∇H::Function`: The gradient function of the Hamiltonian (default is
+  `∇hamiltonian`).
+- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+  to the `∇H` function.
+- `tempering_schedule::Function`: The tempering schedule function used in the
+  HMC (default is `quadratic_tempering`).
+- `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
+  regularization term based on the VAE outputs. Should return a Float32. This
+  function must take as input the VAE outputs and the keyword arguments provided
+  in `reg_kwargs`.
+- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+  regularization function.
+- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+
+# Returns
+- The computed loss.
+"""
 function loss(
     rhvae::RHVAE{<:VAE{<:AbstractGaussianLogEncoder,<:AbstractGaussianDecoder}},
     x::AbstractVecOrMat{T};
