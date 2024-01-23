@@ -301,7 +301,7 @@ struct RHVAE{
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor RHVAE (vae, metric,)
+Flux.@functor RHVAE (vae, metric_chain,)
 
 # ==============================================================================
 # Riemannian Metric computations
