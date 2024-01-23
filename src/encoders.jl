@@ -421,9 +421,7 @@ function JointLogEncoder(
     init::Function=Flux.glorot_uniform
 )
     # Repeat encoder activation function for each layer
-    encoder_activations = [
-        encoder_activation for i in 1:length(encoder_neurons)
-    ]
+    encoder_activations = fill(encoder_activation, length(encoder_neurons))
     # Call constructor
     return JointLogEncoder(
         n_input, n_latent, encoder_neurons, encoder_activations,
@@ -556,9 +554,7 @@ function JointLogEncoder(
     init::Function=Flux.glorot_uniform
 )
     # Repeat encoder activation function for each layer
-    encoder_activations = [
-        encoder_activation for i in 1:length(encoder_neurons)
-    ]
+    encoder_activations = fill(encoder_activation, length(encoder_neurons))
 
     # Call constructor
     return JointLogEncoder(
@@ -769,9 +765,8 @@ function JointEncoder(
     init::Function=Flux.glorot_uniform
 )
     # Repeat encoder activation function for each layer
-    encoder_activations = [
-        encoder_activation for i in 1:length(encoder_neurons)
-    ]
+    encoder_activations = fill(encoder_activation, length(encoder_neurons))
+
     # Call constructor
     return JointEncoder(
         n_input, n_latent, encoder_neurons, encoder_activations,
