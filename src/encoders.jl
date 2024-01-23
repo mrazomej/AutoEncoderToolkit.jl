@@ -74,15 +74,23 @@ abstract type AbstractGaussianEncoder <: AbstractVariationalEncoder end
 @doc raw"""
     AbstractGaussianLinearEncoder <: AbstractGaussianEncoder
 
-An abstract type representing a Gaussian linear encoder in a variational autoencoder.
+An abstract type representing a Gaussian linear encoder in a variational
+autoencoder.
 
 # Description
-A Gaussian linear encoder is a type of encoder that maps inputs to a Gaussian distribution in the latent space. Unlike a standard Gaussian encoder, which typically returns the log of the standard deviation of the Gaussian distribution, a Gaussian linear encoder returns the standard deviation directly.
+A Gaussian linear encoder is a type of encoder that maps inputs to a Gaussian
+distribution in the latent space. Unlike a standard Gaussian encoder, which
+typically returns the log of the standard deviation of the Gaussian
+distribution, a Gaussian linear encoder returns the standard deviation directly.
 
-This abstract type is used as a base for all Gaussian linear encoders. Specific implementations of Gaussian linear encoders should subtype this abstract type and implement the necessary methods.
+This abstract type is used as a base for all Gaussian linear encoders. Specific
+implementations of Gaussian linear encoders should subtype this abstract type
+and implement the necessary methods.
 
 # Note
-When implementing a subtype, ensure that the encoder returns the standard deviation of the Gaussian distribution directly, not the log of the standard deviation.
+When implementing a subtype, ensure that the encoder returns the standard
+deviation of the Gaussian distribution directly, not the log of the standard
+deviation.
 """
 abstract type AbstractGaussianLinearEncoder <: AbstractGaussianEncoder end
 
@@ -369,6 +377,62 @@ function JointLogEncoder(
     return JointLogEncoder(Flux.Chain(encoder_layers...), µ_layer, logσ_layer)
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    JointLogEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
+                 latent_activation; init=Flux.glorot_uniform)
+
+Construct and initialize a `JointLogEncoder` struct that defines an encoder
+network for a variational autoencoder.
+
+# Arguments
+- `n_input::Int`: The dimensionality of the input data.
+- `n_latent::Int`: The dimensionality of the latent space.
+- `encoder_neurons::Vector{<:Int}`: A vector specifying the number of neurons in
+  each layer of the encoder network.
+- `encoder_activation::Function`: Activation function to be used in all hidden
+  layers.
+- `latent_activation::Function`: Activation function for the latent space layers
+  (both µ and logσ).
+
+## Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: The initialization function used for the
+  neural network weights.
+
+# Returns
+- A `JointLogEncoder` struct initialized based on the provided arguments.
+
+# Examples
+```julia
+encoder = JointLogEncoder(784, 20, [400], [relu], tanh)
+```
+
+# Notes
+The length of encoder_neurons should match the length of encoder_activation,
+ensuring that each layer in the encoder has a corresponding activation function.
+"""
+function JointLogEncoder(
+    n_input::Int,
+    n_latent::Int,
+    encoder_neurons::Vector{<:Int},
+    encoder_activation::Function,
+    latent_activation::Function;
+    init::Function=Flux.glorot_uniform
+)
+    # Repeat encoder activation function for each layer
+    encoder_activations = [
+        encoder_activation for i in 1:length(encoder_neurons)
+    ]
+    # Call constructor
+    return JointLogEncoder(
+        n_input, n_latent, encoder_neurons, encoder_activations,
+        latent_activation; init=init
+    )
+end # function
+
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     JointLogEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
                  latent_activation; init=Flux.glorot_uniform)
@@ -448,6 +512,62 @@ function JointLogEncoder(
     return JointLogEncoder(Flux.Chain(encoder_layers...), µ_layer, logσ_layer)
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    JointLogEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
+                 latent_activation; init=Flux.glorot_uniform)
+
+Construct and initialize a `JointLogEncoder` struct that defines an encoder
+network for a variational autoencoder.
+
+# Arguments
+- `n_input::Int`: The dimensionality of the input data.
+- `n_latent::Int`: The dimensionality of the latent space.
+- `encoder_neurons::Vector{<:Int}`: A vector specifying the number of neurons in
+  each layer of the encoder network.
+- `encoder_activation::Function`: Activation function to be used in all hidden
+  layers.
+- `latent_activation::Vector{<:Function}`: Activation functions for the latent
+  space layers (both µ and logσ).
+
+## Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: The initialization function used for the
+  neural network weights.
+
+# Returns
+- A `JointLogEncoder` struct initialized based on the provided arguments.
+
+# Examples
+```julia
+encoder = JointLogEncoder(784, 20, [400], [relu], tanh)
+```
+
+# Notes
+The length of encoder_neurons should match the length of encoder_activation,
+ensuring that each layer in the encoder has a corresponding activation function.
+"""
+function JointLogEncoder(
+    n_input::Int,
+    n_latent::Int,
+    encoder_neurons::Vector{<:Int},
+    encoder_activation::Vector{<:Function},
+    latent_activation::Vector{<:Function};
+    init::Function=Flux.glorot_uniform
+)
+    # Repeat encoder activation function for each layer
+    encoder_activations = [
+        encoder_activation for i in 1:length(encoder_neurons)
+    ]
+
+    # Call constructor
+    return JointLogEncoder(
+        n_input, n_latent, encoder_neurons, encoder_activations,
+        latent_activation; init=init
+    )
+end # function
+
+# ------------------------------------------------------------------------------
 @doc raw"""
         (encoder::JointLogEncoder)(x)
 
@@ -604,6 +724,62 @@ function JointEncoder(
     # Initialize decoder
     return JointEncoder(Flux.Chain(encoder_layers...), µ_layer, logσ_layer)
 end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    JointEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
+                 latent_activation; init=Flux.glorot_uniform)
+
+Construct and initialize a `JointLogEncoder` struct that defines an encoder
+network for a variational autoencoder.
+
+# Arguments
+- `n_input::Int`: The dimensionality of the input data.
+- `n_latent::Int`: The dimensionality of the latent space.
+- `encoder_neurons::Vector{<:Int}`: A vector specifying the number of neurons in
+  each layer of the encoder network.
+- `encoder_activation::Function`: Activation function to be used in all hidden
+  layers.
+- `latent_activation::Vector{<:Function}`: Activation function for the latent
+  space layers. This vector must contain the activation for both µ and logσ.
+
+## Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: The initialization function used for the
+  neural network weights.
+
+# Returns
+- A `JointEncoder` struct initialized based on the provided arguments.
+
+# Examples
+```julia
+encoder = JointEncoder(784, 20, [400], [relu], [tanh, softplus])
+```
+
+# Notes
+The length of encoder_neurons should match the length of encoder_activation,
+ensuring that each layer in the encoder has a corresponding activation function.
+"""
+function JointEncoder(
+    n_input::Int,
+    n_latent::Int,
+    encoder_neurons::Vector{<:Int},
+    encoder_activation::Vector{<:Function},
+    latent_activation::Vector{<:Function};
+    init::Function=Flux.glorot_uniform
+)
+    # Repeat encoder activation function for each layer
+    encoder_activations = [
+        encoder_activation for i in 1:length(encoder_neurons)
+    ]
+    # Call constructor
+    return JointEncoder(
+        n_input, n_latent, encoder_neurons, encoder_activations,
+        latent_activation; init=init
+    )
+end # function
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
         (encoder::JointEncoder)(x)
