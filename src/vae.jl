@@ -82,19 +82,19 @@ Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
-    µ::T,
-    σ::T;
+    µ::AbstractVecOrMat{<:T},
+    σ::AbstractVecOrMat{<:T};
     log::Bool=true
-) where {T<:AbstractVecOrMat{Float32}}
+) where {T<:AbstractFloat}
     # Check if logσ is provided
     if log
-        # Sample n_samples random latent variable point estimates given the
-        # mean and log standard deviation
-        return µ .+ randn(size(µ)..., n_samples) .* exp.(σ)
+        # Sample random latent variable point estimates given the mean and log
+        # standard deviation
+        return µ .+ randn(T, size(µ)...) .* exp.(σ)
     else
-        # Sample n_samples random latent variable point estimates given the
-        # mean and standard deviation
-        return µ .+ randn(prior, size(µ)..., n_samples) .* σ
+        # Sample random latent variable point estimates given the mean and
+        # standard deviation
+        return µ .+ randn(T, size(µ)...) .* σ
     end # if
 end # function
 
@@ -273,11 +273,6 @@ the specified `decoder`.
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
 - `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
-
-## Optional Keyword Arguments
-- `n_samples::Int=1`: The number of latent samples to average over when
-  computing the reconstruction loss. More samples provide a better approximation
-  of the expected reconstruction log likelihood.
 
 # Returns
 - `Float32`: The average reconstruction loss computed across all provided
@@ -520,8 +515,7 @@ end # function
         `loss(vae, x; β=1.0f0, reg_function=nothing, reg_kwargs=Dict(), 
                 reg_strength=1.0f0)`
 
-Computes the loss for the variational autoencoder (VAE) by averaging over
-`n_samples` latent space samples.
+Computes the loss for the variational autoencoder (VAE).
 
 The loss function combines the reconstruction loss with the Kullback-Leibler
 (KL) divergence, and possibly a regularization term, defined as:
@@ -552,8 +546,7 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 
 # Returns
 - `Float32`: The computed average loss value for the input `x` and its
-  reconstructed counterparts over `n_samples` samples, including possible
-  regularization terms.
+  reconstructed counterparts, including possible regularization terms.
 
 # Note
 - Ensure that the input data `x` matches the expected input dimensionality for
@@ -567,8 +560,8 @@ function loss(
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
 )
-    # Forward Pass (run input through reconstruct function with n_samples)
-    vae_outputs = vae(x; latent=true, n_samples=n_samples)
+    # Forward Pass (run input through reconstruct function)
+    vae_outputs = vae(x; latent=true)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     log_likelihood = reconstruction_decoder(vae.decoder, x, vae_outputs)
@@ -639,7 +632,7 @@ function loss(
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
 )
-    # Forward Pass (run input through reconstruct function with n_samples)
+    # Forward Pass (run input through reconstruct function)
     vae_outputs = vae(x_in; latent=true)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
@@ -692,7 +685,7 @@ Trains the VAE by:
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
 for x in dataloader
-    train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0, :n_samples => 5))
+    train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0,))
 end
 ```
 """

@@ -21,37 +21,22 @@ Random.seed!(42)
     # Define some inputs
     µ = Float32[0.5, 0.2]
     logσ = Float32[-0.1, -0.2]
-    prior = Distributions.Normal{Float32}(0.0f0, 1.0f0)
 
     # Test with log scale standard deviation
     @testset "log scale standard deviation" begin
-        result = VAEs.reparameterize(
-            µ, logσ, prior=prior, n_samples=1, log=true
-        )
+        result = VAEs.reparameterize(µ, logσ, log=true)
         @test size(result) == size(µ)
         @test typeof(result) == typeof(µ)
-    end
+    end # @testset "log scale standard deviation"
 
     # Test with standard deviation (not log scale)
     @testset "standard deviation (not log scale)" begin
         σ = exp.(logσ)
-        result = VAEs.reparameterize(
-            µ, σ, prior=prior, n_samples=1, log=false
-        )
+        result = VAEs.reparameterize(µ, σ, log=false)
         @test size(result) == size(µ)
         @test typeof(result) == typeof(µ)
-    end
-
-    # Test with multiple samples
-    @testset "multiple samples" begin
-        n_samples = 5
-        result = VAEs.reparameterize(
-            µ, logσ, prior=prior, n_samples=n_samples, log=true
-        )
-        @test size(result) == (size(µ)..., n_samples)
-        @test typeof(result) == Array{Float32,2}
-    end
-end
+    end # @testset "standard deviation (not log scale)"
+end # @testset "reparameterize function"
 
 ## =============================================================================
 
@@ -255,27 +240,6 @@ decoders = [
             )
         end # for decoder in decoders
     end # @testset "latent=false"
-
-
-    # Test with multiple samples
-    @testset "multiple samples" begin
-        # Loop through decoders
-        for decoder in decoders
-            # Define VAE
-            vae = joint_log_encoder * decoder
-
-            # Test with single data point
-            result = vae(x_vector, latent=false, n_samples=2)
-            @test isa(result, NamedTuple)
-            @test all(isa.(values(result), AbstractArray{Float32}))
-
-            # Test with multiple data points
-            result = vae(data, latent=false, n_samples=2)
-            @test isa(result, NamedTuple)
-            @test all(isa.(values(result), AbstractArray{Float32}))
-        end # for decoder in decoders
-    end # @testset "multiple samples"
-
 end # @testset "VAE Forward Pass"
 
 ## =============================================================================
@@ -289,37 +253,33 @@ end # @testset "VAE Forward Pass"
     # Define VAE with any decoder
     vae = joint_log_encoder * joint_log_decoder
 
-    @testset "kl_gaussian_encoder function" begin
+    @testset "kl_encoder function" begin
         # Test with vector input
         @testset "vector input" begin
             vae_outputs = vae(x_vector; latent=true)
-            result = VAEs.kl_gaussian_encoder(
-                vae.encoder, x_vector, vae_outputs, n_samples=1
-            )
+            result = VAEs.kl_encoder(vae.encoder, x_vector, vae_outputs)
             @test isa(result, Float32)
         end # vector input
 
         # Test with matrix input
         @testset "matrix input" begin
             vae_outputs = vae(x_matrix; latent=true)
-            result = VAEs.kl_gaussian_encoder(
-                vae.encoder, x_matrix, vae_outputs, n_samples=1
-            )
+            result = VAEs.kl_encoder(vae.encoder, x_matrix, vae_outputs)
             @test isa(result, Float32)
         end # matrix input
-    end # kl_gaussian_encoder function
+    end # kl_encoder function
 
     # Loop through decoders
     for decoder in decoders
         # Define VAE
         vae = joint_log_encoder * decoder
 
-        @testset "reconstruction_gaussian_decoder function" begin
+        @testset "reconstruction_decoder function" begin
             # Test with vector input
             @testset "vector input" begin
                 vae_outputs = vae(x_vector; latent=true)
-                result = VAEs.reconstruction_gaussian_decoder(
-                    decoder, x_vector, vae_outputs, n_samples=1
+                result = VAEs.reconstruction_decoder(
+                    decoder, x_vector, vae_outputs
                 )
                 @test isa(result, Float32)
             end # vector input
@@ -327,12 +287,12 @@ end # @testset "VAE Forward Pass"
             # Test with matrix input
             @testset "matrix input" begin
                 vae_outputs = vae(x_matrix; latent=true)
-                result = VAEs.reconstruction_gaussian_decoder(
-                    decoder, x_matrix, vae_outputs, n_samples=1
+                result = VAEs.reconstruction_decoder(
+                    decoder, x_matrix, vae_outputs
                 )
                 @test isa(result, Float32)
             end # matrix input
-        end # reconstruction_gaussian_decoder function
+        end # reconstruction_decoder function
     end # for decoder in decoders
 
     # Loop through decoders
