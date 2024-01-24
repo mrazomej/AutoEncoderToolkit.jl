@@ -22,6 +22,9 @@ using ..AutoEncode: SimpleDecoder,
     JointLogDecoder, SplitLogDecoder,
     JointDecoder, SplitDecoder
 
+# Import functions from the Utils module
+using ..utils: randn_like
+
 # Export functions to use elsewhere
 export reparameterize, reconstruction_decoder, kl_encoder
 
@@ -82,19 +85,19 @@ Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
-    µ::AbstractVecOrMat{<:T},
-    σ::AbstractVecOrMat{<:T};
+    µ::AbstractVecOrMat{T},
+    σ::AbstractVecOrMat{T};
     log::Bool=true
 ) where {T<:AbstractFloat}
     # Check if logσ is provided
     if log
         # Sample random latent variable point estimates given the mean and log
         # standard deviation
-        return µ .+ randn(T, size(µ)...) .* exp.(σ)
+        return µ .+ randn_like(µ) .* exp.(σ)
     else
         # Sample random latent variable point estimates given the mean and
         # standard deviation
-        return µ .+ randn(T, size(µ)...) .* σ
+        return µ .+ randn_like(µ) .* σ
     end # if
 end # function
 
@@ -137,7 +140,7 @@ http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
     encoder::AbstractGaussianLogEncoder,
-    encoder_outputs::NamedTuple;
+    encoder_outputs::NamedTuple
 )
     # Call reparameterize function with encoder outputs
     reparameterize(encoder_outputs.µ, encoder_outputs.logσ; log=true)
