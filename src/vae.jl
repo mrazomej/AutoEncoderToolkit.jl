@@ -3,7 +3,6 @@ import Flux
 import Zygote
 
 # Import basic math
-import Random
 import StatsBase
 import Distributions
 
@@ -24,7 +23,7 @@ using ..AutoEncode: SimpleDecoder,
     JointDecoder, SplitDecoder
 
 # Export functions to use elsewhere
-export reparameterize, reconstruction_gaussian_decoder, kl_gaussian_encoder
+export reparameterize, reconstruction_decoder, kl_encoder
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
@@ -36,10 +35,9 @@ export reparameterize, reconstruction_gaussian_decoder, kl_gaussian_encoder
 # ==============================================================================
 
 @doc raw"""
-    reparameterize(µ, σ; prior=Distributions.Normal{Float32}(0.0f0, 1.0f0), 
-    n_samples=1, log::Bool=true)
+        reparameterize(µ, σ; log::Bool=true)
 
-Reparameterize the latent space using the given mean (`µ`) and (log) standard
+Reparameterize the latent space using the given mean (`µ`) and (log)standard
 deviation (`σ` or `logσ`), employing the reparameterization trick. This function
 helps in sampling from the latent space in variational autoencoders (or similar
 models) while keeping the gradient flow intact.
@@ -54,29 +52,20 @@ models) while keeping the gradient flow intact.
   for a single data point. If a matrix, each column corresponds to the (log)
   standard deviation for a specific data point.
 
-
 # Optional Keyword Arguments
-- `prior::Distributions.Sampleable`: The prior distribution for the latent
-  space. By default, this is a standard normal distribution.
-- `n_samples::Int=1`: The number of samples to draw using the reparametrization
-  trick.
 - `log::Bool=true`: Boolean indicating whether the provided standard deviation
   is in log scale or not. If `true` (default), then `σ = exp(logσ)` is computed.
 
 # Returns
-An array containing `n_samples` samples from the reparameterized latent space,
-obtained by applying the reparameterization trick on the provided mean and log
-standard deviation, using the specified prior distribution.
+An array containing samples from the reparameterized latent space, obtained by
+applying the reparameterization trick on the provided mean and log standard
+deviation.
 
 # Description
 This function employs the reparameterization trick to sample from the latent
 space without breaking the gradient flow. The trick involves expressing the
 random variable as a deterministic variable transformed by a standard random
 variable, allowing for efficient backpropagation through stochastic nodes.
-
-If the provided `prior` is a univariate distribution, the function samples using
-the dimensions of `µ`. For multivariate distributions, it assumes a single
-sample should be generated and broadcasted accordingly.
 
 # Example
 ```julia
@@ -95,77 +84,27 @@ http://arxiv.org/abs/1312.6114 (2014).
 function reparameterize(
     µ::T,
     σ::T;
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-    n_samples::Int=1,
     log::Bool=true
 ) where {T<:AbstractVecOrMat{Float32}}
     # Check if logσ is provided
     if log
-        # Sample result depending on type of prior distribution
-        result = if isa(prior, Distributions.UnivariateDistribution)
-            # Sample n_samples random latent variable point estimates given the
-            # mean and standard deviation
-            µ .+ Random.rand(prior, size(µ)..., n_samples) .* exp.(σ)
-        elseif isa(prior, Distributions.MultivariateDistribution) &
-               isa(µ, AbstractVector)
-            # Sample n_samples random latent variable point estimates given the
-            # mean and standard deviation
-            µ .+ Random.rand(prior, n_samples) .* exp.(σ)
-        elseif isa(prior, Distributions.MultivariateDistribution) &
-               isa(µ, AbstractMatrix)
-            # Sample n_samples random latent variable point estimates given the
-            # mean and standard deviation
-            µ .+ reshape(
-                reduce(hcat, Random.rand(prior, size(µ, 2), n_samples)),
-                :, size(µ, 2), n_samples
-            ) .* exp.(σ)
-        end # if
+        # Sample n_samples random latent variable point estimates given the
+        # mean and log standard deviation
+        return µ .+ randn(size(µ)..., n_samples) .* exp.(σ)
     else
-        # Sample result depending on type of prior distribution
-        result = if isa(prior, Distributions.UnivariateDistribution)
-            # Sample n_samples random latent variable point estimates given the
-            # mean and standard deviation
-            µ .+ Random.rand(prior, size(µ)..., n_samples) .* σ
-        elseif isa(prior, Distributions.MultivariateDistribution) &
-               isa(µ, AbstractVector)
-            # Sample n_samples random latent variable point estimates given the
-            # mean and standard deviation
-            µ .+ Random.rand(prior, n_samples) .* σ
-        elseif isa(prior, Distributions.MultivariateDistribution) &
-               isa(µ, AbstractMatrix)
-            # Sample n_samples random latent variable point estimates given the
-            # mean and standard deviation
-            µ .+ reshape(
-                reduce(hcat, Random.rand(prior, size(µ, 2), n_samples)),
-                :, size(µ, 2), n_samples
-            ) .* σ
-
-        end # if
+        # Sample n_samples random latent variable point estimates given the
+        # mean and standard deviation
+        return µ .+ randn(prior, size(µ)..., n_samples) .* σ
     end # if
-
-    # Remove dimensions of size 1 based on type of T and n_samples = 1
-    if n_samples == 1
-        if T <: AbstractVector
-            # Drop second dimension when input is vector and n_samples = 1
-            return dropdims(result, dims=2)
-        elseif T <: AbstractMatrix
-            # Drop third dimension when input is matrix and n_samples = 1
-            return dropdims(result, dims=3)
-        end # if
-    end # if
-
-    return result
 end # function
 
 # -----------------------------------------------------------------------------
 
 @doc raw"""
-    reparameterize(
-        encoder::AbstractGaussianLogEncoder,
-        encoder_outputs::NamedTuple;
-        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-        n_samples::Int=1
-    ) where {T<:AbstractVecOrMat{Float32}}
+        reparameterize(
+                encoder::AbstractGaussianLogEncoder,
+                encoder_outputs::NamedTuple
+        ) where {T<:AbstractVecOrMat{Float32}}
 
 Reparameterize the latent space using the outputs of a Gaussian log encoder.
 This function helps in sampling from the latent space in variational
@@ -178,16 +117,10 @@ autoencoders (or similar models) while keeping the gradient flow intact.
   NamedTuple with keys `µ` and `logσ`, representing the mean and log standard
   deviation of the latent space.
 
-# Optional Keyword Arguments
-- `prior::Distributions.Sampleable`: The prior distribution for the latent
-  space. By default, this is a standard normal distribution.
-- `n_samples::Int=1`: The number of samples to draw using the reparametrization
-  trick.
-
 # Returns
-An array containing `n_samples` samples from the reparameterized latent space,
-obtained by applying the reparameterization trick on the provided mean and log
-standard deviation, using the specified prior distribution.
+An array containing samples from the reparameterized latent space, obtained by
+applying the reparameterization trick on the provided mean and log standard
+deviation.
 
 # Description
 This function employs the reparameterization trick to sample from the latent
@@ -195,13 +128,8 @@ space without breaking the gradient flow. The trick involves expressing the
 random variable as a deterministic variable transformed by a standard random
 variable, allowing for efficient backpropagation through stochastic nodes.
 
-If the provided `prior` is a univariate distribution, the function samples using
-the dimensions of `µ`. For multivariate distributions, it assumes a single
-sample should be generated and broadcasted accordingly.
-
 # Notes
-Ensure that the dimensions of µ and logσ match, and that the chosen prior
-distribution is consistent with the expectations of the latent space.
+Ensure that the dimensions of µ and logσ match.
 
 # Citation
 Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
@@ -210,15 +138,11 @@ http://arxiv.org/abs/1312.6114 (2014).
 function reparameterize(
     encoder::AbstractGaussianLogEncoder,
     encoder_outputs::NamedTuple;
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-    n_samples::Int=1
 )
     # Call reparameterize function with encoder outputs
-    reparameterize(
-        encoder_outputs.µ, encoder_outputs.logσ;
-        prior=prior, n_samples=n_samples, log=true
-    )
+    reparameterize(encoder_outputs.µ, encoder_outputs.logσ; log=true)
 end # function
+
 # ==============================================================================
 # `struct VAE{E<:AbstractVariationalEncoder, D<:AbstractVariationalDecoder}`
 # ==============================================================================
@@ -251,12 +175,7 @@ end # struct
 Flux.@functor VAE
 
 @doc raw"""
-    (vae::VAE)(
-        x::AbstractVecOrMat{Float32};
-        prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
-        latent::Bool=false,
-        n_samples::Int=1
-    )
+        (vae::VAE)(x::AbstractVecOrMat{Float32}; latent::Bool=false)
 
 Perform the forward pass of a Variational Autoencoder (VAE).
 
@@ -273,20 +192,16 @@ the decoder to obtain the output.
   single data point.
 
 # Optional Keyword Arguments
-- `prior::Distributions.Sampleable`: The prior distribution for the latent
-  variables. Defaults to a standard normal distribution.
 - `latent::Bool`: Whether to return the latent variables along with the decoder
   output. If `true`, the function returns a tuple containing the encoder
   outputs, the latent sample, and the decoder outputs. If `false`, the function
   only returns the decoder outputs. Defaults to `false`.  
-- `n_samples::Int`: The number of samples to draw from the latent distribution.
-  Defaults to `1`.
 
 # Returns
 - If `latent` is `true`, returns a tuple containing:
-  - `encoder`: The outputs of the encoder.
-  - `z`: The latent sample.
-  - `decoder`: The outputs of the decoder.
+    - `encoder`: The outputs of the encoder.
+    - `z`: The latent sample.
+    - `decoder`: The outputs of the decoder.
 - If `latent` is `false`, returns the outputs of the decoder.
 
 # Example
@@ -306,18 +221,13 @@ outputs = vae(x, latent=true)
 """
 function (vae::VAE)(
     x::AbstractVecOrMat{Float32};
-    prior::Distributions.Sampleable=Distributions.Normal{Float32}(0.0f0, 1.0f0),
     latent::Bool=false,
-    n_samples::Int=1
 )
     # Run input through encoder to obtain mean and log std
     encoder_outputs = vae.encoder(x)
 
     # Run reparametrization trick
-    z_sample = reparameterize(
-        vae.encoder, encoder_outputs;
-        prior=prior, n_samples=n_samples
-    )
+    z_sample = reparameterize(vae.encoder, encoder_outputs)
 
     # Check if latent variables should be returned
     if latent
@@ -344,7 +254,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    reconstruction_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
+    reconstruction_decoder(decoder, x, vae_outputs)
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder.
@@ -380,11 +290,10 @@ the specified `decoder`.
   not used within the function itself.
 - The reconstruction assumes a constant variance for the decoder of σ=1.
 """
-function reconstruction_gaussian_decoder(
+function reconstruction_decoder(
     decoder::SimpleDecoder,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::NamedTuple;
-    n_samples::Int=1
+    vae_outputs::NamedTuple
 )
     # Compute batch size
     batch_size = size(x, 2)
@@ -401,11 +310,6 @@ function reconstruction_gaussian_decoder(
         )
     end
 
-    # Validate n_samples
-    if n_samples < 1
-        throw(ArgumentError("Number of samples must be at least 1"))
-    end # if
-
     # Compute average reconstruction loss as the log-likelihood of a Gaussian
     # decoder.
     log_likelihood = -0.5f0 * (
@@ -414,11 +318,17 @@ function reconstruction_gaussian_decoder(
     )
 
     # Average over the number of samples and batch size
-    return log_likelihood / (n_samples * batch_size)
+    return log_likelihood / batch_size
 end # function
 
+# -----------------------------------------------------------------------------
+
 @doc raw"""
-    reconstruction_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
+        reconstruction_decoder(
+                decoder::T,
+                x::AbstractVecOrMat{Float32},
+                vae_outputs::NamedTuple
+        ) where {T<:AbstractGaussianLinearDecoder}
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder.
@@ -430,18 +340,13 @@ from the latent space to the parameters (`decoder_µ`, `decoder_σ`) is done by
 the specified `decoder`.
 
 # Arguments
-- `decoder::T`: Decoder network of type `AbstractGaussianLinearDecoder`,
-  which is assumed to have already mapped the latent variables to the parameters
-  of the Gaussian distribution.
+- `decoder::T`: Decoder network of type `AbstractGaussianLinearDecoder`, which
+  is assumed to have already mapped the latent variables to the parameters of
+  the Gaussian distribution.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
-
-## Optional Keyword Arguments
-- `n_samples::Int=1`: The number of latent samples to average over when
-  computing the reconstruction loss. More samples provide a better approximation
-  of the expected reconstruction log likelihood.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
 
 # Returns
 - `Float32`: The average reconstruction loss computed across all provided
@@ -453,11 +358,10 @@ the specified `decoder`.
   function. The `decoder` argument is provided to indicate the type of decoder
   network used, but it is not used within the function itself.
 """
-function reconstruction_gaussian_decoder(
+function reconstruction_decoder(
     decoder::T,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::NamedTuple;
-    n_samples::Int=1
+    vae_outputs::NamedTuple
 ) where {T<:AbstractGaussianLinearDecoder}
     # Compute batch size
     batch_size = size(x, 2)
@@ -475,11 +379,6 @@ function reconstruction_gaussian_decoder(
         )
     end
 
-    # Validate n_samples
-    if n_samples < 1
-        throw(ArgumentError("Number of samples must be at least 1"))
-    end
-
     # Compute average reconstruction loss as the log-likelihood of a Gaussian
     # decoder.
     log_likelihood = -0.5f0 * (
@@ -489,11 +388,17 @@ function reconstruction_gaussian_decoder(
     )
 
     # Average over the number of samples and batch size
-    return log_likelihood / (n_samples * batch_size)
+    return log_likelihood / batch_size
 end # function
 
-"""
-    reconstruction_gaussian_decoder(decoder, x, vae_outputs; n_samples=1)
+# -----------------------------------------------------------------------------
+
+@doc raw"""
+    reconstruction_decoder(
+        decoder::T,
+        x::AbstractVecOrMat{Float32},
+        vae_outputs::NamedTuple
+    ) where {T<:AbstractGaussianLogDecoder}
 
 Calculate the reconstruction loss for a Gaussian decoder in a variational
 autoencoder, where the decoder outputs log standard deviations instead of
@@ -505,11 +410,7 @@ standard deviations.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
-
-## Optional Keyword Arguments
-- `n_samples::Int=1`: The number of latent samples to average over when
-  computing the reconstruction loss.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
 
 # Returns
 - `Float32`: The average reconstruction loss computed across all provided
@@ -521,11 +422,10 @@ standard deviations.
   function. The `decoder` argument is provided to indicate the type of decoder
   network used, but it is not used within the function itself.
 """
-function reconstruction_gaussian_decoder(
+function reconstruction_decoder(
     decoder::T,
     x::AbstractVecOrMat{Float32},
     vae_outputs::NamedTuple;
-    n_samples::Int=1
 ) where {T<:AbstractGaussianLogDecoder}
     # Compute batch size
     batch_size = size(x, 2)
@@ -546,11 +446,6 @@ function reconstruction_gaussian_decoder(
         )
     end
 
-    # Validate n_samples
-    if n_samples < 1
-        throw(ArgumentError("Number of samples must be at least 1"))
-    end
-
     # Compute average reconstruction loss as the log-likelihood of a Gaussian
     # decoder.
     log_likelihood = -0.5f0 * (
@@ -560,7 +455,7 @@ function reconstruction_gaussian_decoder(
     )
 
     # Average over the number of samples and batch size
-    return log_likelihood / (n_samples * batch_size)
+    return log_likelihood / batch_size
 end # function
 
 # ==============================================================================
@@ -568,7 +463,11 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    kl_gaussian_encoder(encoder, vae_outputs)
+        kl_encoder(
+                encoder::JointLogEncoder,
+                x::AbstractVecOrMat{Float32},
+                vae_outputs::NamedTuple
+        )
 
 Calculate the Kullback-Leibler (KL) divergence between the approximate posterior
 distribution and the prior distribution in a variational autoencoder with a
@@ -582,26 +481,21 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 - `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
-
-## Optional Keyword Arguments
-- `n_samples::Int=1`: The number of latent samples to average over when
-  computing the KL divergence loss.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
 
 # Returns
 - `Float32`: The KL divergence for the entire batch of data points.
 
 # Note
-- It is assumed that the mapping from data space to laten parameters
+- It is assumed that the mapping from data space to latent parameters
   (`encoder_µ` and `encoder_logσ`) has been performed prior to calling this
   function. The `encoder` argument is provided to indicate the type of decoder
   network used, but it is not used within the function itself.
 """
-function kl_gaussian_encoder(
-    encoder::JointLogEncoder,
+function kl_encoder(
+    encoder::AbstractGaussianLogEncoder,
     x::AbstractVecOrMat{Float32},
-    vae_outputs::NamedTuple;
-    n_samples::Int=1
+    vae_outputs::NamedTuple
 )
     # Compute batch size
     batch_size = size(x, 2)
@@ -614,7 +508,7 @@ function kl_gaussian_encoder(
     return 0.5f0 * sum(
         @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
            2.0f0 * encoder_logσ
-    ) / (n_samples * batch_size)
+    ) / batch_size
 end # function
 
 
@@ -623,7 +517,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-        `loss(vae, x; β=1.0f0, n_samples=1, reg_function=nothing, reg_kwargs=Dict(), 
+        `loss(vae, x; β=1.0f0, reg_function=nothing, reg_kwargs=Dict(), 
                 reg_strength=1.0f0)`
 
 Computes the loss for the variational autoencoder (VAE) by averaging over
@@ -648,8 +542,6 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
   annealing.
-- `n_samples::Int=1`: The number of samples to draw from the latent space when
-  computing the loss.
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. Should return a Float32. This
   function must take as input the VAE outputs and the keyword arguments provided
@@ -671,7 +563,6 @@ function loss(
     vae::VAE,
     x::AbstractVecOrMat{Float32};
     β::Float32=1.0f0,
-    n_samples::Int=1,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
@@ -680,15 +571,11 @@ function loss(
     vae_outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    log_likelihood = reconstruction_gaussian_decoder(
-        vae.decoder, x, vae_outputs; n_samples=n_samples
-    )
+    log_likelihood = reconstruction_decoder(vae.decoder, x, vae_outputs)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_div = kl_gaussian_encoder(
-        vae.encoder, x, vae_outputs; n_samples=n_samples
-    )
+    kl_div = kl_encoder(vae.encoder, x, vae_outputs)
 
     # Compute regularization term if regularization function is provided
     reg_term = (reg_function !== nothing) ?
@@ -699,7 +586,7 @@ function loss(
 end # function
 
 @doc raw"""
-    `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0, n_samples=1, 
+    `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0
             regularization=nothing, reg_strength=1.0f0)`
 
 Computes the loss for the variational autoencoder (VAE).
@@ -726,8 +613,6 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
   annealing.
-- `n_samples::Int=1`: The number of samples to draw from the latent space when
-  computing the loss.
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. Should return a Float32. This
   function must take as input the VAE outputs and the keyword arguments provided
@@ -750,24 +635,19 @@ function loss(
     x_in::AbstractVecOrMat{Float32},
     x_out::AbstractVecOrMat{Float32};
     β::Float32=1.0f0,
-    n_samples::Int=1,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
 )
     # Forward Pass (run input through reconstruct function with n_samples)
-    vae_outputs = vae(x_in; latent=true, n_samples=n_samples)
+    vae_outputs = vae(x_in; latent=true)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    log_likelihood = reconstruction_gaussian_decoder(
-        vae.decoder, x_out, vae_outputs; n_samples=n_samples
-    )
+    log_likelihood = reconstruction_decoder(vae.decoder, x_out, vae_outputs)
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_div = kl_gaussian_encoder(
-        vae.encoder, x_in, vae_outputs; n_samples=n_samples
-    )
+    kl_div = kl_encoder(vae.encoder, x_in, vae_outputs)
 
     # Compute regularization term if regularization function is provided
     reg_term = (reg_function !== nothing) ?
@@ -800,8 +680,8 @@ given a specified loss function.
 - `loss_function::Function=VAEs.loss`: The loss function used for training. It
   should accept the VAE model, data `x`, and keyword arguments in that order.
 - `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
-  function. These might include parameters like `σ`, `β`, or `n_samples`,
-  depending on the specific loss function in use.
+  function. These might include parameters like `σ`, or `β`, depending on the
+  specific loss function in use.
 
 # Description
 Trains the VAE by:
@@ -853,8 +733,8 @@ given a loss function.
 - `loss_function::Function=VAEs.loss`: The loss function used for training. It
   should accept the VAE model, data `x`, and keyword arguments in that order.
 - `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
-  function. These might include parameters like `σ`, `β`, or `n_samples`,
-  depending on the specific loss function in use.
+  function. These might include parameters like `σ`, or `β`, depending on the
+  specific loss function in use.
 
 # Description
 Trains the VAE by:
