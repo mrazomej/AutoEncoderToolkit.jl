@@ -2643,7 +2643,7 @@ function (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
     encoder_outputs = rhvae.vae.encoder(x)
 
     # Run reparametrize trick to generate latent variable zₒ
-    zₒ = reparameterize(rhvae.vae.encoder, encoder_outputs, n_samples=1)
+    zₒ = reparameterize(rhvae.vae.encoder, encoder_outputs)
 
     # Run leapfrog and tempering steps
     phase_space = general_leapfrog_tempering_step(
@@ -2758,7 +2758,7 @@ function (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
     encoder_outputs = rhvae.vae.encoder(x)
 
     # Run reparametrize trick to generate latent variable zₒ
-    zₒ = reparameterize(rhvae.vae.encoder, encoder_outputs, n_samples=1)
+    zₒ = reparameterize(rhvae.vae.encoder, encoder_outputs)
 
     # Run leapfrog and tempering steps
     phase_space = general_leapfrog_tempering_step(
