@@ -265,43 +265,73 @@ struct RHVAE{
 } <: AbstractVariationalAutoEncoder
     vae::V
     metric_chain::MetricChain
-    centroids_data::Matrix{Float32}
-    centroids_latent::Matrix{Float32}
-    M::Array{Float32,3}
-    T::Float32
-    λ::Float32
-
-    # Define default constructor
-    function RHVAE(vae, metric_chain, centroids_data, T, λ)
-        # Extract dimensionality of latent space
-        ldim = size(vae.encoder.µ.weight, 1)
-
-        # Initialize centroids_latent
-        centroids_latent = zeros(
-            Float32, ldim, size(centroids_data, 2)
-        )
-
-        # Initialize L
-        L = reduce(
-            (x, y) -> cat(x, y, dims=3),
-            [
-                Matrix{Float32}(LinearAlgebra.I(ldim))
-                for _ in axes(centroids_data, 2)
-            ]
-        )
-
-        # Initialize M
-        M = L
-
-        # Initialize RHVAE
-        new{typeof(vae)}(
-            vae, metric_chain, centroids_data, centroids_latent, M, T, λ,
-        )
-    end # function
+    centroids_data::AbstractMatrix{Float32}
+    centroids_latent::AbstractMatrix{Float32}
+    M::AbstractArray{Float32,3}
+    T::AbstractFloat
+    λ::AbstractFloat
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor RHVAE (vae, metric_chain,)
+Flux.@functor RHVAE
+
+# Overload the Flux.trainable call to only optimize the parameters of the VAE
+# and MetricChain
+# Flux.trainable(rhvae::RHVAE) = Flux.params(rhvae.vae, rhvae.metric_chain)
+
+@doc raw"""
+    RHVAE(
+        vae::VAE, 
+        metric_chain::MetricChain, 
+        centroids_data::AbstractMatrix, 
+        T::Int, 
+        λ::Float32
+    )
+
+Construct a Riemannian Hamiltonian Variational Autoencoder (RHVAE) from a
+standard VAE and a metric chain.
+
+# Arguments
+- `vae::VAE`: A standard Variational Autoencoder (VAE) model.
+- `metric_chain::MetricChain`: A chain of metrics to be used for the Riemannian
+  Hamiltonian Monte Carlo (RHMC) sampler.
+- `centroids_data::AbstractMatrix`: Matrix of data centroids. Each column
+  represents a centroid.
+- `T::Int`: The number of leapfrog steps to be used in the RHMC sampler.
+- `λ::Float32`: The step size to be used in the RHMC sampler.
+
+# Returns
+- A new `RHVAE` object.
+
+# Description
+The constructor initializes the latent centroids and the metric tensor `M` to
+their default values. The latent centroids are initialized to a zero matrix of
+the same size as `centroids_data`, and `M` is initialized to a 3D array of
+identity matrices, one for each centroid.
+"""
+function RHVAE(vae, metric_chain, centroids_data, T, λ)
+    # Extract dimensionality of latent space
+    ldim = size(vae.encoder.µ.weight, 1)
+
+    # Initialize centroids_latent
+    centroids_latent = zeros(
+        Float32, ldim, size(centroids_data, 2)
+    )
+
+    # Initialize M
+    M = reduce(
+        (x, y) -> cat(x, y, dims=3),
+        [
+            Matrix{Float32}(LinearAlgebra.I(ldim))
+            for _ in axes(centroids_data, 2)
+        ]
+    )
+
+    # Initialize RHVAE
+    return RHVAE(
+        vae, metric_chain, centroids_data, centroids_latent, M, T, λ,
+    )
+end # function
 
 # ==============================================================================
 # Riemannian Metric computations
@@ -426,7 +456,7 @@ function update_metric!(
     # Run centroids_data through encoder and update centroids_latent
     rhvae.centroids_latent .= rhvae.vae.encoder(centroids_data).µ
     # Run centroids_data through metric_chain and update L
-    rhvae.L .= reduce(
+    L = reduce(
         (x, y) -> cat(x, y, dims=3),
         [
             rhvae.metric_chain(centroid, matrix=true)
@@ -437,8 +467,8 @@ function update_metric!(
     rhvae.M .= reduce(
         (x, y) -> cat(x, y, dims=3),
         [
-            L * LinearAlgebra.transpose(L)
-            for L in eachslice(rhvae.L, dims=3)
+            l * LinearAlgebra.transpose(l)
+            for l in eachslice(L, dims=3)
         ]
     )
 end # function
@@ -492,16 +522,19 @@ function G_inv(
     T::Float32,
     λ::Float32,
 )
-    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Note: We do not use Distances.jl
-    # because that performs in-place operations on the input, and this is not
-    # compatible with Zygote.jl.
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
+    # - We do not use Distances.jl because that performs in-place operations on
+    #   the input, and this is not compatible with Zygote.jl.
+    # - We use Zygote.dropgrad to prevent backpropagation through the
+    #   hyperparameters.
     LLexp = sum([
         M[:, :, i] .*
-        exp(-sum(abs2, (z - centroids_latent[:, i]) ./ T))
+        exp(-sum(abs2, (z - centroids_latent[:, i]) ./ Zygote.dropgrad(T)))
         for i in 1:size(M, 3)
     ])
     # Return the sum of the LLexp slices plus the regularization term
-    return LLexp + LinearAlgebra.diagm(λ * ones(Float32, size(z, 1)))
+    return LLexp +
+           LinearAlgebra.diagm(Zygote.dropgrad(λ) * ones(Float32, size(z, 1)))
 end # function
 
 @doc raw"""
@@ -567,13 +600,14 @@ end # function
 # Define the Zygote.@adjoint function for the FillArrays.fill method.
 # The function takes a matrix `x` of type Float32 and a size `sz` as input.
 Zygote.@adjoint function (::Type{T})(x::Matrix{Float32}, sz) where {T<:Fill}
-    # Define the backpropagation function for the adjoint.
-    # The function takes a gradient `Δ` as input and returns the sum of the gradient and `nothing`.
+    # Define the backpropagation function for the adjoint. The function takes a
+    # gradient `Δ` as input and returns the sum of the gradient and `nothing`.
     back(Δ::AbstractArray) = (sum(Δ), nothing)
-    # Define the backpropagation function for the adjoint.
-    # The function takes a gradient `Δ` as input and returns the value of `Δ` and `nothing`.
+    # Define the backpropagation function for the adjoint. The function takes a
+    # gradient `Δ` as input and returns the value of `Δ` and `nothing`.
     back(Δ::NamedTuple) = (Δ.value, nothing)
-    # Return the result of the FillArrays.fill method and the backpropagation function.
+    # Return the result of the FillArrays.fill method and the backpropagation
+    # function.
     return Fill(x, sz), back
 end # @adjoint
 
