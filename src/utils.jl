@@ -2,6 +2,9 @@
 import NearestNeighbors
 import Clustering
 
+# Import lobary to conditionally load functions when GPUs are available
+import Requires
+
 # Import library for random sampling
 import StatsBase
 import Random
@@ -294,3 +297,35 @@ function centroids_kmeans(
         return Clustering.kmeans(x, n_centroids).centers
     end # if
 end # function
+
+## =============================================================================
+# Defining random number generators for different GPU backends
+## =============================================================================
+
+function randn_like(x::AbstractArray{T}) where {T<:AbstractFloat}
+    return randn(T, size(x)...)
+end
+
+function __init__()
+
+    # Define randn for CUDA
+    Requires.@require CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba" begin
+        function randn_like(x::CUDA.CuArray{T}) where {T<:AbstractFloat}
+            return CUDA.randn(T, size(x)...)
+        end
+    end
+
+    # Define randn for OpenCL
+    Requires.@require OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2" begin
+        function randn_like(x::OpenCL.CLArray{T}) where {T<:AbstractFloat}
+            return OpenCL.randn(T, size(x)...)
+        end
+    end
+
+    # Define randn for Metal
+    Requires.@require Metal = "dde4c033-4e86-420c-a63e-0dd931031962" begin
+        function randn_like(x::Metal.MtlArray{T}) where {T<:AbstractFloat}
+            return Metal.randn(T, size(x)...)
+        end
+    end
+end # function __init__
