@@ -413,7 +413,7 @@ function vec_to_ltri(
     # Calculate the number of samples
     n_samples = size(diag, 2)
     # Initialize matrix of zeros
-    L = Metal.zeros(T, n, n, n_samples)
+    L = zeros(T, n, n, n_samples)
     # Obtain indices of lower-triangular matrix
     idx_low = tril_indices(n, n_samples; offset=-1)
     # Loop through rows
