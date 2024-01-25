@@ -36,8 +36,7 @@ using ..VAEs: reparameterize
 
 
 # Import functions
-import ..utils: vec_to_ltri
-using ..utils: tril_indices, diag_indices
+using ..utils: vec_to_ltri
 
 using ..HVAEs: decoder_loglikelihood, spherical_logprior,
     quadratic_tempering, null_tempering
