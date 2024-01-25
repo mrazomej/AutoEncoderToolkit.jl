@@ -199,7 +199,6 @@ function locality_sampler(
     end # if
 end # function
 
-# ------------------------------------------------------------------------------
 ## =============================================================================
 # Convert vector to lower triangular matrix
 ## =============================================================================
@@ -360,31 +359,83 @@ vec_to_ltri(diag, lower)  # Returns a 3x3 lower triangular matrix
 ```
 """
 function vec_to_ltri(
-    diag::AbstractVector{T}, lower::AbstractVector{T}, z::T=zero(T)
+    diag::AbstractVector{T}, lower::AbstractVector{T},
 ) where {T<:Number}
-    # Calculate length of diag and lower
-    d, l = length(diag), length(lower)
+    # Calculate latent space dimensionality
+    n = length(diag)
+    # Initialize matrix of zeros
+    L = zeros(T, n, n)
+    # Obtain indices of lower-triangular matrix
+    idx = tril_indices(n; offset=-1)
+    # Loop through rows
+    for (i, row) in enumerate(eachrow(idx))
+        # Populate lower-triangular matrix lower elements
+        L[row[1], row[2]] = vec(lower)[i]
+    end # for
+    # Populate lower-triangular matrix diagonal elements
+    L[LinearAlgebra.diagind(L)] .= diag
 
-    # Calculate the length of vector
-    n = d + l
-    # Calculate the side length of the square matrix that the vector will be converted into
-    s = round(Int, (sqrt(8n + 1) - 1) / 2)
-
-    # Check if the length of the lower vector is a triangular number
-    s * (s + 1) / 2 == n || error("length of vector is not triangular")
-
-    # Construct the lower triangular matrix
-    k = 0
-    LinearAlgebra.LowerTriangular(
-        [
-        i == j ? diag[i] :
-        (i > j ? (k += 1; lower[k]) : z)
-        for i = 1:s, j = 1:s
-    ]
-    )
+    return L
 end # function
 
 # ------------------------------------------------------------------------------
+
+@doc raw"""
+        vec_to_ltri(diag::AbstractMatrix{T}, lower::AbstractMatrix{T}) where {T<:Number}
+
+Construct a set of lower triangular matrices from a matrix of diagonal elements
+and a matrix of lower triangular elements, each column representing a sample.
+
+# Arguments
+- `diag::AbstractMatrix{T}`: A matrix of `T` where each column contains the
+  diagonal elements of the matrix for a specific sample.
+- `lower::AbstractMatrix{T}`: A matrix of `T` where each column contains the
+  elements of the lower triangle of the matrix for a specific sample.
+
+# Returns
+- A 3D array of type `T` where each slice along the third dimension is a lower
+  triangular matrix with the diagonal and lower triangular elements populated
+  from `diag` and `lower` respectively.
+
+# Note
+The function assumes that the `diag` and `lower` matrices have the correct
+dimensions for the matrices to be constructed. Specifically, `diag` and `lower`
+should have `n` rows and `m` columns, where `n` is the dimension of the matrix
+and `m` is the number of samples. The `lower` matrix should have `n*(n-1)/2`
+non-zero elements per column, corresponding to the lower triangular part of the
+matrix.
+"""
+function vec_to_ltri(
+    diag::AbstractMatrix{T}, lower::AbstractMatrix{T}
+) where {T<:Number}
+    # Calculate latent space dimensionality
+    n = size(diag, 1)
+    # Calculate the number of samples
+    n_samples = size(diag, 2)
+    # Initialize matrix of zeros
+    L = Metal.zeros(T, n, n, n_samples)
+    # Obtain indices of lower-triangular matrix
+    idx_low = tril_indices(n, n_samples; offset=-1)
+    # Loop through rows
+    for (i, row) in enumerate(eachrow(idx_low))
+        # Populate lower-triangular matrix lower elements
+        L[row[1], row[2], row[3]] = vec(lower)[i]
+    end # for
+    # Obtain indices of diagonal elements
+    idx_diag = diag_indices(n, n_samples)
+    # Loop through rows
+    for (i, row) in enumerate(eachrow(idx_diag))
+        # Populate lower-triangular matrix lower elements
+        L[row[1], row[2], row[3]] = vec(diag)[i]
+    end # for
+
+    return L
+end # function
+
+
+## =============================================================================
+# Define centroids via k-means
+## =============================================================================
 
 @doc raw"""
     centroids_kmeans(x::AbstractMatrix{<:AbstractFloat}, n_centroids::Int; assign::Bool=false)

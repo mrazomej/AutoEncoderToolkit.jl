@@ -1,6 +1,3 @@
-# Import Requires.jl to import other modules
-using Requires: @require
-
 # Import FillArrays
 using FillArrays: Fill
 
@@ -342,17 +339,6 @@ function RHVAE(vae, metric_chain, centroids_data, T, λ)
 end # function
 
 # ==============================================================================
-# Import GPU functions if backend is available
-# ==============================================================================
-
-function __init__()
-    # Import functions for Meta.jl
-    @require Metal = "dde4c033-4e86-420c-a63e-0dd931031962" begin
-        include("metal_rhvae.jl")
-    end # @requires Metal
-end # function __init__
-
-# ==============================================================================
 # Riemannian Metric computations
 # ==============================================================================
 
@@ -383,13 +369,7 @@ function update_metric(
     # Run centroids_data through encoder and update centroids_latent
     centroids_latent = rhvae.vae.encoder(centroids_data).µ
     # Run centroids_data through metric_chain and update L
-    L = reduce(
-        (x, y) -> cat(x, y, dims=3),
-        [
-            rhvae.metric_chain(centroid, matrix=true)
-            for centroid in eachcol(centroids_data)
-        ]
-    )
+    L = rhvae.metric_chain(centroids_data, matrix=true)
     # Update M by multiplying L by its transpose
     M = reduce(
         (x, y) -> cat(x, y, dims=3),
@@ -475,13 +455,7 @@ function update_metric!(
     # Run centroids_data through encoder and update centroids_latent
     rhvae.centroids_latent .= rhvae.vae.encoder(centroids_data).µ
     # Run centroids_data through metric_chain and update L
-    L = reduce(
-        (x, y) -> cat(x, y, dims=3),
-        [
-            rhvae.metric_chain(centroid, matrix=true)
-            for centroid in eachcol(centroids_data)
-        ]
-    )
+    L = rhvae.metric_chain(centroids_data, matrix=true)
     # Update M by multiplying L by its transpose
     rhvae.M .= reduce(
         (x, y) -> cat(x, y, dims=3),
@@ -541,19 +515,30 @@ function G_inv(
     T::Float32,
     λ::Float32,
 )
-    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
-    # - We do not use Distances.jl because that performs in-place operations on
-    #   the input, and this is not compatible with Zygote.jl.
-    # - We use Zygote.dropgrad to prevent backpropagation through the
-    #   hyperparameters.
-    LLexp = sum([
-        M[:, :, i] .*
-        exp(-sum(abs2, (z - centroids_latent[:, i]) ./ Zygote.dropgrad(T)))
-        for i in 1:size(M, 3)
-    ])
-    # Return the sum of the LLexp slices plus the regularization term
-    return LLexp +
-           LinearAlgebra.diagm(Zygote.dropgrad(λ) * ones(Float32, size(z, 1)))
+    # Define dimensionality of latent space
+    n = size(centroids_latent, 1)
+    # Define number of centroids
+    n_centroids = size(centroids_latent, 2)
+
+    # Initialize array of zeros to save L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
+    LLexp = Metal.zeros(Float32, n, n)
+
+    # Loop through each centroid
+    for i = 1:n_centroids
+        # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
+        # - We do not use Distances.jl because that performs in-place operations
+        #   on the input, and this is not compatible with Zygote.jl.
+        # - We use Zygote.dropgrad to prevent backpropagation through the
+        #   hyperparameters.
+        LLexp .+= M[:, :, i] .*
+                  exp(-sum(abs2, (z - centroids_latent[:, i]) ./
+                                 Zygote.dropgrad(T)))
+    end # for
+
+    # Add regularization term
+    LLexp[LinearAlgebra.diagind(LLexp)] .+= Zygote.dropgrad(λ)
+
+    return LLexp
 end # function
 
 @doc raw"""
