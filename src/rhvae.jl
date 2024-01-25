@@ -3974,16 +3974,24 @@ end # function
         loss_kwargs::Dict=Dict()
     )
 
-Customized training function to update parameters of a Riemannian Hamiltonian Variational Autoencoder given a specified loss function.
+Customized training function to update parameters of a Riemannian Hamiltonian
+Variational Autoencoder given a specified loss function.
 
 # Arguments
-- `rhvae::RHVAE`: A struct containing the elements of a Riemannian Hamiltonian Variational Autoencoder.
-- `x::AbstractVecOrMat{Float32}`: Data on which to evaluate the loss function. Columns represent individual samples.
-- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically initialized using `Flux.Optimisers.update!`.
+- `rhvae::RHVAE`: A struct containing the elements of a Riemannian Hamiltonian
+  Variational Autoencoder.
+- `x::AbstractVecOrMat{Float32}`: Data on which to evaluate the loss function.
+  Columns represent individual samples.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Optimisers.update!`.
 
 # Optional Keyword Arguments
-- `loss_function::Function=loss`: The loss function used for training. It should accept the RHVAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`, `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending on the specific loss function in use.
+- `loss_function::Function=loss`: The loss function used for training. It should
+  accept the RHVAE model, data `x`, and keyword arguments in that order.
+- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might
+  include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
+  `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
+  on the specific loss function in use.
 
 # Description
 Trains the RHVAE by:
