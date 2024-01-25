@@ -200,6 +200,138 @@ function locality_sampler(
 end # function
 
 # ------------------------------------------------------------------------------
+## =============================================================================
+# Convert vector to lower triangular matrix
+## =============================================================================
+
+"""
+        tril_indices(n::Int, offset::Int=0)
+
+Return the row and column indices of the lower triangular part of an `n x n`
+matrix, shifted by a given offset.
+
+# Arguments
+- `n::Int`: The size of the square matrix.
+
+# Optional Keyword Arguments
+- `offset::Int=0`: The offset by which to shift the main diagonal. A positive
+  offset selects an upper diagonal, and a negative offset selects a lower
+  diagonal.
+
+# Returns
+- A matrix of size `n*(n+1)/2 x 2` containing the row and column indices of the
+  lower triangular part of the matrix, shifted by the offset. The indices are
+  1-based, following Julia's convention.
+
+# Note
+This function does not actually create a matrix. It only calculates the indices
+that you would use to access the lower triangular part of an `n x n` matrix,
+shifted by the offset.
+"""
+function tril_indices(n::Int; offset::Int=0)
+    # Initialize an empty array to store row indices
+    rows = Int[]
+    # Initialize an empty array to store column indices
+    cols = Int[]
+    # Iterate over the rows
+    for i in 1:n
+        # Iterate over the columns up to i+offset
+        for j in 1:(i+offset)
+            # Append the current row index to the rows array
+            push!(rows, i)
+            # Append the current column index to the cols array
+            push!(cols, j)
+        end # for j
+    end # for i
+    return hcat(rows, cols)
+end
+
+# ------------------------------------------------------------------------------
+
+"""
+    tril_indices(n::Int, m::Int; offset::Int=0)
+
+Return the row, column, and sample indices of the lower triangular part of an `n x n` matrix for `m` samples, shifted by a given offset.
+
+# Arguments
+- `n::Int`: The size of the square matrix.
+- `m::Int`: The number of samples.
+- `offset::Int=0`: The offset by which to shift the main diagonal. A positive offset selects an upper diagonal, and a negative offset selects a lower diagonal.
+
+# Returns
+- A matrix of size `n*(n+1)/2 x 3` containing the row, column, and sample indices of the lower triangular part of the matrix, shifted by the offset. The indices are 1-based, following Julia's convention.
+
+# Note
+This function does not actually create a matrix. It only calculates the indices that you would use to access the lower triangular part of an `n x n` matrix, shifted by the offset, for `m` samples.
+"""
+function tril_indices(n::Int, m::Int; offset::Int=0)
+    # Initialize an empty array to store row indices
+    rows = Int[]
+    # Initialize an empty array to store column indices
+    cols = Int[]
+    # Initialize an empty array to store sample indices
+    samples = Int[]
+    # Iterate over samples
+    for k in 1:m
+        # Iterate over the rows
+        for i in 1:n
+            # Iterate over the columns up to i+offset
+            for j in 1:(i+offset)
+                # Append the current row index to the rows array
+                push!(rows, i)
+                # Append the current column index to the cols array
+                push!(cols, j)
+                # Append the sample index
+                push!(samples, k)
+            end # for j
+        end # for i
+    end # for k
+    # Return a tuple of the row and column indices
+    return hcat(rows, cols, samples)
+end # function
+
+# ------------------------------------------------------------------------------
+
+"""
+    diag_indices(n::Int, m::Int)
+
+Return the row, column, and sample indices of the diagonal elements of an `n x
+n` matrix for `m` samples.
+
+# Arguments
+- `n::Int`: The size of the square matrix.
+- `m::Int`: The number of samples.
+
+# Returns
+- A tuple of three arrays: the row indices, the column indices, and the sample
+  indices of the diagonal elements of the matrix. The indices are 1-based,
+  following Julia's convention.
+
+# Note
+This function does not actually create a matrix. It only calculates the indices
+that you would use to access the diagonal elements of an `n x n` matrix for `m`
+samples.
+"""
+function diag_indices(n::Int, m::Int)
+    # Initialize an empty array to store row/column indices
+    indices = Int[]
+    # Initialize an empty array to store sample indices
+    samples = Int[]
+    # Iterate over samples
+    for k in 1:m
+        # Iterate over the rows/columns
+        for i in 1:n
+            # Append the current row/column index to the indices array
+            push!(indices, i)
+            # Append the sample index
+            push!(samples, k)
+        end # for i
+    end # for k
+    # Return a tuple of the row/column indices and sample indices
+    return hcat(indices, indices, samples)
+end # function
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T}, z::T=zero(T))
@@ -297,6 +429,10 @@ function centroids_kmeans(
         return Clustering.kmeans(x, n_centroids).centers
     end # if
 end # function
+
+# =============================================================================
+
+
 
 ## =============================================================================
 # Defining random number generators for different GPU backends

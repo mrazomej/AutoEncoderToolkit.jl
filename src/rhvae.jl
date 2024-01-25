@@ -1,3 +1,6 @@
+# Import Requires.jl to import other modules
+using Requires: @require
+
 # Import FillArrays
 using FillArrays: Fill
 
@@ -33,7 +36,12 @@ using ..AutoEncode: VAE
 
 # Import functions from other modules
 using ..VAEs: reparameterize
-using ..utils: vec_to_ltri
+
+
+# Import functions
+import ..utils: vec_to_ltri
+using ..utils: tril_indices, diag_indices
+
 using ..HVAEs: decoder_loglikelihood, spherical_logprior,
     quadratic_tempering, null_tempering
 
@@ -332,6 +340,17 @@ function RHVAE(vae, metric_chain, centroids_data, T, λ)
         vae, metric_chain, centroids_data, centroids_latent, M, T, λ,
     )
 end # function
+
+# ==============================================================================
+# Import GPU functions if backend is available
+# ==============================================================================
+
+function __init__()
+    # Import functions for Meta.jl
+    @require Metal = "dde4c033-4e86-420c-a63e-0dd931031962" begin
+        include("metal_rhvae.jl")
+    end # @requires Metal
+end # function __init__
 
 # ==============================================================================
 # Riemannian Metric computations
