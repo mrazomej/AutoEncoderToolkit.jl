@@ -521,7 +521,7 @@ function G_inv(
     n_centroids = size(centroids_latent, 2)
 
     # Initialize array of zeros to save L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
-    LLexp = Metal.zeros(Float32, n, n)
+    LLexp = zeros(Float32, n, n)
 
     # Loop through each centroid
     for i = 1:n_centroids
