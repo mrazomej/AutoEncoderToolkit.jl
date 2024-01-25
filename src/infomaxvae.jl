@@ -16,8 +16,8 @@ using ..AutoEncode: Float32Array, AbstractVariationalAutoEncoder,
     JointLogEncoder, SimpleDecoder, JointLogDecoder,
     SplitLogDecoder, JointDecoder, SplitDecoder, VAE
 
-using ..VAEs: reparameterize, reconstruction_gaussian_decoder,
-    kl_gaussian_encoder
+using ..VAEs: reparameterize, reconstruction_decoder,
+    kl_encoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # InfoMax-VAE
@@ -459,7 +459,7 @@ function loss(
     vae_outputs = vae(x; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    log_likelihood = reconstruction_gaussian_decoder(
+    log_likelihood = reconstruction_decoder(
         vae.decoder,
         x,
         vae_outputs;
@@ -468,7 +468,7 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_div = kl_gaussian_encoder(
+    kl_div = kl_encoder(
         vae.encoder, x, vae_outputs; n_samples=n_samples
     )
 
@@ -559,7 +559,7 @@ function loss(
     vae_outputs = vae(x_in; latent=true, n_samples=n_samples)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    log_likelihood = reconstruction_gaussian_decoder(
+    log_likelihood = reconstruction_decoder(
         vae.decoder,
         x_out,
         vae_outputs;
@@ -568,7 +568,7 @@ function loss(
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_div = kl_gaussian_encoder(
+    kl_div = kl_encoder(
         vae.encoder, x_in, vae_outputs; n_samples=n_samples
     )
 
