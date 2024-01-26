@@ -482,8 +482,52 @@ function centroids_kmeans(
 end # function
 
 # =============================================================================
+# Computing the log determinant of a matrix via Cholesky decomposition
+# =============================================================================
 
+"""
+    log_abs_determinant(A::AbstractMatrix)
 
+Calculate the natural logarithm of the absolute value of the determinant of a
+matrix `A`.
+
+# Arguments
+- `A::AbstractMatrix`: The input matrix.
+
+# Returns
+- The natural logarithm of the absolute value of the determinant of `A`.
+
+# Warning
+This function uses a possibly slow default implementation of determinant
+calculation, which requires conversion to a dense matrix and performs O(N^3)
+operations.
+
+# Note
+If the matrix `A` is positive definite, the function uses the Cholesky
+decomposition to calculate the determinant. Otherwise, it uses the `logabsdet`
+function.
+
+# Example
+```julia
+A = rand(3, 3)
+log_abs_determinant(A)
+```
+"""
+function log_abs_determinant(A::AbstractMatrix)
+    @warn "Using (possibly slow) default implementation of determinant. Requires conversion to a dense matrix and O(N^3) operations."
+
+    # Check if the matrix is positive definite
+    if LinearAlgebra.isposdef(A)
+        # Compute the diagonal elements of the Cholesky decomposition
+        diag = LinearAlgebra.diag(LinearAlgebra.cholesky(A).L)
+        # Compute the logarithm of the absolute determinant
+        return 2 * sum(log.(abs.(diag)))
+    else
+        # Compute the logarithm of the absolute determinant using logabsdet function
+        _, log_abs_det = logabsdet(A)
+        return log_abs_det
+    end # if
+end # function
 
 ## =============================================================================
 # Defining random number generators for different GPU backends
