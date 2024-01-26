@@ -206,7 +206,7 @@ function (m::MetricChain)(x::AbstractArray{Float32}; matrix::Bool=false)
 
     # Check if matrix should be returned
     if matrix
-        return vec_to_ltri(diag_out, lower_out)
+        return vec_to_ltri(diag_out, lower_out) |> Flux.gpu
     else
         return (diag=diag_out, lower=lower_out,)
     end # if
@@ -520,7 +520,7 @@ function G_inv(
     n_centroids = size(centroids_latent, 2)
 
     # Initialize array of zeros to save L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
-    LLexp = zeros(Float32, n, n)
+    LLexp = zeros(Float32, n, n) |> Flux.gpu
 
     # Loop through each centroid
     for i = 1:n_centroids
