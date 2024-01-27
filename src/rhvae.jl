@@ -1,6 +1,3 @@
-# Import FillArrays
-using FillArrays: Fill
-
 # Import ML libraries
 import Flux
 import Zygote
@@ -36,7 +33,7 @@ using ..VAEs: reparameterize
 
 
 # Import functions
-using ..utils: vec_to_ltri
+using ..utils: vec_to_ltri, slogdet
 
 using ..HVAEs: decoder_loglikelihood, spherical_logprior,
     quadratic_tempering, null_tempering
@@ -199,7 +196,7 @@ function (m::MetricChain)(x::AbstractArray{Float32}; matrix::Bool=false)
     mlp_out = m.mlp(x)
 
     # Compute the diagonal elements of the lower-triangular matrix
-    diag_out = m.diag(mlp_out)
+    diag_out = exp.(m.diag(mlp_out))
 
     # Compute the off-diagonal elements of the lower-triangular matrix
     lower_out = m.lower(mlp_out)
@@ -519,8 +516,10 @@ function G_inv(
     # Define number of centroids
     n_centroids = size(centroids_latent, 2)
 
-    # Initialize array of zeros to save L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²)
-    LLexp = zeros(Float32, n, n) |> Flux.gpu
+    # Initialize array of zeros to save L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Note:
+    # we use fill! to initialize a matrix of the same type as centroids_latent
+    # so that this is compatible with GPU computations.
+    LLexp = fill!(similar(centroids_latent, n, n), 0.0f0)
 
     # Loop through each centroid
     for i = 1:n_centroids
@@ -593,28 +592,6 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 # ==============================================================================
-# Define Zygote.@adjoint for FillArrays.fill
-# ==============================================================================
-
-# Note: This is needed because the specific type of FillArrays.fill does not
-# have a Zygote.@adjoint function defined. This causes an error when trying to
-# backpropagate through the RHVAE.
-
-# Define the Zygote.@adjoint function for the FillArrays.fill method.
-# The function takes a matrix `x` of type Float32 and a size `sz` as input.
-Zygote.@adjoint function (::Type{T})(x::Matrix{Float32}, sz) where {T<:Fill}
-    # Define the backpropagation function for the adjoint. The function takes a
-    # gradient `Δ` as input and returns the sum of the gradient and `nothing`.
-    back(Δ::AbstractArray) = (sum(Δ), nothing)
-    # Define the backpropagation function for the adjoint. The function takes a
-    # gradient `Δ` as input and returns the value of `Δ` and `nothing`.
-    back(Δ::NamedTuple) = (Δ.value, nothing)
-    # Return the result of the FillArrays.fill method and the backpropagation
-    # function.
-    return Fill(x, sz), back
-end # @adjoint
-
-# ==============================================================================
 # Functions to compute Riemannian log-prior
 # ==============================================================================
 
@@ -668,7 +645,7 @@ function riemannian_logprior(
     G⁻¹ = σ^2 .* G_inv(z, metric_param)
 
     # Compute the log determinant of the metric tensor
-    logdetG = -LinearAlgebra.logdet(G⁻¹)
+    logdetG = -slogdet(G⁻¹)
 
     # Return the log-prior
     return -0.5f0 * (length(z) * log(2.0f0π) + logdetG) -

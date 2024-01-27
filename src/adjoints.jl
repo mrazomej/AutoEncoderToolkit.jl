@@ -14,7 +14,9 @@ using FillArrays: Fill
 
 # Define the Zygote.@adjoint function for the FillArrays.fill method.
 # The function takes a matrix `x` of type Float32 and a size `sz` as input.
-Zygote.@adjoint function (::Type{T})(x::Matrix{Float32}, sz) where {T<:Fill}
+Zygote.@adjoint function (::Type{T})(
+    x::AbstractMatrix{Float32}, sz
+) where {T<:Fill}
     # Define the backpropagation function for the adjoint. The function takes a
     # gradient `Δ` as input and returns the sum of the gradient and `nothing`.
     back(Δ::AbstractArray) = (sum(Δ), nothing)
@@ -26,3 +28,16 @@ Zygote.@adjoint function (::Type{T})(x::Matrix{Float32}, sz) where {T<:Fill}
     return Fill(x, sz), back
 end # @adjoint
 
+
+Zygote.@adjoint function fill!(A::AbstractArray, x)
+    # Define the backward pass
+    function back(Δ::AbstractArray)
+        # The gradient with respect to x is the sum of all elements in Δ
+        grad_x = sum(Δ)
+        # The gradient with respect to A is nothing because A is overwritten
+        return (nothing, grad_x)
+    end
+
+    # Execute the operation and return the result and the backward pass
+    return fill!(A, x), back
+end

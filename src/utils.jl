@@ -363,8 +363,9 @@ function vec_to_ltri(
 ) where {T<:Number}
     # Calculate latent space dimensionality
     n = length(diag)
-    # Initialize matrix of zeros
-    L = zeros(T, n, n)
+    # Initialize matrix of zeros. Note: We use fill! to initalize a matrix of
+    # the same type as diag such that this works with GPU arrays.
+    L = fill!(similar(diag, n, n), zero(T))
     # Obtain indices of lower-triangular matrix
     idx = tril_indices(n; offset=-1)
     # Loop through rows
@@ -412,8 +413,9 @@ function vec_to_ltri(
     n = size(diag, 1)
     # Calculate the number of samples
     n_samples = size(diag, 2)
-    # Initialize matrix of zeros
-    L = zeros(T, n, n, n_samples)
+    # Initialize matrix of zeros. Note: we use fill! to initalize a matrix of
+    # the same type as diag such that this works with GPU arrays.
+    L = fill!(similar(diag, n, n, n_samples), zero(T))
     # Obtain indices of lower-triangular matrix
     idx_low = tril_indices(n, n_samples; offset=-1)
     # Loop through rows
@@ -482,51 +484,60 @@ function centroids_kmeans(
 end # function
 
 # =============================================================================
-# Computing the log determinant of a matrix via Cholesky decomposition
+# Computing the log determinant of a matrix via LU decomposition.
+# This is inspired by TensorFlow's slogdet function.
 # =============================================================================
 
-"""
-    log_abs_determinant(A::AbstractMatrix)
+@doc raw"""
+    slogdet(A::AbstractMatrix{T}) where {T<:AbstractFloat}
 
-Calculate the natural logarithm of the absolute value of the determinant of a
-matrix `A`.
+Calculate the signed logarithm of the determinant of a matrix `A`.
 
 # Arguments
-- `A::AbstractMatrix`: The input matrix.
+- `A::AbstractMatrix{T}`: The input matrix, where `T` is a subtype of
+  `AbstractFloat`.
 
 # Returns
-- The natural logarithm of the absolute value of the determinant of `A`.
+- The signed logarithm of the determinant of `A`.
 
-# Warning
-This function uses a possibly slow default implementation of determinant
-calculation, which requires conversion to a dense matrix and performs O(N^3)
-operations.
-
-# Note
-If the matrix `A` is positive definite, the function uses the Cholesky
-decomposition to calculate the determinant. Otherwise, it uses the `logabsdet`
-function.
-
-# Example
-```julia
-A = rand(3, 3)
-log_abs_determinant(A)
-```
+# Details
+This function computes the sign and the logarithm of the absolute value of the
+determinant of a matrix using a partially pivoted LU decomposition. The sign and
+the logarithm of the absolute value of the determinant are multiplied to return
+the signed logarithm of the determinant.
 """
-function log_abs_determinant(A::AbstractMatrix)
-    @warn "Using (possibly slow) default implementation of determinant. Requires conversion to a dense matrix and O(N^3) operations."
+function slogdet(A::AbstractMatrix{T}) where {T<:AbstractFloat}
+    # Initialize log_abs_det and sign
+    log_abs_det = zero(T)
+    sign = one(T)
 
-    # Check if the matrix is positive definite
-    if LinearAlgebra.isposdef(A)
-        # Compute the diagonal elements of the Cholesky decomposition
-        diag = LinearAlgebra.diag(LinearAlgebra.cholesky(A).L)
-        # Compute the logarithm of the absolute determinant
-        return 2 * sum(log.(abs.(diag)))
-    else
-        # Compute the logarithm of the absolute determinant using logabsdet function
-        _, log_abs_det = logabsdet(A)
-        return log_abs_det
+    # An empty matrix' determinant is defined to be 1.
+    if !isempty(A)
+        # Compute the log determinant through a Partially Pivoted LU decomposition
+        # Perform LU decomposition
+        lu = LinearAlgebra.lu(A)
+        # Get the LU factors
+        LU = lu.factors
+        # Compute the sign of the permutation matrix
+        sign = LinearAlgebra.det(lu.P)
+        # Get the diagonal elements of LU
+        diag = LinearAlgebra.diag(LU)
+        # Take the absolute value of the diagonal elements
+        abs_diag = abs.(diag)
+        # Compute the sum of the logarithm of absolute diagonal elements
+        log_abs_det += sum(log.(abs_diag))
+        # Compute the sign of the determinant
+        sign *= prod(diag ./ abs_diag)
     end # if
+
+    # Check if the log_abs_det is finite
+    if !isfinite(log_abs_det)
+        sign = zero(T)
+        # Handle non-finite log_abs_det values
+        log_abs_det = log_abs_det > 0 ? -log(0.0) : log(0.0)
+    end # if
+
+    return log_abs_det * sign
 end # function
 
 ## =============================================================================
