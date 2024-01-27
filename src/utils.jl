@@ -507,36 +507,23 @@ the logarithm of the absolute value of the determinant are multiplied to return
 the signed logarithm of the determinant.
 """
 function slogdet(A::AbstractMatrix{T}) where {T<:AbstractFloat}
-    # Initialize log_abs_det and sign
-    log_abs_det = zero(T)
-    sign = one(T)
+    # Compute the log determinant through a Partially Pivoted LU decomposition
+    # Perform LU decomposition
+    lu = LinearAlgebra.lu(A)
+    # Get the LU factors
+    LU = lu.factors
+    # Compute the sign of the permutation matrix
+    sign = LinearAlgebra.det(lu.P)
+    # Get the diagonal elements of LU
+    diag = LinearAlgebra.diag(LU)
+    # Take the absolute value of the diagonal elements
+    abs_diag = abs.(diag)
+    # Compute the sum of the logarithm of absolute diagonal elements
+    log_abs_det = sum(log.(abs_diag))
+    # Compute the sign of the determinant
+    sign = prod(diag ./ abs_diag)
 
-    # An empty matrix' determinant is defined to be 1.
-    if !isempty(A)
-        # Compute the log determinant through a Partially Pivoted LU decomposition
-        # Perform LU decomposition
-        lu = LinearAlgebra.lu(A)
-        # Get the LU factors
-        LU = lu.factors
-        # Compute the sign of the permutation matrix
-        sign = LinearAlgebra.det(lu.P)
-        # Get the diagonal elements of LU
-        diag = LinearAlgebra.diag(LU)
-        # Take the absolute value of the diagonal elements
-        abs_diag = abs.(diag)
-        # Compute the sum of the logarithm of absolute diagonal elements
-        log_abs_det += sum(log.(abs_diag))
-        # Compute the sign of the determinant
-        sign *= prod(diag ./ abs_diag)
-    end # if
-
-    # Check if the log_abs_det is finite
-    if !isfinite(log_abs_det)
-        sign = zero(T)
-        # Handle non-finite log_abs_det values
-        log_abs_det = log_abs_det > 0 ? -log(0.0) : log(0.0)
-    end # if
-
+    # Return the signed logarithm of the determinant
     return log_abs_det * sign
 end # function
 
