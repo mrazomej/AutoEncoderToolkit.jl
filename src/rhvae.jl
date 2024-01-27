@@ -539,6 +539,67 @@ function G_inv(
     return LLexp
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        G_inv(
+                z::CuArray{Float32,1},
+                centroids_latent::CuArray{Float32,2},
+                M::CuArray{Float32,3},
+                T::Float32,
+                λ::Float32,
+        )
+
+Compute the inverse of the metric tensor G for a given point in the latent space
+using CUDA arrays.
+
+This function takes a point `z` in the latent space, the `centroids_latent` of
+the RHVAE instance, a 3D array `M` representing the metric tensor, a temperature
+`T`, and a regularization factor `λ`, and computes the inverse of the metric
+tensor G at that point. The computation is based on the centroids and the
+temperature, as well as a regularization term. The inverse metric is computed as
+follows:
+
+G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
+
+where each column of `centroids_latent` are the cᵢ.
+
+# Arguments
+- `z::CuArray{Float32,1}`: The point in the latent space.
+- `centroids_latent::CuArray{Float32,2}`: The centroids in the latent space.
+- `M::CuArray{Float32,3}`: The 3D array representing the metric tensor.
+- `T::Float32`: The temperature.
+- `λ::Float32`: The regularization factor.
+
+# Returns
+A matrix representing the inverse of the metric tensor G at the point `z`.
+
+# Notes
+The computation involves the squared Euclidean distance between z and each
+centroid, the exponential of the negative of these distances divided by the
+square of the temperature, and a regularization term proportional to the
+identity matrix. The result is a matrix of the same size as the latent space.
+
+This function is designed to work with CUDA arrays for GPU-accelerated
+computations.
+"""
+function G_inv(
+    z::CuArray{Float32,1},
+    centroids_latent::CuArray{Float32,2},
+    M::CuArray{Float32,3},
+    T::Float32,
+    λ::Float32,
+)
+    LLexp = M .* reshape(exp.(sum(abs2, (z .- centroids_latent) ./ T, dims=1)), 1, 1, :)
+
+    Λ = cu(Matrix(LinearAlgebra.I(length(z)) .* λ))
+
+    return dropdims(sum(LLexp, dims=3), dims=3) + Λ
+end # function
+
+
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     G_inv( 
         z::AbstractVector{Float32},
