@@ -36,7 +36,8 @@ using ..VAEs: reparameterize
 
 
 # Import functions
-using ..utils: vec_to_ltri, slogdet
+using ..utils: vec_to_ltri, slogdet,
+    sample_centered_MvNormal_from_inverse_covariance
 
 using ..HVAEs: decoder_loglikelihood, spherical_logprior,
     quadratic_tempering, null_tempering
@@ -247,6 +248,9 @@ regularization factor, and each column of `centroids` are the cᵢ.
   the encoder.
 - `centroids_latent::Matrix{Float32}`: A matrix where each column represents a
   centroid cᵢ in the inverse metric computation.
+- `L::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ matrix.
+  L_ψᵢ can intuitively be seen as the triangular matrix in the Cholesky
+  decomposition of G⁻¹(centroids_dataᵢ) up to a regularization factor.
 - `M::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ L_ψᵢᵀ.
 - `T::Float32`: The temperature parameter in the inverse metric computation.  
 - `λ::Float32`: The regularization factor in the inverse metric computation.
@@ -271,6 +275,7 @@ struct RHVAE{
     metric_chain::MetricChain
     centroids_data::AbstractMatrix{Float32}
     centroids_latent::AbstractMatrix{Float32}
+    L::AbstractArray{Float32,3}
     M::AbstractArray{Float32,3}
     T::AbstractFloat
     λ::AbstractFloat
@@ -279,9 +284,7 @@ end # struct
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor RHVAE
 
-# Overload the Flux.trainable call to only optimize the parameters of the VAE
-# and MetricChain
-# Flux.trainable(rhvae::RHVAE) = Flux.params(rhvae.vae, rhvae.metric_chain)
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     RHVAE(
@@ -322,8 +325,8 @@ function RHVAE(vae, metric_chain, centroids_data, T, λ)
         Float32, ldim, size(centroids_data, 2)
     )
 
-    # Initialize M
-    M = reduce(
+    # Initialize L as a 3D array of identity matrices
+    L = reduce(
         (x, y) -> cat(x, y, dims=3),
         [
             Matrix{Float32}(LinearAlgebra.I(ldim))
@@ -331,9 +334,12 @@ function RHVAE(vae, metric_chain, centroids_data, T, λ)
         ]
     )
 
+    # Initialize M as a copy of L
+    M = deepcopy(L)
+
     # Initialize RHVAE
     return RHVAE(
-        vae, metric_chain, centroids_data, centroids_latent, M, T, λ,
+        vae, metric_chain, centroids_data, centroids_latent, L, M, T, λ,
     )
 end # function
 
@@ -358,6 +364,8 @@ through the RHVAE during training.
 - NamedTuple with the following fields:
   - `centroids_latent::Matrix{Float32}`: A matrix where each column represents a
     centroid cᵢ in the inverse metric computation.
+  - `L::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
+    matrix.
   - `M::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ L_ψᵢᵀ.
 """
 function update_metric(
@@ -378,7 +386,7 @@ function update_metric(
         ]
     )
 
-    return (centroids_latent=centroids_latent, M=M, T=rhvae.T, λ=rhvae.λ)
+    return (centroids_latent=centroids_latent, L=L, M=M, T=rhvae.T, λ=rhvae.λ)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -392,14 +400,15 @@ end # function
 Update the `centroids_latent` and `M` fields of a `RHVAE` instance in place.
 
 This function takes a `RHVAE` instance and a named tuple `params` containing the
-new values for `centroids_latent` and `M`. It updates the `centroids_latent` and
-`M` fields of the `RHVAE` instance with the provided values.
+new values for `centroids_latent` and `M`. It updates the `centroids_latent`,
+`L`, and `M` fields of the `RHVAE` instance with the provided values.
 
 # Arguments
 - `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}`:
   The `RHVAE` instance to update.
 - `params::NamedTuple`: A named tuple containing the new values for
-  `centroids_latent` and `M`. Must have the keys `:centroids_latent` and `:M`.
+  `centroids_latent` and `M`. Must have the keys `:centroids_latent`, `:L`, and
+  `:M`.
 
 # Returns
 Nothing. The `RHVAE` instance is updated in place.
@@ -415,6 +424,8 @@ function update_metric!(
 
     # Update centroid_latent values in place
     rhvae.centroids_latent .= params.centroids_latent
+    # Update L values in place
+    rhvae.L .= params.L
     # Update M values in place
     rhvae.M .= params.M
 end # function
@@ -454,13 +465,13 @@ function update_metric!(
     # Run centroids_data through encoder and update centroids_latent
     rhvae.centroids_latent .= rhvae.vae.encoder(centroids_data).µ
     # Run centroids_data through metric_chain and update L
-    L = rhvae.metric_chain(centroids_data, matrix=true)
+    rhvae.L .= rhvae.metric_chain(centroids_data, matrix=true)
     # Update M by multiplying L by its transpose
     rhvae.M .= reduce(
         (x, y) -> cat(x, y, dims=3),
         [
             l * LinearAlgebra.transpose(l)
-            for l in eachslice(L, dims=3)
+            for l in eachslice(rhvae.L, dims=3)
         ]
     )
 end # function
@@ -521,14 +532,15 @@ function G_inv(
     # computed with respect to T.
     LLexp = M .*
             reshape(
-        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)), 1, 1, :
+        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)),
+        1, 1, :
     )
 
     # Compute the regularization term.
-    Λ = LinearAlgebra.I(length(z)) .* Zygote.dropgrad(λ)
+    # Λ = Zygote.dropgrad(LinearAlgebra.I(length(z)) .* λ)
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
-    return dropdims(sum(LLexp, dims=3), dims=3) + Λ
+    return dropdims(sum(LLexp, dims=3), dims=3) #+ Λ
 
 end # function
 
@@ -590,11 +602,12 @@ function G_inv(
     # computed with respect to T.
     LLexp = M .*
             reshape(
-        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)), 1, 1, :
+        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)),
+        1, 1, :
     )
 
     # Compute the regularization term.
-    Λ = cu(Matrix(LinearAlgebra.I(length(z)) .* Zygote.dropgrad(λ)))
+    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
     return dropdims(sum(LLexp, dims=3), dims=3) + Λ
@@ -817,6 +830,8 @@ function hamiltonian(
     return U + κ
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     hamiltonian(
         x::AbstractVector{T},
@@ -906,7 +921,7 @@ function hamiltonian(
     )
 end # function
 
-# # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     ∇hamiltonian(
@@ -1018,6 +1033,8 @@ function ∇hamiltonian(
         return Zygote.gradient(ρ -> H(z, ρ), ρ)[1]
     end # if
 end # function
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     ∇hamiltonian(
@@ -1304,7 +1321,7 @@ function _leapfrog_first_step(
     )
 end # function
 
-# # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     _leapfrog_second_step(
@@ -1581,6 +1598,8 @@ function _leapfrog_third_step(
                ∇H(x, z, ρ, decoder, metric_param, :z; ∇H_kwargs...)
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     _leapfrog_third_step(
         x::AbstractVector{T},
@@ -1753,17 +1772,17 @@ function general_leapfrog_step(
     # Update position variable with full step. This step peforms fixed-point
     # iterations
     z̄ = _leapfrog_second_step(
-        x, z, ρ, decoder, metric_param;
+        x, z, ρ̃, decoder, metric_param;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
     # Update momentum variable with half step. No fixed-point iterations needed
     ρ̄ = _leapfrog_third_step(
-        x, z, ρ, decoder, metric_param;
+        x, z̄, ρ̃, decoder, metric_param;
         ϵ=ϵ, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
-    return z̄, ρ
+    return z̄, ρ̄
 end # function 
 
 # ------------------------------------------------------------------------------
@@ -1944,13 +1963,13 @@ function general_leapfrog_step(
     # Update position variable with full step. This step peforms fixed-point
     # iterations
     z̄ = _leapfrog_second_step(
-        x, z, ρ, rhvae;
+        x, z, ρ̃, rhvae;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
     # Update momentum variable with half step. No fixed-point iterations needed
     ρ̄ = _leapfrog_third_step(
-        x, z, ρ, rhvae;
+        x, z̄, ρ̃, rhvae;
         ϵ=ϵ, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
@@ -2052,24 +2071,24 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-        general_leapfrog_tempering_step(
-                x::AbstractVector{T},
-                zₒ::AbstractVector{T},
-                decoder::AbstractVariationalDecoder,
-                metric_param::NamedTuple;
-                ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
-                K::Int=3,
-                βₒ::T=0.3f0,
-                steps::Int=3,
-                ∇H::Function=∇hamiltonian,
-                ∇H_kwargs::Union{NamedTuple,Dict}=(
-                        decoder_loglikelihood=decoder_loglikelihood,
-                        position_logprior=spherical_logprior,
-                        momentum_logprior=riemannian_logprior,
-                        G_inv=G_inv,
-                ),
-                tempering_schedule::Function=quadratic_tempering,
-        ) where {T<:Float32}
+    general_leapfrog_tempering_step(
+            x::AbstractVector{T},
+            zₒ::AbstractVector{T},
+            decoder::AbstractVariationalDecoder,
+            metric_param::NamedTuple;
+            ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
+            K::Int=3,
+            βₒ::T=0.3f0,
+            steps::Int=3,
+            ∇H::Function=∇hamiltonian,
+            ∇H_kwargs::Union{NamedTuple,Dict}=(
+                    decoder_loglikelihood=decoder_loglikelihood,
+                    position_logprior=spherical_logprior,
+                    momentum_logprior=riemannian_logprior,
+                    G_inv=G_inv,
+            ),
+            tempering_schedule::Function=quadratic_tempering,
+    ) where {T<:Float32}
 
 Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -2135,78 +2154,12 @@ function general_leapfrog_tempering_step(
     ),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:Float32}
-    # Extract latent-space dimensionality
-    ldim = size(zₒ, 1)
-
     # Compute inverse metric for initial point
     G⁻¹ = ∇H_kwargs.G_inv(zₒ, metric_param)
 
-    # Sample γₒ ~ N(0, I)
-    γₒ = Random.rand(Distributions.MvNormal(zeros(T, ldim), G⁻¹))
-
-    # Define ρₒ = γₒ / √βₒ
-    ρₒ = γₒ ./ √(βₒ)
-
-    # Define initial value of z and ρ before loop
-    zₖ₋₁ = deepcopy(zₒ)
-    ρₖ₋₁ = deepcopy(ρₒ)
-
-    # Loop over K steps
-    for k = 1:K
-        # 1) Leapfrog step
-        zₖ, ρₖ = general_leapfrog_step(
-            x, zₖ₋₁, ρₖ₋₁, decoder, metric_param;
-            ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
-        )
-
-        # 2) Tempering step
-        # Compute previous step's inverse temperature
-        βₖ₋₁ = tempering_schedule(βₒ, k - 1, K)
-        # Compute current step's inverse temperature
-        βₖ = tempering_schedule(βₒ, k, K)
-
-        # Update momentum variable with tempering Update zₖ₋₁, ρₖ₋₁ for next
-        # iteration. The momentum variable is updated with tempering. Also, note
-        # this is the last step as well, thus we return zₖ₋₁, ρₖ₋₁ as the final
-        # points.
-        zₖ₋₁ = zₖ
-        ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
-    end # for
-
-    return (
-        z_init=zₒ,
-        ρ_init=ρₒ,
-        z_final=zₖ₋₁,
-        ρ_final=ρₖ₋₁,
-    )
-end # function
-
-function general_leapfrog_tempering_step(
-    x::CuVector{T},
-    zₒ::CuVector{T},
-    decoder::AbstractVariationalDecoder,
-    metric_param::NamedTuple;
-    ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
-    K::Int=3,
-    βₒ::T=0.3f0,
-    steps::Int=3,
-    ∇H::Function=∇hamiltonian,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
-        decoder_loglikelihood=decoder_loglikelihood,
-        position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
-        G_inv=G_inv,
-    ),
-    tempering_schedule::Function=quadratic_tempering,
-) where {T<:Float32}
-    # Extract latent-space dimensionality
-    ldim = size(zₒ, 1)
-
-    # Compute inverse metric for initial point
-    G⁻¹ = ∇H_kwargs.G_inv(zₒ, metric_param)
-
-    # Sample γₒ ~ N(0, G⁻¹)
-    γₒ = LinearAlgebra.cholesky(G⁻¹).L * CUDA.randn(ldim)
+    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
+    # sampling given the inverse of the covariance matrix.
+    γₒ = sample_centered_MvNormal_from_inverse_covariance(G⁻¹)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
@@ -2333,87 +2286,14 @@ function general_leapfrog_tempering_step(
     ),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:Float32}
-    # Extract latent-space dimensionality
-    ldim = size(zₒ, 1)
-
-    # Sample γₒ ~ N(0, I)
+    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
+    # sampling given the inverse of the covariance matrix.
     γₒ = reduce(
         hcat,
         [
-            Random.rand(
-                Distributions.MvNormal(
-                    zeros(T, ldim),
-                    ∇H_kwargs.G_inv(z, metric_param)
-                )
+            sample_centered_MvNormal_from_inverse_covariance(
+                ∇H_kwargs.G_inv(zₒ, metric_param)
             )
-            for z in eachcol(zₒ)
-        ],
-    )
-
-    # Define ρₒ = γₒ / √βₒ
-    ρₒ = γₒ ./ √(βₒ)
-
-    # Define initial value of z and ρ before loop
-    zₖ₋₁ = deepcopy(zₒ)
-    ρₖ₋₁ = deepcopy(ρₒ)
-
-    # Loop over K steps
-    for k = 1:K
-        # 1) Leapfrog step
-        zₖ, ρₖ = general_leapfrog_step(
-            x, zₖ₋₁, ρₖ₋₁, decoder, metric_param;
-            ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
-        )
-
-        # 2) Tempering step
-        # Compute previous step's inverse temperature
-        βₖ₋₁ = tempering_schedule(βₒ, k - 1, K)
-        # Compute current step's inverse temperature
-        βₖ = tempering_schedule(βₒ, k, K)
-
-        # Update momentum variable with tempering Update zₖ₋₁, ρₖ₋₁ for next
-        # iteration. The momentum variable is updated with tempering. Also, note
-        # this is the last step as well, thus we return zₖ₋₁, ρₖ₋₁ as the final
-        # points.
-        zₖ₋₁ = zₖ
-        ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
-    end # for
-
-    return (
-        z_init=zₒ,
-        ρ_init=ρₒ,
-        z_final=zₖ₋₁,
-        ρ_final=ρₖ₋₁,
-    )
-end # function
-
-function general_leapfrog_tempering_step(
-    x::CuMatrix{T},
-    zₒ::CuMatrix{T},
-    decoder::AbstractVariationalDecoder,
-    metric_param::NamedTuple;
-    ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
-    K::Int=3,
-    βₒ::T=0.3f0,
-    steps::Int=3,
-    ∇H::Function=∇hamiltonian,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
-        decoder_loglikelihood=decoder_loglikelihood,
-        position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
-        G_inv=G_inv,
-    ),
-    tempering_schedule::Function=quadratic_tempering,
-) where {T<:Float32}
-    # Extract latent-space dimensionality
-    ldim = size(zₒ, 1)
-
-    # Sample γₒ ~ N(0, I)
-    γₒ = reduce(
-        hcat,
-        [
-            LinearAlgebra.cholesky(∇H_kwargs.G_inv(z, metric_param)).L * 
-            CUDA.randn(ldim)
             for z in eachcol(zₒ)
         ],
     )
@@ -2459,8 +2339,8 @@ end # function
 
 @doc raw"""
         general_leapfrog_tempering_step(
-                x::AbstractVecOrMat{T},
-                zₒ::AbstractVecOrMat{T},
+                x::AbstractVector{T},
+                zₒ::AbstractVector{T},
                 rhvae::RHVAE;
                 ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
                 K::Int=3,
@@ -2544,8 +2424,9 @@ function general_leapfrog_tempering_step(
     # Compute inverse metric for initial point
     G⁻¹ = ∇H_kwargs.G_inv(zₒ, rhvae)
 
-    # Sample γₒ ~ N(0, I)
-    γₒ = Random.rand(Distributions.MvNormal(zeros(T, ldim), G⁻¹))
+    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
+    # sampling given the inverse of the covariance matrix.
+    γₒ = sample_centered_MvNormal_from_inverse_covariance(G⁻¹)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
@@ -2584,7 +2465,7 @@ function general_leapfrog_tempering_step(
     )
 end # function
 
-# # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 @doc raw"""
         general_leapfrog_tempering_step(
@@ -2669,18 +2550,13 @@ function general_leapfrog_tempering_step(
     ),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:Float32}
-    # Extract latent-space dimensionality
-    ldim = size(zₒ, 1)
-
-    # Sample γₒ ~ N(0, I)
+    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
+    # sampling given the inverse of the covariance matrix.
     γₒ = reduce(
         hcat,
         [
-            Random.rand(
-                Distributions.MvNormal(
-                    zeros(T, ldim),
-                    ∇H_kwargs.G_inv(z, rhvae)
-                )
+            sample_centered_MvNormal_from_inverse_covariance(
+                ∇H_kwargs.G_inv(zₒ, metric_param)
             )
             for z in eachcol(zₒ)
         ],
@@ -4178,8 +4054,8 @@ Trains the RHVAE by:
 """
 function train!(
     rhvae::RHVAE,
-    x::AbstractVecOrMat{Float32},
-    opt::NamedTuple;
+    x::AbstractVecOrMat{Float32};
+    # opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict()
 )
@@ -4188,9 +4064,10 @@ function train!(
         loss_function(rhvae_model, x; loss_kwargs...)
     end # do block
 
+    return ∇loss_
     # Update parameters
-    Flux.Optimisers.update!(opt, rhvae, ∇loss_[1])
+    # Flux.Optimisers.update!(opt, rhvae, ∇loss_[1])
 
     # Update metric
-    update_metric!(rhvae)
+    # update_metric!(rhvae)
 end # function

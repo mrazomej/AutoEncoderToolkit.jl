@@ -1,3 +1,6 @@
+# Import CUDA library
+import CUDA
+
 # Import library to find nearest neighbors
 import NearestNeighbors
 import Clustering
@@ -6,6 +9,7 @@ import Clustering
 import Requires
 
 # Import library for random sampling
+import Distributions
 import StatsBase
 import Random
 
@@ -531,19 +535,60 @@ end # function
 # Defining random number generators for different GPU backends
 ## =============================================================================
 
+@doc raw"""
+    randn_like(x::AbstractArray{T}) where {T<:AbstractFloat}
+
+Generates an array of random numbers from the standard normal distribution that
+has the same type and shape as the input array.
+
+# Arguments
+- `x::AbstractArray{T}`: The input array. The output array will have the same
+  type and shape as this array.
+
+# Returns
+- An `AbstractArray{T}` of the same type and shape as `x`, where each element is
+  a random number from the standard normal distribution.
+
+# Description
+The function uses the `randn` function to generate random numbers from the
+standard normal distribution. The type of the random numbers is the same as the
+element type of `x`, and the shape of the output array is the same as the shape
+of `x`.
+"""
 function randn_like(x::AbstractArray{T}) where {T<:AbstractFloat}
     return randn(T, size(x)...)
 end
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    randn_like(x::CuArray{T}) where {T<:AbstractFloat}
+
+Generates an array of random numbers from the standard normal distribution that
+has the same type and shape as the input array. This method is specific for the
+CUDA.jl package.
+
+# Arguments
+- `x::CuArray{T}`: The input array. The output array will have the same type and
+  shape as this array.
+
+# Returns
+- An `AbstractArray{T}` of the same type and shape as `x`, where each element is
+  a random number from the standard normal distribution.
+
+# Description
+The function uses the `randn` function to generate random numbers from the
+standard normal distribution. The type of the random numbers is the same as the
+element type of `x`, and the shape of the output array is the same as the shape
+of `x`.
+"""
+function randn_like(x::CUDA.CuArray{T}) where {T<:Float32}
+    return CUDA.randn(T, size(x)...)
+end
+
+# ------------------------------------------------------------------------------
+
 function __init__()
-
-    # Define randn for CUDA
-    Requires.@require CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba" begin
-        function randn_like(x::CUDA.CuArray{T}) where {T<:AbstractFloat}
-            return CUDA.randn(T, size(x)...)
-        end
-    end
-
     # Define randn for OpenCL
     Requires.@require OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2" begin
         function randn_like(x::OpenCL.CLArray{T}) where {T<:AbstractFloat}
@@ -558,3 +603,95 @@ function __init__()
         end
     end
 end # function __init__
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    sample_centered_MvNormal_from_inverse_covariance(
+        Σ⁻¹::AbstractMatrix{T},
+        n_samples::Int
+    ) where {T<:AbstractFloat}
+
+Generates samples from a centered multivariate normal distribution (i.e., a
+multivariate normal distribution with mean 0) using the inverse of the
+covariance matrix.
+
+# Arguments
+- `Σ⁻¹::AbstractMatrix{T}`: The inverse of the covariance matrix of the
+  multivariate normal distribution.
+
+# Returns
+- An `AbstractArray{T}` of size `size(Σ⁻¹, 1)`, with a single sample from the
+  centered multivariate normal distribution.
+
+# Description
+The function first computes the Cholesky decomposition of the inverse covariance
+matrix `Σ⁻¹`. It then generates `n_samples` samples from a standard normal
+distribution using the `randn` function. These samples are then multiplied by
+the lower triangular matrix from the Cholesky decomposition. This process
+generates samples from a centered multivariate normal distribution with
+covariance matrix `Σ`, where `Σ` is the inverse of `Σ⁻¹`.
+
+# Note
+Ensure that `Σ⁻¹` is a positive-definite matrix.
+"""
+function sample_centered_MvNormal_from_inverse_covariance(
+    Σ⁻¹::AbstractMatrix{T}
+) where {T<:AbstractFloat}
+    # Obtain covariance matrix by inverting the inverse covariance matrix. Note:
+    # we use the Hermitian function to ensure that the matrix is symmetric,
+    # which is not guaranteed by the inv function due to rounding errors.
+    Σ = LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹))
+    # Compute Choelsky decomposition of covariance matrix
+    L = LinearAlgebra.cholesky(Σ).L
+    # Sample from standard normal distribution
+    sample = randn(T, size(Σ⁻¹, 1))
+    # Multiply samples by Cholesky decomposition to get samples from
+    # multivariate Gaussian with mean 0 and covariance Σ
+    return L * sample
+end # function
+
+@doc raw"""
+    sample_centered_MvNormal_from_inverse_covariance(
+        Σ⁻¹::CuMatrix{T},
+        n_samples::Int
+    ) where {T<:AbstractFloat}
+
+Generates samples from a centered multivariate normal distribution (i.e., a
+multivariate normal distribution with mean 0) using the inverse of the
+covariance matrix. This method is specific for the CUDA.jl package.
+
+# Arguments
+- `Σ⁻¹::CuMatrix{T}`: The inverse of the covariance matrix of the multivariate
+  normal distribution.
+
+# Returns
+- A `CuVector{T}` of size `size(Σ⁻¹, 1)`, with a single sample from the centered
+  multivariate normal distribution.
+
+# Description
+The function first computes the Cholesky decomposition of the inverse covariance
+matrix `Σ⁻¹`. It then generates `n_samples` samples from a standard normal
+distribution using the `randn` function. These samples are then multiplied by
+the lower triangular matrix from the Cholesky decomposition. This process
+generates samples from a centered multivariate normal distribution with
+covariance matrix `Σ`, where `Σ` is the inverse of `Σ⁻¹`.
+
+# Note
+Ensure that `Σ⁻¹` is a positive-definite matrix.
+"""
+function sample_centered_MvNormal_from_inverse_covariance(
+    Σ⁻¹::CUDA.CuMatrix{T}
+) where {T<:Float32}
+    # Obtain covariance matrix by inverting the inverse covariance matrix. Note:
+    # we use the Hermitian function to ensure that the matrix is symmetric,
+    # which is not guaranteed by the inv function due to rounding errors.
+    Σ = LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹))
+    # Compute Choelsky decomposition of covariance matrix
+    L = LinearAlgebra.cholesky(Σ).L
+    # Sample from standard normal distribution
+    sample = CUDA.randn(T, size(Σ, 1))
+    # Multiply samples by Cholesky decomposition to get samples from
+    # multivariate Gaussian with mean 0 and covariance Σ
+    return L * sample
+end # function
