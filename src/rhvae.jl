@@ -2,6 +2,9 @@
 import Flux
 import Zygote
 
+# Import GPU libraries
+using CUDA
+
 # Import basic math
 import Distances
 import LinearAlgebra
@@ -511,32 +514,22 @@ function G_inv(
     T::Float32,
     λ::Float32,
 )
-    # Define dimensionality of latent space
-    n = size(centroids_latent, 1)
-    # Define number of centroids
-    n_centroids = size(centroids_latent, 2)
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
+    # - We use the reshape function to broadcast the operation over the third
+    # dimension of M.
+    # - The Zygote.dropgrad function is used to prevent the gradient from being
+    # computed with respect to T.
+    LLexp = M .*
+            reshape(
+        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)), 1, 1, :
+    )
 
-    # Initialize array of zeros to save L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Note:
-    # we use fill! to initialize a matrix of the same type as centroids_latent
-    # so that this is compatible with GPU computations.
-    LLexp = fill!(similar(centroids_latent, n, n), 0.0f0)
+    # Compute the regularization term.
+    Λ = LinearAlgebra.I(length(z)) .* Zygote.dropgrad(λ)
 
-    # Loop through each centroid
-    for i = 1:n_centroids
-        # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
-        # - We do not use Distances.jl because that performs in-place operations
-        #   on the input, and this is not compatible with Zygote.jl.
-        # - We use Zygote.dropgrad to prevent backpropagation through the
-        #   hyperparameters.
-        LLexp .+= M[:, :, i] .*
-                  exp(-sum(abs2, (z - centroids_latent[:, i]) ./
-                                 Zygote.dropgrad(T)))
-    end # for
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
+    return dropdims(sum(LLexp, dims=3), dims=3) + Λ
 
-    # Add regularization term
-    LLexp[LinearAlgebra.diagind(LLexp)] .+= Zygote.dropgrad(λ)
-
-    return LLexp
 end # function
 
 # ------------------------------------------------------------------------------
@@ -590,10 +583,20 @@ function G_inv(
     T::Float32,
     λ::Float32,
 )
-    LLexp = M .* reshape(exp.(sum(abs2, (z .- centroids_latent) ./ T, dims=1)), 1, 1, :)
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
+    # - We use the reshape function to broadcast the operation over the third
+    # dimension of M.
+    # - The Zygote.dropgrad function is used to prevent the gradient from being
+    # computed with respect to T.
+    LLexp = M .*
+            reshape(
+        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)), 1, 1, :
+    )
 
-    Λ = cu(Matrix(LinearAlgebra.I(length(z)) .* λ))
+    # Compute the regularization term.
+    Λ = cu(Matrix(LinearAlgebra.I(length(z)) .* Zygote.dropgrad(λ)))
 
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
     return dropdims(sum(LLexp, dims=3), dims=3) + Λ
 end # function
 
