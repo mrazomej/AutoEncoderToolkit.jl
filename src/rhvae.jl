@@ -709,7 +709,8 @@ function riemannian_logprior(
     G⁻¹ = σ^2 .* G_inv(z, metric_param)
 
     # Compute the log determinant of the metric tensor
-    logdetG = -slogdet(G⁻¹)
+    # logdetG = -slogdet(G⁻¹)
+    logdetG = -LinearAlgebra.logdet(G⁻¹)
 
     # Return the log-prior
     return -0.5f0 * (length(z) * log(2.0f0π) + logdetG) -
@@ -2180,6 +2181,70 @@ function general_leapfrog_tempering_step(
     )
 end # function
 
+function general_leapfrog_tempering_step(
+    x::CuVector{T},
+    zₒ::CuVector{T},
+    decoder::AbstractVariationalDecoder,
+    metric_param::NamedTuple;
+    ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
+    K::Int=3,
+    βₒ::T=0.3f0,
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
+        G_inv=G_inv,
+    ),
+    tempering_schedule::Function=quadratic_tempering,
+) where {T<:Float32}
+    # Extract latent-space dimensionality
+    ldim = size(zₒ, 1)
+
+    # Compute inverse metric for initial point
+    G⁻¹ = ∇H_kwargs.G_inv(zₒ, metric_param)
+
+    # Sample γₒ ~ N(0, G⁻¹)
+    γₒ = LinearAlgebra.cholesky(G⁻¹).L * CUDA.randn(ldim)
+
+    # Define ρₒ = γₒ / √βₒ
+    ρₒ = γₒ ./ √(βₒ)
+
+    # Define initial value of z and ρ before loop
+    zₖ₋₁ = deepcopy(zₒ)
+    ρₖ₋₁ = deepcopy(ρₒ)
+
+    # Loop over K steps
+    for k = 1:K
+        # 1) Leapfrog step
+        zₖ, ρₖ = general_leapfrog_step(
+            x, zₖ₋₁, ρₖ₋₁, decoder, metric_param;
+            ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+        )
+
+        # 2) Tempering step
+        # Compute previous step's inverse temperature
+        βₖ₋₁ = tempering_schedule(βₒ, k - 1, K)
+        # Compute current step's inverse temperature
+        βₖ = tempering_schedule(βₒ, k, K)
+
+        # Update momentum variable with tempering Update zₖ₋₁, ρₖ₋₁ for next
+        # iteration. The momentum variable is updated with tempering. Also, note
+        # this is the last step as well, thus we return zₖ₋₁, ρₖ₋₁ as the final
+        # points.
+        zₖ₋₁ = zₖ
+        ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
+    end # for
+
+    return (
+        z_init=zₒ,
+        ρ_init=ρₒ,
+        z_final=zₖ₋₁,
+        ρ_final=ρₖ₋₁,
+    )
+end # function
+
 # ------------------------------------------------------------------------------
 
 @doc raw"""
@@ -2281,6 +2346,74 @@ function general_leapfrog_tempering_step(
                     ∇H_kwargs.G_inv(z, metric_param)
                 )
             )
+            for z in eachcol(zₒ)
+        ],
+    )
+
+    # Define ρₒ = γₒ / √βₒ
+    ρₒ = γₒ ./ √(βₒ)
+
+    # Define initial value of z and ρ before loop
+    zₖ₋₁ = deepcopy(zₒ)
+    ρₖ₋₁ = deepcopy(ρₒ)
+
+    # Loop over K steps
+    for k = 1:K
+        # 1) Leapfrog step
+        zₖ, ρₖ = general_leapfrog_step(
+            x, zₖ₋₁, ρₖ₋₁, decoder, metric_param;
+            ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+        )
+
+        # 2) Tempering step
+        # Compute previous step's inverse temperature
+        βₖ₋₁ = tempering_schedule(βₒ, k - 1, K)
+        # Compute current step's inverse temperature
+        βₖ = tempering_schedule(βₒ, k, K)
+
+        # Update momentum variable with tempering Update zₖ₋₁, ρₖ₋₁ for next
+        # iteration. The momentum variable is updated with tempering. Also, note
+        # this is the last step as well, thus we return zₖ₋₁, ρₖ₋₁ as the final
+        # points.
+        zₖ₋₁ = zₖ
+        ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
+    end # for
+
+    return (
+        z_init=zₒ,
+        ρ_init=ρₒ,
+        z_final=zₖ₋₁,
+        ρ_final=ρₖ₋₁,
+    )
+end # function
+
+function general_leapfrog_tempering_step(
+    x::CuMatrix{T},
+    zₒ::CuMatrix{T},
+    decoder::AbstractVariationalDecoder,
+    metric_param::NamedTuple;
+    ϵ::Union{T,<:AbstractVector{T}}=0.01f0,
+    K::Int=3,
+    βₒ::T=0.3f0,
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        decoder_loglikelihood=decoder_loglikelihood,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior,
+        G_inv=G_inv,
+    ),
+    tempering_schedule::Function=quadratic_tempering,
+) where {T<:Float32}
+    # Extract latent-space dimensionality
+    ldim = size(zₒ, 1)
+
+    # Sample γₒ ~ N(0, I)
+    γₒ = reduce(
+        hcat,
+        [
+            LinearAlgebra.cholesky(∇H_kwargs.G_inv(z, metric_param)).L * 
+            CUDA.randn(ldim)
             for z in eachcol(zₒ)
         ],
     )
