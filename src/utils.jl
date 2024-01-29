@@ -1,6 +1,9 @@
 # Import CUDA library
 import CUDA
 
+# Import AutoDiff library
+import Zygote
+
 # Import library to find nearest neighbors
 import NearestNeighbors
 import Clustering
@@ -337,23 +340,32 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T}, z::T=zero(T))
+        vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T})
 
-Convert two one-dimensional vectors into a lower triangular matrix.
+Convert two one-dimensional vectors into a lower triangular matrix using
+Zygote.Buffer.
 
 # Arguments
 - `diag::AbstractVector{T}`: The input vector to be converted into the diagonal
-  of the matrix.
+    of the matrix.
 - `lower::AbstractVector{T}`: The input vector to be converted into the lower
-  triangular part of the matrix. The length of this vector should be a
-  triangular number (i.e., the sum of the first `n` natural numbers for some
-  `n`).
-- `z::T=zero(T)`: The value to fill in the upper triangular part of the matrix.
-  Defaults to zero.
+    triangular part of the matrix. The length of this vector should be a
+    triangular number (i.e., the sum of the first `n` natural numbers for some
+    `n`).
 
 # Returns
-- A lower triangular matrix constructed from `diag` and `lower`, with the upper
-  triangular part filled with `z`.
+- A lower triangular matrix constructed from `diag` and `lower`.
+
+# Description
+This function uses `Zygote.Buffer` to create a mutable buffer that can be
+written to in a loop. This is necessary because Zygote, the automatic
+differentiation library used in Julia, cannot differentiate through loops that
+write to arrays. The buffer is first initialized with zeros using `fill!`. Then,
+the lower triangular and diagonal elements of the buffer are populated with the
+elements of `lower` and `diag`, respectively. Finally, the buffer is converted
+to an array using `copy` before being returned. This is necessary because Zygote
+cannot differentiate through buffers, so they must be converted to arrays before
+being returned from a function.
 
 # Example
 ```julia
@@ -367,40 +379,59 @@ function vec_to_ltri(
 ) where {T<:Number}
     # Calculate latent space dimensionality
     n = length(diag)
-    # Initialize matrix of zeros. Note: We use fill! to initalize a matrix of
-    # the same type as diag such that this works with GPU arrays.
-    L = fill!(similar(diag, n, n), zero(T))
-    # Obtain indices of lower-triangular matrix
-    idx = tril_indices(n; offset=-1)
+
+    # Create a Zygote.Buffer of zeros to store the lower triangular matrix
+    L_buff = Zygote.bufferfrom(fill!(similar(diag, n, n), zero(T)))
+
+    # Obtain indices of lower-triangular matrix. Note: We use the Zygote.ignore
+    # for Zygote to ignore this part of the code when computing gradients.
+    idx = Zygote.ignore() do
+        tril_indices(n; offset=-1)
+    end
     # Loop through rows
     for (i, row) in enumerate(eachrow(idx))
         # Populate lower-triangular matrix lower elements
-        L[row[1], row[2]] = vec(lower)[i]
+        L_buff[row[1], row[2]] = vec(lower)[i]
     end # for
-    # Populate lower-triangular matrix diagonal elements
-    L[LinearAlgebra.diagind(L)] .= diag
 
-    return L
+    # Loop through diagonal terms
+    for i = 1:n
+        # Populate lower-triangular matrix diagonal elements
+        L_buff[i, i] = diag[i]
+    end # for
+
+    # Convert buffer to array before returning
+    return copy(L_buff)
 end # function
-
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        vec_to_ltri(diag::AbstractMatrix{T}, lower::AbstractMatrix{T}) where {T<:Number}
+                vec_to_ltri(diag::AbstractMatrix{T}, lower::AbstractMatrix{T}) where {T<:Number}
 
 Construct a set of lower triangular matrices from a matrix of diagonal elements
 and a matrix of lower triangular elements, each column representing a sample.
 
 # Arguments
 - `diag::AbstractMatrix{T}`: A matrix of `T` where each column contains the
-  diagonal elements of the matrix for a specific sample.
+    diagonal elements of the matrix for a specific sample.
 - `lower::AbstractMatrix{T}`: A matrix of `T` where each column contains the
-  elements of the lower triangle of the matrix for a specific sample.
+    elements of the lower triangle of the matrix for a specific sample.
 
 # Returns
 - A 3D array of type `T` where each slice along the third dimension is a lower
-  triangular matrix with the diagonal and lower triangular elements populated
-  from `diag` and `lower` respectively.
+    triangular matrix with the diagonal and lower triangular elements populated
+    from `diag` and `lower` respectively.
+
+# Description
+This function uses `Zygote.Buffer` to create a mutable buffer that can be
+written to in a loop. This is necessary because Zygote, the automatic
+differentiation library used in Julia, cannot differentiate through loops that
+write to arrays. The buffer is first initialized with zeros using `fill!`. Then,
+the lower triangular and diagonal elements of the buffer are populated with the
+elements of `lower` and `diag`, respectively. Finally, the buffer is converted
+to an array using `copy` before being returned. This is necessary because Zygote
+cannot differentiate through buffers, so they must be converted to arrays before
+being returned from a function.
 
 # Note
 The function assumes that the `diag` and `lower` matrices have the correct
@@ -417,25 +448,34 @@ function vec_to_ltri(
     n = size(diag, 1)
     # Calculate the number of samples
     n_samples = size(diag, 2)
-    # Initialize matrix of zeros. Note: we use fill! to initalize a matrix of
-    # the same type as diag such that this works with GPU arrays.
-    L = fill!(similar(diag, n, n, n_samples), zero(T))
-    # Obtain indices of lower-triangular matrix
-    idx_low = tril_indices(n, n_samples; offset=-1)
+
+    # Create a Zygote.Buffer of zeros to store the lower triangular matrices
+    L_buff = Zygote.bufferfrom(fill!(similar(diag, n, n, n_samples), zero(T)))
+
+    # Obtain indices of lower-triangular matrix. Note: We use the Zygote.ignore
+    # for Zygote to ignore this part of the code when computing gradients.
+    idx_low = Zygote.ignore() do
+        tril_indices(n, n_samples; offset=-1)
+    end
     # Loop through rows
     for (i, row) in enumerate(eachrow(idx_low))
         # Populate lower-triangular matrix lower elements
-        L[row[1], row[2], row[3]] = vec(lower)[i]
+        L_buff[row[1], row[2], row[3]] = vec(lower)[i]
     end # for
-    # Obtain indices of diagonal elements
-    idx_diag = diag_indices(n, n_samples)
+
+    # Obtain indices of diagonal elements. Note: We use the Zygote.ignore for
+    # Zygote to ignore this part of the code when computing gradients.
+    idx_diag = Zygote.ignore() do
+        diag_indices(n, n_samples)
+    end
     # Loop through rows
     for (i, row) in enumerate(eachrow(idx_diag))
         # Populate lower-triangular matrix lower elements
-        L[row[1], row[2], row[3]] = vec(diag)[i]
+        L_buff[row[1], row[2], row[3]] = vec(diag)[i]
     end # for
 
-    return L
+    # Convert buffer to array before returning
+    return copy(L_buff)
 end # function
 
 
