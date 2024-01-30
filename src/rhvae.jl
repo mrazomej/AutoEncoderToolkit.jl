@@ -1,6 +1,7 @@
 # Import ML libraries
 import Flux
 import Zygote
+import ForwardDiff
 
 # Import GPU libraries
 using CUDA
@@ -207,7 +208,7 @@ function (m::MetricChain)(x::AbstractArray{Float32}; matrix::Bool=false)
 
     # Check if matrix should be returned
     if matrix
-        return vec_to_ltri(diag_out, lower_out) |> Flux.gpu
+        return vec_to_ltri(diag_out, lower_out)
     else
         return (diag=diag_out, lower=lower_out,)
     end # if
@@ -377,7 +378,7 @@ function update_metric(
     centroids_latent = rhvae.vae.encoder(centroids_data).µ
     # Run centroids_data through metric_chain and update L
     L = rhvae.metric_chain(centroids_data, matrix=true)
-    # Update M by multiplying L by its transpose
+    # # Update M by multiplying L by its transpose
     M = reduce(
         (x, y) -> cat(x, y, dims=3),
         [
@@ -519,9 +520,9 @@ square of the temperature, and a regularization term proportional to the
 identity matrix. The result is a matrix of the same size as the latent space.
 """
 function G_inv(
-    z::AbstractVector{Float32},
-    centroids_latent::AbstractMatrix{Float32},
-    M::AbstractArray{Float32,3},
+    z::AbstractVector,
+    centroids_latent::AbstractMatrix,
+    M::AbstractArray{<:Any,3},
     T::Float32,
     λ::Float32,
 )
@@ -537,11 +538,10 @@ function G_inv(
     )
 
     # Compute the regularization term.
-    # Λ = Zygote.dropgrad(LinearAlgebra.I(length(z)) .* λ)
+    Λ = Zygote.dropgrad(LinearAlgebra.I(length(z)) .* λ)
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
-    return dropdims(sum(LLexp, dims=3), dims=3) #+ Λ
-
+    return dropdims(sum(LLexp, dims=3), dims=3) + Λ
 end # function
 
 # ------------------------------------------------------------------------------
