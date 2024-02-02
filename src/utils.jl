@@ -796,3 +796,100 @@ function sample_centered_MvNormal_from_inverse_covariance(
     # multivariate Gaussian with mean 0 and covariance Σ
     return L * sample
 end # function
+
+## =============================================================================
+
+"""
+    unit_vector(dim::Int, i::Int, T::Type=Float32)
+
+Create a unit vector of dimension `dim` with the `i`-th element set to 1.
+
+# Arguments
+- `dim::Int`: The dimension of the unit vector.
+- `i::Int`: The index of the element to be set to 1.
+- `T::Type=Float32`: The type of the elements in the vector. Defaults to
+  `Float32`.
+
+# Returns
+- A unit vector of type `T` and dimension `dim` with the `i`-th element set to
+  1.
+
+# Description
+This function creates a unit vector of dimension `dim` with the `i`-th element
+set to 1. All other elements are set to 0. The type of the elements in the
+vector is `T`, which defaults to `Float32`.
+
+# Note
+This function is marked with the `@nograd` macro from the Zygote package, which
+means that Zygote will ignore any call to this function when computing
+gradients.
+
+# Example
+```julia
+unit_vector(5, 3)  # Returns the vector [0.0, 0.0, 1.0, 0.0, 0.0]
+```
+"""
+function unit_vector(dim::Int, i::Int, T::Type=Float32)
+    # Initialize a vector of zeros
+    e = zeros(T, dim)
+    # Set the i-th element to 1
+    e[i] = one(T)
+    return e
+end # function
+
+# Set Zygote to ignore the function when computing gradients
+Zygote.@nograd unit_vector
+
+# ------------------------------------------------------------------------------
+
+"""
+    finite_difference_gradient(
+        f::Function, x::AbstractVector{T}; ε::T=sqrt(eps(T))
+    ) where {T<:AbstractFloat}
+
+Compute the finite difference gradient of a function `f` at a point `x`.
+
+# Arguments
+- `f::Function`: The function for which the gradient is to be computed.
+- `x::AbstractVector{T}`: The point at which the gradient is to be computed.
+
+# Optional Keyword Arguments
+- `ε::T=sqrt(eps(Float32))`: The step size for the finite difference
+  calculation. Defaults to the square root of the machine epsilon for type
+  `Float32`.
+
+# Returns
+- A vector representing the gradient of `f` at `x`.
+
+# Description
+This function computes the finite difference gradient of a function `f` at a
+point `x`. The gradient is a vector where the `i`-th element is the partial
+derivative of `f` with respect to the `i`-th element of `x`.
+
+The partial derivatives are computed using the central difference formula:
+
+∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
+
+where eᵢ is the `i`-th unit vector.
+
+# Example
+```julia
+f(x) = sum(x.^2)
+x = [1.0, 2.0, 3.0]
+finite_difference_gradient(f, x)  # Returns the vector [2.0, 4.0, 6.0]
+```
+"""
+function finite_difference_gradient(
+    f::Function,
+    x::AbstractVector{T};
+    ε::T=sqrt(eps(Float32))
+) where {T<:AbstractFloat}
+    # Compute the finite difference gradient for each element of x
+    grad = [
+        (
+            f(x .+ ε * unit_vector(length(x), i, T)) -
+            f(x .- ε * unit_vector(length(x), i, T))
+        ) / 2ε for i in eachindex(x)
+    ]
+    return grad
+end # function
