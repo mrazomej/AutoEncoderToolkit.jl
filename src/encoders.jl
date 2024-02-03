@@ -481,7 +481,9 @@ mu, logσ = je(some_input)
 Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
-function (encoder::JointLogEncoder)(x::AbstractVecOrMat{Float32})
+function (encoder::JointLogEncoder)(
+    x::AbstractArray{T}
+) where {T<:AbstractFloat}
     # Run input to encoder network
     h = encoder.encoder(x)
     # Map from last encoder layer to latent space mean
@@ -636,7 +638,9 @@ je = JointEncoder(...)
 Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
-function (encoder::JointEncoder)(x::AbstractVecOrMat{Float32})
+function (encoder::JointEncoder)(
+    x::AbstractArray{T}
+) where {T<:AbstractFloat}
     # Run input to encoder network
     h = encoder.encoder(x)
     # Map from last encoder layer to latent space mean
