@@ -1,6 +1,9 @@
 # Import CUDA library
 import CUDA
 
+# Import ML library
+import Flux
+
 # Import AutoDiff library
 import Zygote
 
@@ -429,7 +432,7 @@ vec_to_ltri(diag, lower)  # Returns a 3x3 lower triangular matrix
 function vec_to_ltri(
     diag::CUDA.CuVector{T}, lower::CUDA.CuVector{T},
 ) where {T<:Number}
-    return CUDA.cu(vec_to_ltri(diag, lower))
+    return vec_to_ltri(diag |> Flux.cpu, lower |> Flux.cpu) |> Flux.gpu
 end # function
 
 # ------------------------------------------------------------------------------
@@ -537,7 +540,7 @@ matrix.
 function vec_to_ltri(
     diag::CUDA.CuMatrix{T}, lower::CUDA.CuMatrix{T}
 ) where {T<:Number}
-    return CUDA.cu(vec_to_ltri(diag, lower))
+    return CUDA.cu(vec_to_ltri(diag |> Flux.cpu, lower |> Flux.cpu))
 end # function
 
 ## =============================================================================
@@ -829,13 +832,22 @@ gradients.
 unit_vector(5, 3)  # Returns the vector [0.0, 0.0, 1.0, 0.0, 0.0]
 ```
 """
-function unit_vector(dim::Int, i::Int, T::Type=Float32)
+function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
     # Initialize a vector of zeros
-    e = zeros(T, dim)
+    e = zeros(T, length(x))
     # Set the i-th element to 1
     e[i] = one(T)
     return e
 end # function
+
+function unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
+    # Initialize a vector of zeros
+    e = CUDA.zeros(T, length(x))
+    # Set the i-th element to 1
+    e[i] = CUDA.one(T)
+    return e
+end # function
+
 
 # Set Zygote to ignore the function when computing gradients
 Zygote.@nograd unit_vector
@@ -887,9 +899,24 @@ function finite_difference_gradient(
     # Compute the finite difference gradient for each element of x
     grad = [
         (
-            f(x .+ ε * unit_vector(length(x), i, T)) -
-            f(x .- ε * unit_vector(length(x), i, T))
+            f(x .+ ε * unit_vector(x, i, T)) -
+            f(x .- ε * unit_vector(x, i, T))
         ) / 2ε for i in eachindex(x)
     ]
+    return grad
+end # function
+
+function finite_difference_gradient(
+    f::Function,
+    x::CUDA.CuVector{T};
+    ε::T=sqrt(eps(Float32))
+) where {T<:AbstractFloat}
+    # Compute the finite difference gradient for each element of x
+    grad = CUDA.cu([
+        (
+            f(x .+ ε * unit_vector(x, i, T)) -
+            f(x .- ε * unit_vector(x, i, T))
+        ) / 2ε for i in eachindex(x)
+    ])
     return grad
 end # function
