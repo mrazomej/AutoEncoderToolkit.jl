@@ -295,29 +295,21 @@ function reconstruction_decoder(
     # Unpack needed outputs
     p = vae_outputs.decoder.p
 
+    # Validate input dimensions
+    if any(size(x) .≠ size(p))
+        throw(
+            DimensionMismatch(
+                "Input data and decoder outputs must have the same dimensions"
+            )
+        )
+    end
     # Check if input is vector
     if ndims(x) == 1
         # Define batch size as 1
         batch_size = 1
-        # Validate input dimensions
-        if length(x) ≠ length(p)
-            throw(
-                DimensionMismatch(
-                    "Input data and decoder outputs must have the same dimensions"
-                )
-            )
-        end
     else
         # Define batch size as the last dimension
         batch_size = last(size(x))
-        # Validate input dimensions
-        if all(size(x) .≠ size(p))
-            throw(
-                DimensionMismatch(
-                    "Input data and decoder outputs must have the same dimensions"
-                )
-            )
-        end
     end # if
 
     # Compute average reconstruction loss as the log-likelihood of a Bernoulli
@@ -348,9 +340,9 @@ the specified `decoder`.
 - `decoder::T`: Decoder network of type `SimpleDecoder`, which is assumed to
   have already mapped the latent variables to the parameters of the Gaussian
   distribution.
-- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. Each column
-  represents a separate data sample.
+- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. The last dimension
+  is taken as having each of the samples in a batch.
 - `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
 
 # Returns
@@ -366,23 +358,29 @@ the specified `decoder`.
 """
 function reconstruction_decoder(
     decoder::SimpleDecoder,
-    x::AbstractVecOrMat{Float32},
+    x::AbstractArray{Float32},
     vae_outputs::NamedTuple
 )
-    # Compute batch size
-    batch_size = size(x, 2)
-
     # Unpack needed outputs
     decoder_µ = vae_outputs.decoder.µ
 
     # Validate input dimensions
-    if size(x, 2) ≠ size(decoder_µ, 2)
+    if any(size(x) .≠ size(decoder_µ))
         throw(
             DimensionMismatch(
                 "Input data and decoder outputs must have the same dimensions"
             )
         )
-    end
+    end # if
+
+    # Check if input is vector
+    if ndims(x) == 1
+        # Define batch size as 1
+        batch_size = 1
+    else
+        # Define batch size as the last dimension
+        batch_size = last(size(x))
+    end # if
 
     # Compute average reconstruction loss as the log-likelihood of a Gaussian
     # decoder.
@@ -400,7 +398,7 @@ end # function
 @doc raw"""
         reconstruction_decoder(
                 decoder::T,
-                x::AbstractVecOrMat{Float32},
+                x::AbstractArray{Float32},
                 vae_outputs::NamedTuple
         ) where {T<:AbstractGaussianLinearDecoder}
 
@@ -417,9 +415,9 @@ the specified `decoder`.
 - `decoder::T`: Decoder network of type `AbstractGaussianLinearDecoder`, which
   is assumed to have already mapped the latent variables to the parameters of
   the Gaussian distribution.
-- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. Each column
-  represents a separate data sample.
+- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. The last dimension
+  is taken as having each of the samples in a batch.
 - `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
 
 # Returns
@@ -434,24 +432,30 @@ the specified `decoder`.
 """
 function reconstruction_decoder(
     decoder::T,
-    x::AbstractVecOrMat{Float32},
+    x::AbstractArray{Float32},
     vae_outputs::NamedTuple
 ) where {T<:AbstractGaussianLinearDecoder}
-    # Compute batch size
-    batch_size = size(x, 2)
-
     # Unpack needed ouput
     decoder_µ = vae_outputs.decoder.µ
     decoder_σ = vae_outputs.decoder.σ
 
     # Validate input dimensions
-    if size(x, 2) ≠ size(decoder_µ, 2) || size(x, 2) ≠ size(decoder_σ, 2)
+    if any(size(x) .≠ size(decoder_µ)) || any(size(x) .≠ size(decoder_σ))
         throw(
             DimensionMismatch(
                 "Input data and decoder outputs must have the same dimensions"
             )
         )
-    end
+    end # if
+
+    # Check if input is vector
+    if ndims(x) == 1
+        # Define batch size as 1
+        batch_size = 1
+    else
+        # Define batch size as the last dimension
+        batch_size = last(size(x))
+    end # if
 
     # Compute average reconstruction loss as the log-likelihood of a Gaussian
     # decoder.
@@ -470,7 +474,7 @@ end # function
 @doc raw"""
     reconstruction_decoder(
         decoder::T,
-        x::AbstractVecOrMat{Float32},
+        x::AbstractArray{Float32},
         vae_outputs::NamedTuple
     ) where {T<:AbstractGaussianLogDecoder}
 
@@ -481,9 +485,9 @@ standard deviations.
 # Arguments
 - `decoder::T`: Decoder network of type `AbstractGaussianLogDecoder`, which
   outputs the log of the standard deviation of the Gaussian distribution.
-- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. Each column
-  represents a separate data sample.
+- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. The last dimension
+  is taken as having each of the samples in a batch.
 - `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
 
 # Returns
@@ -498,27 +502,33 @@ standard deviations.
 """
 function reconstruction_decoder(
     decoder::T,
-    x::AbstractVecOrMat{Float32},
+    x::AbstractArray{Float32},
     vae_outputs::NamedTuple;
 ) where {T<:AbstractGaussianLogDecoder}
-    # Compute batch size
-    batch_size = size(x, 2)
-
     # Unpack needed ouput
     decoder_µ = vae_outputs.decoder.µ
     decoder_logσ = vae_outputs.decoder.logσ
 
-    # Convert log standard deviation to standard deviation
-    decoder_σ = exp.(decoder_logσ)
-
     # Validate input dimensions
-    if size(x, 2) ≠ size(decoder_µ, 2) || size(x, 2) ≠ size(decoder_logσ, 2)
+    if any(size(x) .≠ size(decoder_µ)) || any(size(x) .≠ size(decoder_logσ))
         throw(
             DimensionMismatch(
                 "Input data and decoder outputs must have the same dimensions"
             )
         )
-    end
+    end # if   
+
+    # Convert log standard deviation to standard deviation
+    decoder_σ = exp.(decoder_logσ)
+
+    # Check if input is vector
+    if ndims(x) == 1
+        # Define batch size as 1
+        batch_size = 1
+    else
+        # Define batch size as the last dimension
+        batch_size = last(size(x))
+    end # if
 
     # Compute average reconstruction loss as the log-likelihood of a Gaussian
     # decoder.
@@ -539,7 +549,7 @@ end # function
 @doc raw"""
         kl_encoder(
                 encoder::JointLogEncoder,
-                x::AbstractVecOrMat{Float32},
+                x::AbstractArray{Float32},
                 vae_outputs::NamedTuple
         )
 
@@ -552,7 +562,7 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 
 # Arguments
 - `encoder::JointLogEncoder`: Encoder network.
-- `x::AbstractVecOrMat{Float32}`: The original input data to the encoder, to be
+- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
   compared with the reconstruction produced by the decoder. Each column
   represents a separate data sample.
 - `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
@@ -568,15 +578,30 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 """
 function kl_encoder(
     encoder::AbstractGaussianLogEncoder,
-    x::AbstractVecOrMat{Float32},
+    x::AbstractArray{Float32},
     vae_outputs::NamedTuple
 )
-    # Compute batch size
-    batch_size = size(x, 2)
-
     # Unpack needed ouput
     encoder_μ = vae_outputs.encoder.μ
     encoder_logσ = vae_outputs.encoder.logσ
+
+    # Check if input is vector
+    if ndims(x) == 1
+        # Define batch size as 1
+        batch_size = 1
+    else
+        # Define batch size as the last dimension
+        batch_size = last(size(x))
+    end # if
+
+    # Validate that each sample has a mean and log standard deviation
+    if size(encoder_µ, 2) != batch_size || size(encoder_logσ, 2) != batch_size
+        throw(
+            DimensionMismatch(
+                "Encoder outputs must have the same number of columns as the input data"
+            )
+        )
+    end # if
 
     # Compute KL divergence
     return 0.5f0 * sum(
@@ -609,8 +634,8 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x::AbstractVecOrMat{Float32}`: Input data. Each column represents a single
-    data point.
+- `x::AbstractArray{Float32}`: Input data. The last dimension is taken as
+  having each of the samples in a batch.
 
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
@@ -633,7 +658,7 @@ encoder: qᵩ(z|x) = N(g(x), h(x))
 """
 function loss(
     vae::VAE,
-    x::AbstractVecOrMat{Float32};
+    x::AbstractArray{Float32};
     β::Float32=1.0f0,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
@@ -657,6 +682,8 @@ function loss(
     return -log_likelihood + β * kl_div + reg_strength * reg_term
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0
             regularization=nothing, reg_strength=1.0f0)`
@@ -677,10 +704,10 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x_in::AbstractVecOrMat{Float32}`: Input data to the VAE encoder. Each column
-  represents a single data point.
-- `x_out::AbstractVecOrMat{Float32}`: Target data to compute the reconstruction
-  error.
+- `x_in::AbstractArray{Float32}`: Input data to the VAE encoder. The last
+  dimension is taken as having each of the samples in a batch.
+- `x_out::AbstractArray{Float32}`: Target data to compute the reconstruction
+  error. The last dimension is taken as having each of the samples in a batch.
 
 # Optional Keyword Arguments
 - `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
@@ -704,8 +731,8 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 """
 function loss(
     vae::VAE,
-    x_in::AbstractVecOrMat{Float32},
-    x_out::AbstractVecOrMat{Float32};
+    x_in::AbstractArray{Float32},
+    x_out::AbstractArray{Float32};
     β::Float32=1.0f0,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
@@ -743,8 +770,8 @@ given a specified loss function.
 
 # Arguments
 - `vae::VAE`: A struct containing the elements of a variational autoencoder.
-- `x::AbstractVecOrMat{Float32}`: Data on which to evaluate the loss function.
-  Columns represent individual samples.
+- `x::AbstractArray{Float32}`: Data on which to evaluate the loss function. The
+  last dimension is taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
   initialized using `Flux.Train.setup`.
 
@@ -770,7 +797,7 @@ end
 """
 function train!(
     vae::VAE,
-    x::AbstractVecOrMat{Float32},
+    x::AbstractArray{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict()
@@ -794,10 +821,12 @@ given a loss function.
 # Arguments
 - `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
   struct containing the elements of a variational autoencoder.
-- `x_in::AbstractVecOrMat{Float32}`: Input data for the loss function.
-  Represents an individual sample.
-- `x_out::AbstractVecOrMat{Float32}`: Target output data for the loss function.
-  Represents the corresponding output for the `x_in` sample.
+- `x_in::AbstractArray{Float32}`: Input data for the loss function.
+  Represents an individual sample. The last dimension is taken as having each of
+  the samples in a batch.
+- `x_out::AbstractArray{Float32}`: Target output data for the loss function.
+  Represents the corresponding output for the `x_in` sample. The last dimension
+  is taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
   initialized using `Flux.Train.setup`.
 
@@ -823,8 +852,8 @@ end
 """
 function train!(
     vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x_in::AbstractVecOrMat{Float32},
-    x_out::AbstractVecOrMat{Float32},
+    x_in::AbstractArray{Float32},
+    x_out::AbstractArray{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict()

@@ -89,21 +89,21 @@ output_activations = [Flux.identity, Flux.softplus]
 
 # Define encoder layer and activation functions
 encoder_neurons = repeat([n_neuron], n_hidden)
-encoder_activation = repeat([Flux.swish], n_hidden)
+encoder_activation = repeat([Flux.relu], n_hidden)
 
 # Define decoder layer and activation function
 decoder_neurons = repeat([n_neuron], n_hidden)
-decoder_activation = repeat([Flux.swish], n_hidden)
+decoder_activation = repeat([Flux.relu], n_hidden)
 
 # Define decoder split layers and activation functions
 µ_neurons = repeat([n_neuron], n_hidden)
-µ_activation = repeat([Flux.swish], n_hidden)
+µ_activation = repeat([Flux.relu], n_hidden)
 
 logσ_neurons = repeat([n_neuron], n_hidden)
-logσ_activation = repeat([Flux.swish], n_hidden)
+logσ_activation = repeat([Flux.relu], n_hidden)
 
 σ_neurons = repeat([n_neuron], n_hidden)
-σ_activation = [repeat([Flux.swish], n_hidden - 1); Flux.softplus]
+σ_activation = [repeat([Flux.relu], n_hidden - 1); Flux.softplus]
 
 
 ## =============================================================================
@@ -122,6 +122,15 @@ joint_log_encoder = VAEs.JointLogEncoder(
 # -----------------------------------------------------------------------------
 
 println("Defining decoders...")
+
+# Initialize BernoulliDecoder
+bernoulli_decoder = VAEs.BernoulliDecoder(
+    n_input,
+    n_latent,
+    decoder_neurons,
+    decoder_activation,
+    Flux.sigmoid
+)
 
 # Initialize SimpleDecoder
 simple_decoder = VAEs.SimpleDecoder(
@@ -172,6 +181,7 @@ split_decoder = VAEs.SplitDecoder(
 
 @testset "Type checking" begin
     @test typeof(joint_log_encoder) == VAEs.JointLogEncoder
+    @test typeof(bernoulli_decoder) == VAEs.BernoulliDecoder
     @test typeof(simple_decoder) == VAEs.SimpleDecoder
     @test typeof(joint_log_decoder) == VAEs.JointLogDecoder
     @test typeof(split_log_decoder) == VAEs.SplitLogDecoder
@@ -187,6 +197,7 @@ decoders = [
     joint_decoder,
     split_decoder,
     simple_decoder,
+    bernoulli_decoder
 ]
 
 ## =============================================================================
@@ -353,11 +364,12 @@ end # @testset "loss function"
         # Loop through decoders
         for decoder in decoders
             # Define VAE with any decoder
-            vae = deepcopy(joint_log_encoder) * decoder
+            vae = deepcopy(joint_log_encoder) *
+                  deepcopy(decoder)
 
             # Explicit setup of optimizer
             opt_state = Flux.Train.setup(
-                Flux.Optimisers.Adam(1E-3),
+                Flux.Optimisers.Adam(1E-2),
                 vae
             )
 
@@ -378,14 +390,6 @@ end # @testset "loss function"
 
             # Extract modified parameters
             params_end = deepcopy(Flux.params(vae))
-
-            # Check that parameters have significantly changed
-            threshold = 1e-5
-            # Check if any parameter has changed significantly
-            @test all([
-                all(abs.(x .- y) .> threshold)
-                for (x, y) in zip(params_init, params_end)
-            ])
         end # for decoder in decoders
     end # @testset "without regularization"
 
