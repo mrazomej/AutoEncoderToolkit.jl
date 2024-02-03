@@ -2394,6 +2394,7 @@ function general_leapfrog_tempering_step(
     # sampling given the inverse of the covariance matrix.
     γₒ = sample_centered_MvNormal_from_inverse_covariance(G⁻¹)
 
+    return γₒ 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
 
