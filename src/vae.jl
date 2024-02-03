@@ -18,7 +18,7 @@ using ..AutoEncode: AbstractVariationalAutoEncoder,
 using ..AutoEncode: JointLogEncoder
 
 # Import Concrete Decoder Types
-using ..AutoEncode: SimpleDecoder,
+using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
     JointLogDecoder, SplitLogDecoder,
     JointDecoder, SplitDecoder
 
@@ -178,7 +178,7 @@ end # struct
 Flux.@functor VAE
 
 @doc raw"""
-        (vae::VAE)(x::AbstractVecOrMat{Float32}; latent::Bool=false)
+        (vae::VAE)(x::AbstractArray{Float32}; latent::Bool=false)
 
 Perform the forward pass of a Variational Autoencoder (VAE).
 
@@ -190,9 +190,10 @@ the decoder to obtain the output.
 
 # Arguments
 - `vae::VAE`: The VAE used to encode the input data and decode the latent space.
-- `x::AbstractVecOrMat{Float32}`: The input data, where `Float32` is a subtype
-  of `AbstractFloat`. If a matrix is provided, each column should represent a
-  single data point.
+- `x::AbstractArray{Float32}`: The input data, where `Float32` is a subtype of
+  `AbstractFloat`. If a matrix is provided, each column should represent a
+  single data point. If a tensor is provided, the last dimension should
+  represent each data point.
 
 # Optional Keyword Arguments
 - `latent::Bool`: Whether to return the latent variables along with the decoder
@@ -223,9 +224,9 @@ outputs = vae(x, latent=true)
 ```
 """
 function (vae::VAE)(
-    x::AbstractVecOrMat{Float32};
+    x::AbstractArray{T};
     latent::Bool=false,
-)
+) where {T<:AbstractFloat}
     # Run input through encoder to obtain mean and log std
     encoder_outputs = vae.encoder(x)
 
@@ -251,6 +252,81 @@ end # function
 # VAE loss functions
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # ==============================================================================
+
+# ==============================================================================
+# Bernoulli decoder reconstruction loss
+# ==============================================================================
+
+@doc raw"""
+        reconstruction_decoder(decoder, x, vae_outputs)
+
+Calculate the reconstruction loss for a Bernoulli decoder in a variational
+autoencoder.
+
+This function computes the negative log-likelihood of the input data `x` given
+the Bernoulli distribution parameters `p` provided by the decoder. It assumes
+that the actual mapping from the latent space to the parameters `p` is done by
+the specified `decoder`.
+
+# Arguments
+- `decoder::BernoulliDecoder`: Decoder network of type `BernoulliDecoder`, which
+  is assumed to have already mapped the latent variables to the parameters of
+  the Bernoulli distribution.
+- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
+  compared with the reconstruction produced by the decoder. The last dimension
+  is taken as having each of the samples in a batch.
+- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
+
+# Returns
+- `Float32`: The average reconstruction loss computed across all provided
+  samples and data points.
+
+# Note
+- It is assumed that the mapping from latent space to decoder parameters (`p`)
+  has been performed prior to calling this function. The `decoder` argument is
+  provided to indicate the type of decoder network used, but it is not used
+  within the function itself.
+"""
+function reconstruction_decoder(
+    decoder::BernoulliDecoder,
+    x::AbstractArray{Float32},
+    vae_outputs::NamedTuple
+)
+    # Unpack needed outputs
+    p = vae_outputs.decoder.p
+
+    # Check if input is vector
+    if ndims(x) == 1
+        # Define batch size as 1
+        batch_size = 1
+        # Validate input dimensions
+        if length(x) ≠ length(p)
+            throw(
+                DimensionMismatch(
+                    "Input data and decoder outputs must have the same dimensions"
+                )
+            )
+        end
+    else
+        # Define batch size as the last dimension
+        batch_size = last(size(x))
+        # Validate input dimensions
+        if all(size(x) .≠ size(p))
+            throw(
+                DimensionMismatch(
+                    "Input data and decoder outputs must have the same dimensions"
+                )
+            )
+        end
+    end # if
+
+    # Compute average reconstruction loss as the log-likelihood of a Bernoulli
+    # decoder.
+    log_likelihood = sum(Flux.Losses.logitbinarycrossentropy.(x, p))
+
+    # Average over the number of samples and batch size
+    return -log_likelihood / batch_size
+end # function
 
 # ==============================================================================
 # Gaussian decoder reconstruction loss
