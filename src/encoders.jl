@@ -491,6 +491,10 @@ function (encoder::JointLogEncoder)(
     # Map from last encoder layer to latent space log standard deviation
     logσ = encoder.logσ(h)
 
+    # Drop dimensions of size 1 from µ and logσ
+    µ = dropdims(µ, dims=tuple(findall(size(µ) .== 1)...))
+    logσ = dropdims(logσ, dims=tuple(findall(size(logσ) .== 1)...))
+
     # Return description of latent variables
     return (µ=µ, logσ=logσ,)
 end # function
@@ -647,6 +651,10 @@ function (encoder::JointEncoder)(
     µ = encoder.µ(h)
     # Map from last encoder layer to latent space log standard deviation
     σ = encoder.logσ(h)
+
+    # Drop dimensions of size 1 from µ and σ
+    µ = dropdims(µ, dims=tuple(findall(size(µ) .== 1)...))
+    σ = dropdims(σ, dims=tuple(findall(size(σ) .== 1)...))
 
     # Return description of latent variables
     return (µ=µ, σ=σ,)
