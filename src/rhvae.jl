@@ -12,6 +12,9 @@ import Random
 import StatsBase
 import Distributions
 
+# Import library to use Ellipsis Notation
+using EllipsisNotation
+
 # Import Abstract Types
 using ..AutoEncode: AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractGaussianEncoder,
@@ -24,7 +27,7 @@ using ..AutoEncode: AbstractVariationalAutoEncoder,
 using ..AutoEncode: JointLogEncoder
 
 # Import Concrete Decoder Types
-using ..AutoEncode: SimpleDecoder,
+using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
     JointLogDecoder, SplitLogDecoder,
     JointDecoder, SplitDecoder
 
@@ -244,37 +247,25 @@ regularization factor, and each column of `centroids` are the cᵢ.
   `AbstractVariationalEncoder` and an `AbstractVariationalDecoder`.
 - `metric_chain::MetricChain`: The `MetricChain` that computes the Riemannian
   metric in the latent space.
-- `centroids_data::Matrix{Float32}`: A matrix where each column represents a
-  data point xᵢ from which the centroids cᵢ are computed by passing them through
-  the encoder.
-- `centroids_latent::Matrix{Float32}`: A matrix where each column represents a
-  centroid cᵢ in the inverse metric computation.
-- `L::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ matrix.
-  L_ψᵢ can intuitively be seen as the triangular matrix in the Cholesky
+- `centroids_data::AbstractArray{Float32}`: An array where the last dimension
+  represents a data point xᵢ from which the centroids cᵢ are computed by passing
+  them through the encoder.
+- `centroids_latent::AbstractMatrix{Float32}`: A matrix where each column
+  represents a centroid cᵢ in the inverse metric computation.
+- `L::AbstractArray{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
+  matrix. L_ψᵢ can intuitively be seen as the triangular matrix in the Cholesky
   decomposition of G⁻¹(centroids_dataᵢ) up to a regularization factor.
-- `M::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ L_ψᵢᵀ.
+- `M::AbstractArray{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
+  L_ψᵢᵀ.
 - `T::Float32`: The temperature parameter in the inverse metric computation.  
 - `λ::Float32`: The regularization factor in the inverse metric computation.
-
-# Constructor
-The constructor for `RHVAE` takes the following arguments:
-- `vae`: The underlying VAE.
-- `metric_chain`: The `MetricChain` that computes the Riemannian metric.
-- `centroids_data`: A matrix of data points used to compute the centroids.
-- `T`: The temperature parameter.
-- `λ`: The regularization factor.
-
-It initializes `centroids_latent` as a zero matrix with the same number of
-columns as `centroids_data` and number of rows equal to the dimensionality of
-the latent space. `L` and `M` are initialized as 3D arrays of identity matrices,
-with the third dimension equal to the number of columns in `centroids_data`.
 """
 struct RHVAE{
     V<:VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}
 } <: AbstractVariationalAutoEncoder
     vae::V
     metric_chain::MetricChain
-    centroids_data::AbstractMatrix{Float32}
+    centroids_data::AbstractArray{Float32}
     centroids_latent::AbstractMatrix{Float32}
     L::AbstractArray{Float32,3}
     M::AbstractArray{Float32,3}
@@ -321,17 +312,24 @@ function RHVAE(vae, metric_chain, centroids_data, T, λ)
     # Extract dimensionality of latent space
     ldim = size(vae.encoder.µ.weight, 1)
 
+    # Extract number of centroids_data
+    if ndims(centroids_data) == 1
+        # Define batch size as 1
+        n_centroids = 1
+    else
+        # Define batch size as the last dimension
+        n_centroids = last(size(centroids_data))
+    end # if
+
     # Initialize centroids_latent
-    centroids_latent = zeros(
-        Float32, ldim, size(centroids_data, 2)
-    )
+    centroids_latent = zeros(Float32, ldim, n_centroids)
 
     # Initialize L as a 3D array of identity matrices
     L = reduce(
         (x, y) -> cat(x, y, dims=3),
         [
             Matrix{Float32}(LinearAlgebra.I(ldim))
-            for _ in axes(centroids_data, 2)
+            for _ in 1:n_centroids
         ]
     )
 
@@ -525,35 +523,23 @@ function G_inv(
     M::AbstractArray{N,3},
     T::N,
     λ::N,
-) where {N<:Any}
+) where {N<:AbstractFloat}
     # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
     # - We use the reshape function to broadcast the operation over the third
     # dimension of M.
     # - The Zygote.dropgrad function is used to prevent the gradient from being
     # computed with respect to T.
-    LLexp = dropdims(
-        sum(
-            M .*
+    LLexp = M .*
             reshape(
-                exp.(
-                    sum(
-                        abs2,
-                        (z .- centroids_latent) ./ Zygote.dropgrad(T),
-                        dims=1
-                    )
-                ),
-                1, 1, :
-            ),
-            dims=3
-        ),
-        dims=3
+        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)),
+        1, 1, :
     )
 
     # Compute the regularization term.
-    Λ = Zygote.dropgrad(LinearAlgebra.I(length(z)) .* λ)
+    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(length(z)) .* λ))
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
-    return LLexp + Λ
+    return dropdims(sum(LLexp, dims=3), dims=3) + Λ
 end # function
 
 # ------------------------------------------------------------------------------
@@ -748,7 +734,7 @@ end # function
 
 @doc raw"""
     hamiltonian(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         decoder::AbstractVariationalDecoder{T},
@@ -786,7 +772,9 @@ where D is the dimension of the latent space, and G(z) is the metric tensor at
 the point `z`.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
@@ -814,7 +802,7 @@ the point `z`.
 A scalar representing the Hamiltonian at the point `z` with the momentum `ρ`.
 """
 function hamiltonian(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
@@ -824,7 +812,7 @@ function hamiltonian(
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
 ) where {T<:Float32}
-    # 1. Potntial energy U(z|x)
+    # 1. Potential energy U(z|x)
 
     # Compute log-likelihood
     loglikelihood = decoder_loglikelihood(decoder, x, z)
@@ -846,7 +834,7 @@ end # function
 
 @doc raw"""
     hamiltonian(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         rhvae::RHVAE;
@@ -881,7 +869,9 @@ where D is the dimension of the latent space, and G(z) is the metric tensor at
 the point `z`.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -908,7 +898,7 @@ the point `z`.
 A scalar representing the Hamiltonian at the point `z` with the momentum `ρ`.
 """
 function hamiltonian(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     rhvae::RHVAE;
@@ -937,7 +927,7 @@ end # function
 
 @doc raw"""
     ∇hamiltonian(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         decoder::AbstractVariationalDecoder,
@@ -976,7 +966,9 @@ where D is the dimension of the latent space, and G(z) is the metric tensor at
 the point `z`.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
@@ -1006,7 +998,7 @@ A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` wit
 respect to variable `var`.
 """
 function ∇hamiltonian(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
@@ -1050,7 +1042,7 @@ end # function
 
 @doc raw"""
     ∇hamiltonian(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         rhvae::RHVAE,
@@ -1088,7 +1080,9 @@ where D is the dimension of the latent space, and G(z) is the metric tensor at
 the point `z`.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -1117,7 +1111,7 @@ A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` wit
 respect to variable `var`.
 """
 function ∇hamiltonian(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     rhvae::RHVAE,
@@ -1148,7 +1142,7 @@ end # function
 
 @doc raw"""
     ∇hamiltonian_finite(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         decoder::AbstractVariationalDecoder,
@@ -1189,7 +1183,9 @@ where D is the dimension of the latent space, and G(z) is the metric tensor at
 the point `z`.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
@@ -1219,7 +1215,7 @@ A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` wit
 respect to variable `var`.
 """
 function ∇hamiltonian_finite(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
@@ -1266,7 +1262,7 @@ end # function
 
 @doc raw"""
     ∇hamiltonian_finite(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         rhvae::RHVAE,
@@ -1306,7 +1302,9 @@ where D is the dimension of the latent space, and G(z) is the metric tensor at
 the point `z`.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -1335,7 +1333,7 @@ A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` wit
 respect to variable `var`.
 """
 function ∇hamiltonian_finite(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     rhvae::RHVAE,
@@ -1370,7 +1368,7 @@ end # function
 
 @doc raw"""
     _leapfrog_first_step(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         decoder::AbstractVariationalDecoder,
@@ -1411,7 +1409,9 @@ where `∇H` is the gradient of the Hamiltonian with respect to the position
 variables `z`. The result is returned as ρ̃.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
@@ -1432,7 +1432,7 @@ A vector representing the updated momentum after performing the first step of
 the generalized leapfrog integrator.
 """
 function _leapfrog_first_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
@@ -1463,9 +1463,11 @@ function _leapfrog_first_step(
     return ρ̃
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     _leapfrog_first_step(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         rhvae::RHVAE;
@@ -1504,7 +1506,9 @@ where `∇H` is the gradient of the Hamiltonian with respect to the position
 variables `z`. The result is returned as ρ̃.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -1524,7 +1528,7 @@ A vector representing the updated momentum after performing the first step of
 the generalized leapfrog integrator.
 """
 function _leapfrog_first_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     rhvae::RHVAE;
@@ -1558,7 +1562,7 @@ end # function
 
 @doc raw"""
     _leapfrog_second_step(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         decoder::AbstractVariationalDecoder,
@@ -1600,7 +1604,9 @@ where `∇H` is the gradient of the Hamiltonian with respect to the momentum
 variables `ρ`. The result is returned as z̄.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
@@ -1620,7 +1626,7 @@ A vector representing the updated position after performing the second step of
 the generalized leapfrog integrator.
 """
 function _leapfrog_second_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
@@ -1658,7 +1664,7 @@ end # function
 
 @doc raw"""
     _leapfrog_second_step(
-            x::AbstractVector{T},
+            x::AbstractArray{T},
             z::AbstractVector{T},
             ρ::AbstractVector{T},
             rhvae::RHVAE;
@@ -1698,7 +1704,9 @@ where `∇H` is the gradient of the Hamiltonian with respect to the momentum
 variables `ρ`. The result is returned as z̄.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -1719,7 +1727,7 @@ A vector representing the updated position after performing the second step of
 the generalized leapfrog integrator.
 """
 function _leapfrog_second_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     rhvae::RHVAE;
@@ -1753,7 +1761,7 @@ end # function
 
 @doc raw"""
     _leapfrog_third_step(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         decoder::AbstractVariationalDecoder,
@@ -1792,7 +1800,9 @@ where `∇H` is the gradient of the Hamiltonian with respect to the position
 variables `z`. The result is returned as ρ̃.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
@@ -1811,7 +1821,7 @@ A vector representing the updated momentum after performing the third step of
 the generalized leapfrog integrator.
 """
 function _leapfrog_third_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
@@ -1835,7 +1845,7 @@ end # function
 
 @doc raw"""
     _leapfrog_third_step(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         rhvae::RHVAE;
@@ -1873,7 +1883,9 @@ where `∇H` is the gradient of the Hamiltonian with respect to the position
 variables `z`. The result is returned as ρ̃.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -1891,7 +1903,7 @@ A vector representing the updated momentum after performing the first step of
 the generalized leapfrog integrator.
 """
 function _leapfrog_third_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     rhvae::RHVAE;
@@ -1923,7 +1935,7 @@ end # function
 
 @doc raw"""
     general_leapfrog_step(
-        x::AbstractVector{T},
+        x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
         decoder::AbstractVariationalDecoder,
@@ -1959,7 +1971,9 @@ This function performs these three steps in sequence, using the
 helper functions.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported, but the last dimension of the
+  array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
@@ -1980,7 +1994,7 @@ A tuple `(z̄, ρ̄)` representing the updated position and momentum after
 performing the full leapfrog step.
 """
 function general_leapfrog_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
@@ -2022,7 +2036,7 @@ end # function
 
 @doc raw"""
     general_leapfrog_step(
-        x::AbstractMatrix{T},
+        x::AbstractArray{T},
         z::AbstractMatrix{T},
         ρ::AbstractMatrix{T},
         decoder::AbstractVariationalDecoder,
@@ -2058,8 +2072,8 @@ This function performs these three steps in sequence, using the
 helper functions.
 
 # Arguments
-- `x::AbstractMatrix{T}`: The points in the data space. Each column represents a
-  point.
+- `x::AbstractArray{T}`: The points in the data space. The last dimension of
+  the array must contain each data point.
 - `z::AbstractMatrix{T}`: The points in the latent space. Each column represents
   a point.
 - `ρ::AbstractMatrix{T}`: The momentum variables. Each column represents a data
@@ -2071,8 +2085,8 @@ helper functions.
 - `ϵ::Union{T,<:AbstractVector{T}}=0.01f0`: The step size. Default is 0.01.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of the
-  Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
+  the Hamiltonian. Default is `∇hamiltonian_finite`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `decoder_loglikelihood`, `position_logprior`,
   `momentum_logprior`, and `G_inv`.
@@ -2082,7 +2096,7 @@ A tuple `(z̄, ρ̄)` representing the updated position and momentum after
 performing the full leapfrog step.
 """
 function general_leapfrog_step(
-    x::AbstractMatrix{T},
+    x::AbstractArray{T},
     z::AbstractMatrix{T},
     ρ::AbstractMatrix{T},
     decoder::AbstractVariationalDecoder,
@@ -2097,14 +2111,26 @@ function general_leapfrog_step(
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
-    # Apply general_leapfrog_step to each column and collect the results
-    results = [
-        general_leapfrog_step(
-            x[:, i], z[:, i], ρ[:, i], decoder, metric_param;
-            ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
-        )
-        for i in axes(z, 2)
-    ]
+    # Apply general_leapfrog_step to each data point
+    if typeof(x) <: AbstractMatrix
+        results = [
+            general_leapfrog_step(
+                x[:, i], z[:, i], ρ[:, i], decoder, metric_param;
+                ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+            )
+            for i in axes(z, 2)
+        ]
+    else
+        # For array inputs we use the EllipsisNotation package to index the last
+        # dimension
+        results = [
+            general_leapfrog_step(
+                x[.., i:i], z[:, i], ρ[:, i], decoder, metric_param;
+                ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+            )
+            for i in axes(z, 2)
+        ]
+    end
 
     # Split the results into separate matrices for z̄ and ρ̄
     z̄ = reduce(hcat, [result[1] for result in results])
@@ -2117,7 +2143,7 @@ end # function
 
 @doc raw"""
         general_leapfrog_step(
-                x::AbstractVector{T},
+                x::AbstractArray{T},
                 z::AbstractVector{T},
                 ρ::AbstractVector{T},
                 rhvae::RHVAE;
@@ -2151,7 +2177,8 @@ This function performs these three steps in sequence, using the
 `_leapfrog_first_step` and `_leapfrog_second_step` helper functions.
 
 # Arguments
-- `x::AbstractVector{T}`: The point in the data space.
+- `x::AbstractArray{T}`: The point in the data space. If array, the last
+  dimension must be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
 - `rhvae::RHVAE`: The `RHVAE` instance.
@@ -2161,8 +2188,8 @@ This function performs these three steps in sequence, using the
   0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of the
-  Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
+  the Hamiltonian. Default is `∇hamiltonian_finite`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `decoder_loglikelihood`, `position_logprior`,
   `momentum_logprior` and `G_inv`.
@@ -2172,7 +2199,7 @@ A tuple `(z̄, ρ̄)` representing the updated position and momentum after
 performing the full leapfrog step.
 """
 function general_leapfrog_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
     rhvae::RHVAE;
@@ -2213,7 +2240,7 @@ end # function
 
 @doc raw"""
     general_leapfrog_step(
-        x::AbstractMatrix{T},
+        x::AbstractArray{T},
         z::AbstractMatrix{T},
         ρ::AbstractMatrix{T},
         rhvae::RHVAE;
@@ -2246,8 +2273,8 @@ input matrices, using the `_leapfrog_first_step` and `_leapfrog_second_step`
 helper functions.
 
 # Arguments
-- `x::AbstractMatrix{T}`: The points in the data space. Each column represents a
-  point.
+- `x::AbstractArray{T}`: The points in the data space. The last dimension of
+  the array must contain each data point.
 - `z::AbstractMatrix{T}`: The points in the latent space. Each column represents
   a point.
 - `ρ::AbstractMatrix{T}`: The momenta. Each column represents a momentum.
@@ -2269,7 +2296,7 @@ Two matrices `(z̄, ρ̄)` representing the updated positions and momenta after
 performing the full leapfrog step on each column of the input matrices.
 """
 function general_leapfrog_step(
-    x::AbstractMatrix{T},
+    x::AbstractArray{T},
     z::AbstractMatrix{T},
     ρ::AbstractMatrix{T},
     rhvae::RHVAE;
@@ -2283,14 +2310,26 @@ function general_leapfrog_step(
         G_inv=G_inv,
     ),
 ) where {T<:Float32}
-    # Apply general_leapfrog_step to each column and collect the results
-    results = [
-        general_leapfrog_step(
-            x[:, i], z[:, i], ρ[:, i], rhvae;
-            ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
-        )
-        for i in axes(z, 2)
-    ]
+    # Apply general_leapfrog_step to each data point
+    if typeof(x) <: AbstractMatrix
+        results = [
+            general_leapfrog_step(
+                x[:, i], z[:, i], ρ[:, i], rhvae;
+                ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+            )
+            for i in axes(z, 2)
+        ]
+    else
+        # For array inputs we use the EllipsisNotation package to index the last
+        # dimension
+        results = [
+            general_leapfrog_step(
+                x[.., i:i], z[:, i], ρ[:, i], rhvae;
+                ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+            )
+            for i in axes(z, 2)
+        ]
+    end
 
     # Split the results into separate matrices for z̄ and ρ̄
     z̄ = reduce(hcat, [result[1] for result in results])
@@ -2305,7 +2344,7 @@ end # function
 
 @doc raw"""
     general_leapfrog_tempering_step(
-            x::AbstractVector{T},
+            x::AbstractArray{T},
             zₒ::AbstractVector{T},
             decoder::AbstractVariationalDecoder,
             metric_param::NamedTuple;
@@ -2327,7 +2366,8 @@ Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractVector{T}`: The data to be processed. 
+- `x::AbstractArray{T}`: The data to be processed. If `Array`, the last
+  dimension must be of size 1.
 - `zₒ::AbstractVector{T}`: The initial latent variable. 
 - `decoder::AbstractVariationalDecoder`: The decoder of the RHVAE model.
 - `metric_param::NamedTuple`: The parameters of the metric tensor.
@@ -2370,7 +2410,7 @@ Ensure the input data `x` and the initial latent variable `zₒ` match the
 expected input dimensionality for the RHVAE model.
 """
 function general_leapfrog_tempering_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     zₒ::AbstractVector{T},
     decoder::AbstractVariationalDecoder,
     metric_param::NamedTuple;
@@ -2394,7 +2434,6 @@ function general_leapfrog_tempering_step(
     # sampling given the inverse of the covariance matrix.
     γₒ = sample_centered_MvNormal_from_inverse_covariance(G⁻¹)
 
-    return γₒ 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
 
@@ -2436,7 +2475,7 @@ end # function
 
 @doc raw"""
         general_leapfrog_tempering_step(
-                x::AbstractMatrix{T},
+                x::AbstractArray{T},
                 zₒ::AbstractMatrix{T},
                 decoder::AbstractVariationalDecoder,
                 metric_param::NamedTuple;
@@ -2458,8 +2497,8 @@ Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractMatrix{T}`: The data to be processed. Each column represents a
-  data point.
+- `x::AbstractArray{T}`: The data to be processed. The last dimension must
+  contain each of the data points.
 - `zₒ::AbstractMatrix{T}`: The initial latent variable. Each column represents a
   data point.
 - `decoder::AbstractVariationalDecoder`: The decoder of the RHVAE model.
@@ -2503,7 +2542,7 @@ Ensure the input data `x` and the initial latent variable `zₒ` match the
 expected input dimensionality for the RHVAE model.
 """
 function general_leapfrog_tempering_step(
-    x::AbstractMatrix{T},
+    x::AbstractArray{T},
     zₒ::AbstractMatrix{T},
     decoder::AbstractVariationalDecoder,
     metric_param::NamedTuple;
@@ -2573,7 +2612,7 @@ end # function
 
 @doc raw"""
         general_leapfrog_tempering_step(
-                x::AbstractVector{T},
+                x::AbstractArray{T},
                 zₒ::AbstractVector{T},
                 rhvae::RHVAE;
                 ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -2594,7 +2633,8 @@ Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractVector{T}`: The data to be processed. 
+- `x::AbstractArray{T}`: The data to be processed. If `Array`, the last
+  dimension must be of size 1.
 - `zₒ::AbstractVector{T}`: The initial latent variable. 
 - `rhvae::RHVAE`: The Riemannian Hamiltonian Variational Autoencoder model.
 
@@ -2636,7 +2676,7 @@ Ensure the input data `x` and the initial latent variable `zₒ` match the
 expected input dimensionality for the RHVAE model.
 """
 function general_leapfrog_tempering_step(
-    x::AbstractVector{T},
+    x::AbstractArray{T},
     zₒ::AbstractVector{T},
     rhvae::RHVAE;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -2652,9 +2692,6 @@ function general_leapfrog_tempering_step(
     ),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:Float32}
-    # Extract latent-space dimensionality
-    ldim = size(zₒ, 1)
-
     # Compute inverse metric for initial point
     G⁻¹ = ∇H_kwargs.G_inv(zₒ, rhvae)
 
@@ -2703,7 +2740,7 @@ end # function
 
 @doc raw"""
         general_leapfrog_tempering_step(
-                x::AbstractMatrix{T},
+                x::AbstractArray{T},
                 zₒ::AbstractMatrix{T},
                 rhvae::RHVAE;
                 ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -2724,8 +2761,8 @@ Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractMatrix{T}`: The data to be processed. Each column represents a
-  point.
+- `x::AbstractArray{T}`: The data to be processed. The last dimension must
+  contain each of the data points.
 - `zₒ::AbstractMatrix{T}`: The initial latent variable. Each column represents a
   point.
 - `rhvae::RHVAE`: The Riemannian Hamiltonian Variational Autoencoder model.
@@ -2768,7 +2805,7 @@ Ensure the input data `x` and the initial latent variable `zₒ` match the
 expected input dimensionality for the RHVAE model.
 """
 function general_leapfrog_tempering_step(
-    x::AbstractMatrix{T},
+    x::AbstractArray{T},
     zₒ::AbstractMatrix{T},
     rhvae::RHVAE;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -2838,8 +2875,8 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
-        x::AbstractVecOrMat{T},
+    (rhvae::RHVAE{VAE{AbstractGaussianLogEncoder,D}})(
+        x::AbstractArray{T},
         metric_param::NamedTuple;
         ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
         K::Int=3,
@@ -2854,17 +2891,16 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         latent::Bool=false,
-    ) where {D<:AbstractGaussianDecoder,T<:Float32}
+    ) where {D<:AbstractVariationalDecoder,T<:Float32}
 
 Run the Riemannian Hamiltonian Variational Autoencoder (RHVAE) on the given
 input. This method takes the parameters to compute the metric tensor as a
 separate input in the form of a NamedTuple.
 
 # Arguments
-- `x::AbstractVecOrMat{T}`: The input to the RHVAE. If it is a vector, it
-        represents a single data point. If it is a matrix, each column
-        corresponds to a specific data point, and each row corresponds to a
-        dimension of the input space.
+- `x::AbstractArray{T}`: The input to the RHVAE. If `Vector`, it represents a
+  single data point. If `Array`, the last dimension must contain each of the
+  data points.
 - `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
 
 # Optional Keyword Arguments
@@ -2876,8 +2912,8 @@ separate input in the form of a NamedTuple.
   Carlo (HMC) part of the RHVAE.
 - `βₒ::T=0.3f0`: The initial inverse temperature for the tempering schedule.
 - `steps::Int=3`: The number of fixed-point iterations to perform.  
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of the
-  Hamiltonian in the HMC part of the RHVAE.
+- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
+  the Hamiltonian in the HMC part of the RHVAE.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
   to the `∇H` function. Default is a NamedTuple with `decoder_loglikelihood`,
   `position_logprior`, `momentum_logprior`, and `G_inv`.  
@@ -2909,8 +2945,8 @@ decoder to obtain the output.
 Ensure that the dimensions of `x` match the input dimensions of the RHVAE, and
 that the dimensions of `ϵ` match the dimensions of the latent space.
 """
-function (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
-    x::AbstractVecOrMat{T},
+function (rhvae::RHVAE{VAE{E,D}})(
+    x::AbstractArray{T},
     metric_param::NamedTuple;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
     K::Int=3,
@@ -2925,7 +2961,9 @@ function (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
-) where {D<:AbstractGaussianDecoder,T<:Float32}
+) where {
+    E<:AbstractGaussianLogEncoder,D<:AbstractVariationalDecoder,T<:Float32
+}
     # Run input through encoder
     encoder_outputs = rhvae.vae.encoder(x)
 
@@ -2958,7 +2996,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
+    (rhvae::RHVAE{VAE{AbstractGaussianLogEncoder,D}})(
         x::AbstractVecOrMat{T};
         ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
         K::Int=3,
@@ -2972,7 +3010,7 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         latent::Bool=false,
-    ) where {D<:AbstractGaussianDecoder,T<:Float32}
+    ) where {D<:AbstractVariationalDecoder,T<:Float32}
 
 Run the Riemannian Hamiltonian Variational Autoencoder (RHVAE) on the given
 input.
@@ -3025,8 +3063,8 @@ decoder to obtain the output.
 Ensure that the dimensions of `x` match the input dimensions of the RHVAE, and
 that the dimensions of `ϵ` match the dimensions of the latent space.
 """
-function (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
-    x::AbstractVecOrMat{T};
+function (rhvae::RHVAE{VAE{E,D}})(
+    x::AbstractArray{T};
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
     K::Int=3,
     βₒ::T=0.3f0,
@@ -3040,7 +3078,9 @@ function (rhvae::RHVAE{VAE{JointLogEncoder,D}})(
     ),
     tempering_schedule::Function=quadratic_tempering,
     latent::Bool=false,
-) where {D<:AbstractGaussianDecoder,T<:Float32}
+) where {
+    E<:AbstractGaussianLogEncoder,D<:AbstractVariationalDecoder,T<:Float32
+}
     # Run input through encoder
     encoder_outputs = rhvae.vae.encoder(x)
 
