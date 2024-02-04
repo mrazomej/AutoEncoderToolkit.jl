@@ -591,6 +591,93 @@ function centroids_kmeans(
     end # if
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    centroids_kmeans(
+        x::AbstractArray{<:AbstractFloat}, n_centroids::Int; reshape_centroids::Bool=true, assign::Bool=false
+    )
+
+Perform k-means clustering on the input and return the centers. This function
+can be used to down-sample the number of points used when computing the metric
+tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+The input data is flattened into a matrix before performing k-means clustering.
+This is done because k-means operates on a set of data points in a vector space
+and cannot handle multi-dimensional arrays. Flattening the input ensures that
+the k-means algorithm can process the data correctly.
+
+By default, the output centroids are reshaped back to the original input shape.
+This is controlled by the `reshape_centroids` argument.
+
+# Arguments
+- `x::AbstractArray{<:AbstractFloat}`: The input data. It can be a
+  multi-dimensional array where the last dimension represents individual
+  samples.
+- `n_centroids::Int`: The number of centroids to compute.
+
+# Optional Keyword Arguments
+- `reshape_centroids::Bool=true`: If true, reshape the output centroids back to
+  the original input shape.
+- `assign::Bool=false`: If true, also return the assignments of each point to a
+  centroid.
+
+# Returns
+- If `assign` is false, returns a matrix where each column is a centroid.
+- If `assign` is true, returns a tuple where the first element is the matrix of
+  centroids and the second element is a vector of assignments.
+
+# Examples
+```julia
+data = rand(100, 10)
+centroids = centroids_kmeans(data, 5)
+```
+"""
+function centroids_kmeans(
+    x::AbstractArray{<:AbstractFloat},
+    n_centroids::Int;
+    reshape_centroids::Bool=true,
+    assign::Bool=false
+)
+    # Flatten input into matrix
+    x_flat = Flux.flatten(x)
+
+    # Check if output should be reshaped
+    if reshape_centroids
+        # Perform k-means clustering on the input and return the centers
+        if assign
+            # Compute clustering
+            clustering = Clustering.kmeans(x_flat, n_centroids)
+            # Extract centeres
+            centers = clustering.centers
+            # Reshape centers
+            centers = reshape(centers, size(x)[1:end-1]..., n_centroids)
+            # Return centers and assignments
+            return (clustering.centers, Clustering.assignments(clustering))
+        else
+            # Compute clustering
+            clustering = Clustering.kmeans(x_flat, n_centroids)
+            # Extract centeres
+            centers = clustering.centers
+            # Reshape centers
+            centers = reshape(centers, size(x)[1:end-1]..., n_centroids)
+            # Return centers
+            return centers
+        end # if
+    else
+        # Perform k-means clustering on the input and return the centers
+        if assign
+            # Compute clustering
+            clustering = Clustering.kmeans(x_flat, n_centroids)
+            # Return centers and assignments
+            return (clustering.centers, Clustering.assignments(clustering))
+        else
+            # Return centers
+            return Clustering.kmeans(x_flat, n_centroids).centers
+        end # if
+    end # if
+end # function
+
 # =============================================================================
 # Computing the log determinant of a matrix via LU decomposition.
 # This is inspired by TensorFlow's slogdet function.
