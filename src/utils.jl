@@ -832,7 +832,9 @@ function sample_centered_MvNormal_from_inverse_covariance(
     # Obtain covariance matrix by inverting the inverse covariance matrix. Note:
     # we use the Hermitian function to ensure that the matrix is symmetric,
     # which is not guaranteed by the inv function due to rounding errors.
-    Σ = LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹))
+    Σ = LinearAlgebra.Hermitian(
+        LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹))
+    )
     # Compute Choelsky decomposition of covariance matrix
     L = LinearAlgebra.cholesky(Σ).L
     # Sample from standard normal distribution
@@ -882,7 +884,9 @@ function sample_centered_MvNormal_from_inverse_covariance(
     #   which is not guaranteed by the inv function due to rounding errors.
     # - We pipe the input matrix to the CPU so that the inverse matrix can be
     #   computed, since inverting a matrix is not supported on the GPU.
-    Σ = LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹ |> Flux.cpu)) |> Flux.gpu
+    Σ = LinearAlgebra.Hermitian(
+        LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹ |> Flux.cpu))
+    ) |> Flux.gpu
     # Compute Choelsky decomposition of covariance matrix
     L = LinearAlgebra.cholesky(Σ).L
     # Sample from standard normal distribution
