@@ -524,7 +524,7 @@ function centroids_kmeans(
             # Reshape centers
             centers = reshape(centers, size(x)[1:end-1]..., n_centroids)
             # Return centers and assignments
-            return (clustering.centers, Clustering.assignments(clustering))
+            return (centers, Clustering.assignments(clustering))
         else
             # Compute clustering
             clustering = Clustering.kmeans(x_flat, n_centroids)
