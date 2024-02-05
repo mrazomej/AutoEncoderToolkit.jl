@@ -213,135 +213,6 @@ end # function
 # Convert vector to lower triangular matrix
 ## =============================================================================
 
-"""
-        tril_indices(n::Int, offset::Int=0)
-
-Return the row and column indices of the lower triangular part of an `n x n`
-matrix, shifted by a given offset.
-
-# Arguments
-- `n::Int`: The size of the square matrix.
-
-# Optional Keyword Arguments
-- `offset::Int=0`: The offset by which to shift the main diagonal. A positive
-  offset selects an upper diagonal, and a negative offset selects a lower
-  diagonal.
-
-# Returns
-- A matrix of size `n*(n+1)/2 x 2` containing the row and column indices of the
-  lower triangular part of the matrix, shifted by the offset. The indices are
-  1-based, following Julia's convention.
-
-# Note
-This function does not actually create a matrix. It only calculates the indices
-that you would use to access the lower triangular part of an `n x n` matrix,
-shifted by the offset.
-"""
-function tril_indices(n::Int; offset::Int=0)
-    # Initialize an empty array to store row indices
-    rows = Int[]
-    # Initialize an empty array to store column indices
-    cols = Int[]
-    # Iterate over the rows
-    for i in 1:n
-        # Iterate over the columns up to i+offset
-        for j in 1:(i+offset)
-            # Append the current row index to the rows array
-            push!(rows, i)
-            # Append the current column index to the cols array
-            push!(cols, j)
-        end # for j
-    end # for i
-    return hcat(rows, cols)
-end
-
-# ------------------------------------------------------------------------------
-
-"""
-    tril_indices(n::Int, m::Int; offset::Int=0)
-
-Return the row, column, and sample indices of the lower triangular part of an `n x n` matrix for `m` samples, shifted by a given offset.
-
-# Arguments
-- `n::Int`: The size of the square matrix.
-- `m::Int`: The number of samples.
-- `offset::Int=0`: The offset by which to shift the main diagonal. A positive offset selects an upper diagonal, and a negative offset selects a lower diagonal.
-
-# Returns
-- A matrix of size `n*(n+1)/2 x 3` containing the row, column, and sample indices of the lower triangular part of the matrix, shifted by the offset. The indices are 1-based, following Julia's convention.
-
-# Note
-This function does not actually create a matrix. It only calculates the indices that you would use to access the lower triangular part of an `n x n` matrix, shifted by the offset, for `m` samples.
-"""
-function tril_indices(n::Int, m::Int; offset::Int=0)
-    # Initialize an empty array to store row indices
-    rows = Int[]
-    # Initialize an empty array to store column indices
-    cols = Int[]
-    # Initialize an empty array to store sample indices
-    samples = Int[]
-    # Iterate over samples
-    for k in 1:m
-        # Iterate over the rows
-        for i in 1:n
-            # Iterate over the columns up to i+offset
-            for j in 1:(i+offset)
-                # Append the current row index to the rows array
-                push!(rows, i)
-                # Append the current column index to the cols array
-                push!(cols, j)
-                # Append the sample index
-                push!(samples, k)
-            end # for j
-        end # for i
-    end # for k
-    # Return a tuple of the row and column indices
-    return hcat(rows, cols, samples)
-end # function
-
-# ------------------------------------------------------------------------------
-
-"""
-    diag_indices(n::Int, m::Int)
-
-Return the row, column, and sample indices of the diagonal elements of an `n x
-n` matrix for `m` samples.
-
-# Arguments
-- `n::Int`: The size of the square matrix.
-- `m::Int`: The number of samples.
-
-# Returns
-- A tuple of three arrays: the row indices, the column indices, and the sample
-  indices of the diagonal elements of the matrix. The indices are 1-based,
-  following Julia's convention.
-
-# Note
-This function does not actually create a matrix. It only calculates the indices
-that you would use to access the diagonal elements of an `n x n` matrix for `m`
-samples.
-"""
-function diag_indices(n::Int, m::Int)
-    # Initialize an empty array to store row/column indices
-    indices = Int[]
-    # Initialize an empty array to store sample indices
-    samples = Int[]
-    # Iterate over samples
-    for k in 1:m
-        # Iterate over the rows/columns
-        for i in 1:n
-            # Append the current row/column index to the indices array
-            push!(indices, i)
-            # Append the sample index
-            push!(samples, k)
-        end # for i
-    end # for k
-    # Return a tuple of the row/column indices and sample indices
-    return hcat(indices, indices, samples)
-end # function
-
-# ------------------------------------------------------------------------------
-
 @doc raw"""
         vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T})
 
@@ -798,135 +669,85 @@ end # function __init__
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    sample_centered_MvNormal_from_inverse_covariance(
-        Σ⁻¹::AbstractMatrix{T},
-        n_samples::Int
-    ) where {T<:AbstractFloat}
+    sample_MvNormalCanon(Σ⁻¹::AbstractMatrix{T}) where {T<:AbstractFloat}
 
-Generates samples from a centered multivariate normal distribution (i.e., a
-multivariate normal distribution with mean 0) using the inverse of the
-covariance matrix.
+Draw a random sample from a multivariate normal distribution in canonical form.
 
 # Arguments
-- `Σ⁻¹::AbstractMatrix{T}`: The inverse of the covariance matrix of the
-  multivariate normal distribution.
+- `Σ⁻¹::AbstractMatrix{T}`: The precision matrix (inverse of the covariance
+  matrix) of the multivariate normal distribution. `T` is a subtype of
+  `AbstractFloat`.
 
 # Returns
-- An `AbstractArray{T}` of size `size(Σ⁻¹, 1)`, with a single sample from the
-  centered multivariate normal distribution.
-
-# Description
-The function first computes the Cholesky decomposition of the inverse covariance
-matrix `Σ⁻¹`. It then generates `n_samples` samples from a standard normal
-distribution using the `randn` function. These samples are then multiplied by
-the lower triangular matrix from the Cholesky decomposition. This process
-generates samples from a centered multivariate normal distribution with
-covariance matrix `Σ`, where `Σ` is the inverse of `Σ⁻¹`.
-
-# Note
-Ensure that `Σ⁻¹` is a positive-definite matrix.
+- A random sample drawn from the multivariate normal distribution specified by
+  the input precision matrix.
 """
-function sample_centered_MvNormal_from_inverse_covariance(
+function sample_MvNormalCanon(
     Σ⁻¹::AbstractMatrix{T}
 ) where {T<:AbstractFloat}
-    # Obtain covariance matrix by inverting the inverse covariance matrix. Note:
-    # we use the Hermitian function to ensure that the matrix is symmetric,
-    # which is not guaranteed by the inv function due to rounding errors.
-    Σ = LinearAlgebra.Hermitian(
-        LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹))
+    return Random.rand(
+        Distributions.MvNormalCanon(Σ⁻¹)
     )
-    # Compute Choelsky decomposition of covariance matrix
-    L = LinearAlgebra.cholesky(Σ).L
-    # Sample from standard normal distribution
-    sample = randn(T, size(Σ⁻¹, 1))
-    # Multiply samples by Cholesky decomposition to get samples from
-    # multivariate Gaussian with mean 0 and covariance Σ
-    return L * sample
 end # function
 
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    sample_centered_MvNormal_from_inverse_covariance(
-        Σ⁻¹::CuMatrix{T},
-        n_samples::Int
-    ) where {T<:AbstractFloat}
+    sample_MvNormalCanon(Σ⁻¹::CUDA.CuMatrix{T}) where {T<:AbstractFloat}
 
-Generates samples from a centered multivariate normal distribution (i.e., a
-multivariate normal distribution with mean 0) using the inverse of the
-covariance matrix. This method is specific for the CUDA.jl package.
+Draw a random sample from a multivariate normal distribution in canonical form,
+specifically for a precision matrix stored on the GPU.
 
 # Arguments
-- `Σ⁻¹::CuMatrix{T}`: The inverse of the covariance matrix of the multivariate
-  normal distribution.
+- `Σ⁻¹::CUDA.CuMatrix{T}`: The precision matrix (inverse of the covariance
+  matrix) of the multivariate normal distribution, stored on the GPU. `T` is a
+  subtype of `AbstractFloat`.
 
 # Returns
-- A `CuVector{T}` of size `size(Σ⁻¹, 1)`, with a single sample from the centered
-  multivariate normal distribution.
+- A random sample drawn from the multivariate normal distribution specified by
+  the input precision matrix, returned as a GPU array.
 
-# Description
-The function first computes the Cholesky decomposition of the inverse covariance
-matrix `Σ⁻¹`. It then generates `n_samples` samples from a standard normal
-distribution using the `randn` function. These samples are then multiplied by
-the lower triangular matrix from the Cholesky decomposition. This process
-generates samples from a centered multivariate normal distribution with
-covariance matrix `Σ`, where `Σ` is the inverse of `Σ⁻¹`.
-
-# Note
-Ensure that `Σ⁻¹` is a positive-definite matrix.
+# Behavior
+For `CuMatrix` inputs, this function first transfers the precision matrix to the
+CPU using `Flux.cpu`. It then draws a sample from the multivariate normal
+distribution using the `rand` function from the `Distributions.jl` package.
+Finally, it transfers the sample back to the GPU using `Flux.gpu`.
 """
-function sample_centered_MvNormal_from_inverse_covariance(
+function sample_MvNormalCanon(
     Σ⁻¹::CUDA.CuMatrix{T}
-) where {T<:Float32}
-    # Obtain covariance matrix by inverting the inverse covariance matrix.
-    # Notes:
-    # - We use the Hermitian function to ensure that the matrix is symmetric,
-    #   which is not guaranteed by the inv function due to rounding errors.
-    # - We pipe the input matrix to the CPU so that the inverse matrix can be
-    #   computed, since inverting a matrix is not supported on the GPU.
-    Σ = LinearAlgebra.Hermitian(
-        LinearAlgebra.inv(LinearAlgebra.Hermitian(Σ⁻¹ |> Flux.cpu))
+) where {T<:AbstractFloat}
+    return Random.rand(
+        Distributions.MvNormalCanon(Σ⁻¹ |> Flux.cpu)
     ) |> Flux.gpu
-    # Compute Choelsky decomposition of covariance matrix
-    L = LinearAlgebra.cholesky(Σ).L
-    # Sample from standard normal distribution
-    sample = CUDA.randn(T, size(Σ, 1))
-    # Multiply samples by Cholesky decomposition to get samples from
-    # multivariate Gaussian with mean 0 and covariance Σ
-    return L * sample
 end # function
 
 ## =============================================================================
 
 """
-    unit_vector(dim::Int, i::Int, T::Type=Float32)
+    unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
 
-Create a unit vector of dimension `dim` with the `i`-th element set to 1.
+Create a unit vector of the same length as `x` with the `i`-th element set to 1.
 
 # Arguments
-- `dim::Int`: The dimension of the unit vector.
+- `x::AbstractVector`: The vector whose length is used to determine the
+  dimension of the unit vector.
 - `i::Int`: The index of the element to be set to 1.
 - `T::Type=Float32`: The type of the elements in the vector. Defaults to
   `Float32`.
 
 # Returns
-- A unit vector of type `T` and dimension `dim` with the `i`-th element set to
-  1.
+- A unit vector of type `T` and length equal to `x` with the `i`-th element set
+  to 1.
 
 # Description
-This function creates a unit vector of dimension `dim` with the `i`-th element
-set to 1. All other elements are set to 0. The type of the elements in the
-vector is `T`, which defaults to `Float32`.
+This function creates a unit vector of the same length as `x` with the `i`-th
+element set to 1. All other elements are set to 0. The type of the elements in
+the vector is `T`, which defaults to `Float32`.
 
 # Note
 This function is marked with the `@nograd` macro from the Zygote package, which
 means that Zygote will ignore any call to this function when computing
 gradients.
-
-# Example
-```julia
-unit_vector(5, 3)  # Returns the vector [0.0, 0.0, 1.0, 0.0, 0.0]
-```
 """
 function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
     # Initialize a vector of zeros
@@ -936,6 +757,36 @@ function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
     return e
 end # function
 
+# ------------------------------------------------------------------------------
+
+"""
+    unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
+
+Create a unit vector of the same length as `x` with the `i`-th element set to 1,
+specifically for a vector stored on the GPU.
+
+# Arguments
+- `x::CUDA.CuVector`: The GPU vector whose length is used to determine the
+  dimension of the unit vector.
+- `i::Int`: The index of the element to be set to 1.
+- `T::Type=Float32`: The type of the elements in the vector. Defaults to
+  `Float32`.
+
+# Returns
+- A unit vector of type `T` and length equal to `x` with the `i`-th element set
+  to 1, returned as a GPU array.
+
+# Description
+This function creates a unit vector of the same length as `x` with the `i`-th
+element set to 1. All other elements are set to 0. The type of the elements in
+the vector is `T`, which defaults to `Float32`. The vector is created on the GPU
+using the CUDA.jl package.
+
+# Note
+This function is marked with the `@nograd` macro from the Zygote package, which
+means that Zygote will ignore any call to this function when computing
+gradients.
+"""
 function unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
     # Initialize a vector of zeros
     e = CUDA.zeros(T, length(x))
