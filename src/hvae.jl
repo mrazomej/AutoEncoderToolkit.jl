@@ -121,8 +121,10 @@ function decoder_loglikelihood(
     # Compute the probability of the decoder output given the latent variable z
     p = decoder(z).p
 
-    # Compute log-likelihood
-    loglikelihood = sum(Flux.Losses.logitbinarycrossentropy.(x, p))
+    # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
+    # distribution is given as follows:
+    # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
+    loglikelihood = -Flux.Losses.logitbinarycrossentropy(x, p; agg=sum)
 
     return loglikelihood
 end
