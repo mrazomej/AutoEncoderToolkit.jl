@@ -3990,6 +3990,7 @@ Variational Autoencoder given a specified loss function.
   include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
   `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
   on the specific loss function in use.
+- `verbose::Bool=false`: Whether to print the loss at each iteration.
 
 # Description
 Trains the RHVAE by:
@@ -3999,20 +4000,25 @@ Trains the RHVAE by:
 """
 function train!(
     rhvae::RHVAE,
-    x::AbstractArray{Float32};
-    # opt::NamedTuple;
+    x::AbstractArray{Float32},
+    opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Dict=Dict()
+    loss_kwargs::Dict=Dict(),
+    verbose::Bool=false,
 )
     # Compute VAE gradient
-    ∇loss_ = Flux.gradient(rhvae) do rhvae_model
+    L, ∇L = Flux.withgradient(rhvae) do rhvae_model
         loss_function(rhvae_model, x; loss_kwargs...)
     end # do block
 
-    return ∇loss_
     # Update parameters
-    Flux.Optimisers.update!(opt, rhvae, ∇loss_[1])
+    Flux.Optimisers.update!(opt, rhvae, ∇L[1])
 
     # Update metric
     update_metric!(rhvae)
+
+    # Check if loss should be printed
+    if verbose
+        println("Loss: ", L)
+    end # if
 end # function
