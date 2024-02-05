@@ -40,7 +40,7 @@ using ..VAEs: reparameterize
 
 # Import functions
 using ..utils: vec_to_ltri, slogdet,
-    sample_centered_MvNormal_from_inverse_covariance,
+    sample_MvNormalCanon,
     finite_difference_gradient
 
 using ..HVAEs: decoder_loglikelihood, spherical_logprior,
@@ -529,11 +529,14 @@ function G_inv(
     # dimension of M.
     # - The Zygote.dropgrad function is used to prevent the gradient from being
     # computed with respect to T.
+    # - We divide the result by the number of centroids. This is NOT done in the
+    #   original implementation, but without it, the metric tensor scales with
+    #   the number of centroids.
     LLexp = M .*
             reshape(
-        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)),
+        exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
         1, 1, :
-    )
+    ) / size(centroids_latent, 2)
 
     # Compute the regularization term.
     Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(length(z)) .* λ))
@@ -598,11 +601,14 @@ function G_inv(
     # dimension of M.
     # - The Zygote.dropgrad function is used to prevent the gradient from being
     # computed with respect to T.
+    # - We divide the result by the number of centroids. This is NOT done in the
+    #   original implementation, but without it, the metric tensor scales with
+    #   the number of centroids.
     LLexp = M .*
             reshape(
-        exp.(sum(abs2, (z .- centroids_latent) ./ Zygote.dropgrad(T), dims=1)),
+        exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
         1, 1, :
-    )
+    ) / size(centroids_latent, 2)
 
     # Compute the regularization term.
     Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
@@ -722,6 +728,12 @@ function riemannian_logprior(
     # Compute the log determinant of the metric tensor
     # logdetG = -slogdet(G⁻¹)
     logdetG = -LinearAlgebra.logdet(G⁻¹)
+
+    # Compute the Cholesky decomposition of G⁻¹
+    # chol = LinearAlgebra.cholesky(G⁻¹)
+    # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
+    # elements of the Cholesky decomposition
+    # logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
 
     # Return the log-prior
     return -0.5f0 * (length(z) * log(2.0f0π) + logdetG) -
@@ -2430,9 +2442,8 @@ function general_leapfrog_tempering_step(
     # Compute inverse metric for initial point
     G⁻¹ = ∇H_kwargs.G_inv(zₒ, metric_param)
 
-    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
-    # sampling given the inverse of the covariance matrix.
-    γₒ = sample_centered_MvNormal_from_inverse_covariance(G⁻¹)
+    # Sample γₒ ~ N(0, G⁻¹). 
+    γₒ = sample_MvNormalCanon(G⁻¹)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
@@ -2559,12 +2570,11 @@ function general_leapfrog_tempering_step(
     ),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:Float32}
-    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
-    # sampling given the inverse of the covariance matrix.
+    # Sample γₒ ~ N(0, G⁻¹). 
     γₒ = reduce(
         hcat,
         [
-            sample_centered_MvNormal_from_inverse_covariance(
+            sample_MvNormalCanon(
                 ∇H_kwargs.G_inv(z, metric_param)
             )
             for z in eachcol(zₒ)
@@ -2695,9 +2705,8 @@ function general_leapfrog_tempering_step(
     # Compute inverse metric for initial point
     G⁻¹ = ∇H_kwargs.G_inv(zₒ, rhvae)
 
-    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
-    # sampling given the inverse of the covariance matrix.
-    γₒ = sample_centered_MvNormal_from_inverse_covariance(G⁻¹)
+    # Sample γₒ ~ N(0, G⁻¹).
+    γₒ = sample_MvNormalCanon(G⁻¹)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
@@ -2821,12 +2830,11 @@ function general_leapfrog_tempering_step(
     ),
     tempering_schedule::Function=quadratic_tempering,
 ) where {T<:Float32}
-    # Sample γₒ ~ N(0, G⁻¹). Note: We use a custom method to perform the
-    # sampling given the inverse of the covariance matrix.
+    # Sample γₒ ~ N(0, G⁻¹). 
     γₒ = reduce(
         hcat,
         [
-            sample_centered_MvNormal_from_inverse_covariance(
+            sample_MvNormalCanon(
                 ∇H_kwargs.G_inv(z, rhvae)
             )
             for z in eachcol(zₒ)
@@ -3173,8 +3181,8 @@ function _log_p̄(
     # NOTE: We will use the EllipsisNotation to iterate over the last dimension
     for i in 1:n_samples
         # Compute log p(x | zₖ)
-        log_p_x_given_zₖ = sum(
-            Flux.Losses.logitbinarycrossentropy.(x[.., i:i], p[.., i:i])
+        log_p_x_given_zₖ = -Flux.Losses.logitbinarycrossentropy(
+            x[.., i:i], p[.., i:i]; agg=sum
         )
 
         # Compute log p(zₖ)
@@ -3186,7 +3194,6 @@ function _log_p̄(
         # Update log p̄
         log_p = log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
         log_p̄ = log_p̄ + log_p
-
     end # for
 
     return log_p̄
