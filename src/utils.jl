@@ -723,7 +723,7 @@ gradients.
 """
 function unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
     # Create a unit vector with a list comprehension
-    return [j == i ? CUDA.one(T) : CUDA.zero(T) for j in 1:length(x)]
+    return CUDA.cu([j == i ? CUDA.one(T) : CUDA.zero(T) for j in 1:length(x)])
 end # function
 
 
@@ -829,7 +829,7 @@ active_selection(f, x)  # Returns the CUDA array [2.0, 4.0, 6.0]
 function finite_difference_gradient(
     f::Function,
     x::CUDA.CuVector{T};
-    ε::T=sqrt(eps(Float32))
+    ε::T=sqrt(CUDA.eps(Float32))
 ) where {T<:AbstractFloat}
     # Compute the finite difference gradient for each element of x
     grad = CUDA.cu([
