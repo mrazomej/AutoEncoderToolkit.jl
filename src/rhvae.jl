@@ -727,8 +727,77 @@ function riemannian_logprior(
 
     # Compute the log determinant of the metric tensor
     # logdetG = -slogdet(G⁻¹)
-    logdetG = CUDA.allowscalar() do 
-      -LinearAlgebra.logdet(G⁻¹)
+    logdetG = -LinearAlgebra.logdet(G⁻¹)
+
+    # Compute the Cholesky decomposition of G⁻¹
+    # chol = LinearAlgebra.cholesky(G⁻¹)
+    # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
+    # elements of the Cholesky decomposition
+    # logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
+
+    # Return the log-prior
+    return -0.5f0 * (length(z) * log(2.0f0π) + logdetG) -
+           0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior(
+        rhvae::RHVAE,
+        z::AbstractVector{Float32},
+        ρ::AbstractVector{Float32};
+        G_inv::Function=G_inv,
+    )
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric.
+
+# Arguments
+- `z::CuVector{Float32}`: The latent variable vector.
+- `ρ::CuVector{Float32}`: The momentum vector.
+- `metric_param::Union{RHVAE,NamedTuple}`: Either an `RHVAE` instance or a named
+  tuple containing the fields `centroids_latent`, `M`, `T`, and `λ`.
+
+# Optional Keyword Arguments
+- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
+  metric tensor. This function should take two arguments: The latent variable
+  vector and an RHVAE model or the corresponding NamedTuple and and return the
+  inverse of the Riemannian metric tensor.
+- `σ::Float32=1.0f0`: The standard deviation of the Gaussian distribution. This
+  is used to scale the inverse metric tensor. Default is `1.0f0`.
+
+# Returns
+The log-prior of the Gaussian distribution.
+
+# Description
+This function computes the log-prior of a Gaussian distribution with a
+covariance matrix given by the Riemannian metric. It first computes the inverse
+of the Riemannian metric tensor using the provided `G_inv` function, then
+computes the log determinant of the metric tensor, and finally computes and
+returns the log-prior.
+
+# Notes
+- Ensure that the dimensions of `z` match the dimensions of the latent space of
+  the RHVAE model.
+- This function is designed to work with CUDA arrays for GPU-accelerated
+  computations. However, the logdetG computation is not yet supported on the
+  GPU, so it will be computed on the CPU.
+"""
+function riemannian_logprior(
+    z::CuVector{Float32},
+    ρ::CuVector{Float32},
+    metric_param::Union{RHVAE,NamedTuple};
+    G_inv::Function=G_inv,
+    σ::Float32=1.0f0,
+)
+    # Compute the inverse metric tensor
+    G⁻¹ = σ^2 .* G_inv(z, metric_param)
+
+    # Compute the log determinant of the metric tensor
+    # logdetG = -slogdet(G⁻¹)
+    logdetG = CUDA.allowscalar() do
+        -LinearAlgebra.logdet(G⁻¹)
     end
 
     # Compute the Cholesky decomposition of G⁻¹
