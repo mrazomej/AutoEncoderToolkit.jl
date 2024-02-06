@@ -791,7 +791,10 @@ function unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
     # Initialize a vector of zeros
     e = CUDA.zeros(T, length(x))
     # Set the i-th element to 1
-    e[i] = CUDA.one(T)
+    CUDA.allowscalar() do 
+        e[i] = CUDA.one(T)
+    end
+
     return e
 end # function
 

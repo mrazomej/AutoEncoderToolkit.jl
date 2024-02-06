@@ -727,7 +727,9 @@ function riemannian_logprior(
 
     # Compute the log determinant of the metric tensor
     # logdetG = -slogdet(G⁻¹)
-    logdetG = -LinearAlgebra.logdet(G⁻¹)
+    logdetG = CUDA.allowscalar() do 
+      -LinearAlgebra.logdet(G⁻¹)
+    end
 
     # Compute the Cholesky decomposition of G⁻¹
     # chol = LinearAlgebra.cholesky(G⁻¹)
