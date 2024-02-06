@@ -727,13 +727,13 @@ function riemannian_logprior(
 
     # Compute the log determinant of the metric tensor
     # logdetG = -slogdet(G⁻¹)
-    logdetG = -LinearAlgebra.logdet(G⁻¹)
+    # logdetG = -LinearAlgebra.logdet(G⁻¹)
 
     # Compute the Cholesky decomposition of G⁻¹
-    # chol = LinearAlgebra.cholesky(G⁻¹)
+    chol = LinearAlgebra.cholesky(G⁻¹)
     # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
     # elements of the Cholesky decomposition
-    # logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
+    logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
 
     # Return the log-prior
     return -0.5f0 * (length(z) * log(2.0f0π) + logdetG) -
@@ -3231,21 +3231,14 @@ function _log_p̄(
     zₖ = rhvae_outputs.phase_space.z_final
     ρₖ = rhvae_outputs.phase_space.ρ_final
 
-    # Extract number of samples
-    if ndims(zₖ) == 1
-        n_samples = 1
-    else
-        n_samples = last(size(zₖ))
-    end # if
-
     # Initialize log p̄.
     # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
     log_p̄ = zero(T)
 
     # Iterate over samples.
     # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in 1:n_samples
-        # Compute log p(x | zₖ)
+    for i in axes(zₖ, 2)
+        # Compute log p(x | zₖ) = ∑ᵢ log p(xᵢ | zₖ)
         log_p_x_given_zₖ = -Flux.Losses.logitbinarycrossentropy(
             x[.., i:i], p[.., i:i]; agg=sum
         )
@@ -3253,11 +3246,11 @@ function _log_p̄(
         # Compute log p(zₖ)
         log_p_zₖ = spherical_logprior(zₖ[:, i])
 
-        # Compute log p(ρₖ)
-        log_p_ρₖ = riemannian_logprior(zₖ[:, i], ρₖ[:, i], metric_param)
+        # Compute log p(ρₖ|zₖ) = log p(x | zₖ) + log p(zₖ) + log p(ρₖ|zₖ)
+        log_p_ρₖ_given_zₖ = riemannian_logprior(zₖ[:, i], ρₖ[:, i], metric_param)
 
         # Update log p̄
-        log_p = log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
+        log_p = log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ
         log_p̄ = log_p̄ + log_p
     end # for
 
@@ -3313,23 +3306,16 @@ function _log_p̄(
     zₖ = rhvae_outputs.phase_space.z_final
     ρₖ = rhvae_outputs.phase_space.ρ_final
 
-    # Extract number of samples
-    if ndims(zₖ) == 1
-        n_samples = 1
-    else
-        n_samples = last(size(zₖ))
-    end # if
-
     # Initialize log p̄.
     # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
     log_p̄ = zero(T)
 
     # Iterate over samples.
     # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in 1:n_samples
+    for i in axes(zₖ, 2)
         # Compute log p(x | zₖ)
-        log_p_x_given_zₖ = -0.5f0 * sum(abs2, (x[.., i] - µ[.., i]) / σ) -
-                           0.5f0 * length(x[.., i]) *
+        log_p_x_given_zₖ = -0.5f0 * sum((x[.., i:i] - µ[.., i:i]) .^ 2 ./ σ^2) -
+                           0.5f0 * length(x[.., i:i]) *
                            (2.0f0 * log(σ) + log(2.0f0π))
 
         # Compute log p(zₖ)
@@ -3397,25 +3383,18 @@ function _log_p̄(
     zₖ = rhvae_outputs.phase_space.z_final
     ρₖ = rhvae_outputs.phase_space.ρ_final
 
-    # Extract number of samples
-    if ndims(zₖ) == 1
-        n_samples = 1
-    else
-        n_samples = last(size(zₖ))
-    end # if
-
     # Initialize log p̄.
     # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
     log_p̄ = zero(T)
 
     # Iterate over samples.
     # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in 1:n_samples
+    for i in axes(zₖ, 2)
         # Compute log p(x | zₖ)
         log_p_x_given_zₖ = -0.5f0 *
-                           sum(abs2, (x[.., i] - µ[.., i]) ./ σ[.., i]) -
-                           sum(logσ[.., i]) -
-                           0.5f0 * length(x[.., i]) * log(2.0f0π)
+                           sum(((x[.., i:i] - µ[.., i:i]) ./ σ[.., i:i])) .^ 2 -
+                           sum(logσ[.., i:i]) -
+                           0.5f0 * length(x[.., i:i]) * log(2.0f0π)
 
         # Compute log p(zₖ)
         log_p_zₖ = spherical_logprior(zₖ[:, i])
@@ -3482,25 +3461,18 @@ function _log_p̄(
     zₖ = rhvae_outputs.phase_space.z_final
     ρₖ = rhvae_outputs.phase_space.ρ_final
 
-    # Extract number of samples
-    if ndims(zₖ) == 1
-        n_samples = 1
-    else
-        n_samples = last(size(zₖ))
-    end # if
-
     # Initialize log p̄.
     # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
     log_p̄ = zero(T)
 
     # Iterate over samples.
     # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in 1:n_samples
+    for i in axes(zₖ, 2)
         # Compute log p(x | zₖ)
         log_p_x_given_zₖ = -0.5f0 *
-                           sum(abs2, (x[.., i] - µ[.., i]) ./ σ[.., i]) -
-                           sum(log, σ[.., i]) -
-                           0.5f0 * length(x[.., i]) * log(2.0f0π)
+                           sum(((x[.., i:i] - µ[.., i:i]) ./ σ[.., i:i])) .^ 2 -
+                           sum(log, σ[.., i:i]) -
+                           0.5f0 * length(x[.., i:i]) * log(2.0f0π)
 
         # Compute log p(zₖ)
         log_p_zₖ = spherical_logprior(zₖ[:, i])
@@ -3521,11 +3493,11 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        _log_p̄(
-                x::AbstractArray{T},
-                rhvae::RHVAE,
-                rhvae_outputs::NamedTuple,
-        ) where {T<:Float32}
+    _log_p̄(
+        x::AbstractArray{T},
+        rhvae::RHVAE,
+        rhvae_outputs::NamedTuple,
+    ) where {T<:Float32}
 
 This is an internal function used in `riemannian_hamiltonian_elbo` to compute
 the numerator of the unbiased estimator of the marginal likelihood. The function
@@ -3627,15 +3599,26 @@ function _log_q̄(
 
     # Iterate over columns
     for i in axes(zₒ, 2)
-        # Compute log q(zₒ)
-        log_q_z = -0.5f0 * sum(abs2, (zₒ[:, i] - µ[:, i]) ./ exp.(logσ[:, i])) -
-                  sum(logσ[:, i]) - 0.5f0 * size(zₒ, 1) * log(2.0f0π)
+        # # Compute log q(zₒ|x)
+        # log_q_zₒ_given_x = -0.5f0 *
+        #                    sum(((zₒ[:, i] - µ[:, i]) ./ exp.(logσ[:, i])) .^ 2) -
+        #                    sum(logσ[:, i]) - 0.5f0 * size(zₒ, 1) * log(2.0f0π)
 
-        # Compute log p(ρₒ)
-        log_p_ρ = riemannian_logprior(zₒ[:, i], ρₒ[:, i], metric_param; σ=βₒ^-1)
+        # # Compute log p(ρₒ|zₒ)
+        # log_p_ρₒ_given_zₒ = riemannian_logprior(
+        #     zₒ[:, i], ρₒ[:, i], metric_param
+        # )
 
-        # Compute log q̄ = log q(zₒ) + log p(ρₒ) - 0.5d log(βₒ)
-        log_q = log_q_z + log_p_ρ - 0.5f0 * size(zₒ, 1) * log(βₒ)
+        # # Compute log q̄ = log q(zₒ|x) + log p(ρₒ|zₒ) - 0.5d log(βₒ)
+        # log_q = log_q_zₒ_given_x + log_p_ρₒ_given_zₒ -
+        #         0.5f0 * size(zₒ, 1) * log(βₒ)
+
+        # Compute log q(zₒ | x). NOTE: The cod above is what I think the math
+        # derived in the original paper implied. But, looking at the original
+        # implementation, they take this to be a much simpler form.
+        log_q = -0.5f0 *
+                sum(((zₒ[:, i] - µ[:, i]) ./ exp.(logσ[:, i])) .^ 2) -
+                sum(logσ[:, i]) - 0.5f0 * size(zₒ, 1) * log(2.0f0π)
 
         # Accumulate results
         log_q̄ = log_q̄ + log_q
@@ -4088,6 +4071,49 @@ function train!(
     end # if
 end # function
 
+# ------------------------------------------------------------------------------
+
+"""
+    train!(
+        rhvae::RHVAE,
+        x::CUDA.CuArray{Float32},
+        opt::NamedTuple;
+        loss_function::Function=loss,
+        loss_kwargs::Dict=Dict(),
+        verbose::Bool=false,
+    )
+
+Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
+
+# Arguments
+- `rhvae::RHVAE`: The RHVAE model to be trained.
+- `x::CUDA.CuArray{Float32}`: The training data.
+- `opt::NamedTuple`: The optimizer to be used for training.
+
+# Optional Keyword Arguments
+- `loss_function::Function=loss`: The loss function to be used for training.
+  Defaults to the `loss` function.
+- `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
+  loss function.
+- `verbose::Bool=false`: If `true`, the loss will be printed at each iteration.
+
+# Description
+This function trains the RHVAE model on a CUDA array `x` using the specified
+optimizer `opt`. The training process involves computing the gradient of the
+loss function with respect to the model parameters, and then updating the model
+parameters using the optimizer.
+
+The gradient computation is performed on the GPU and requires the use of
+`CUDA.allowscalar` to ensure that backpropagation can work with CUDA arrays.
+
+# Example
+```julia
+rhvae = RHVAE(...)
+x = CUDA.cu(rand(Float32, 100, 100))
+opt = (lr=0.01,)
+train!(rhvae, x, opt; verbose=true)
+```
+"""
 function train!(
     rhvae::RHVAE,
     x::CUDA.CuArray{Float32},
@@ -4098,9 +4124,9 @@ function train!(
 )
     # Compute VAE gradient
     L, ∇L = CUDA.allowscalar() do
-      Flux.withgradient(rhvae) do rhvae_model
-        loss_function(rhvae_model, x; loss_kwargs...)
-      end # do block
+        Flux.withgradient(rhvae) do rhvae_model
+            loss_function(rhvae_model, x; loss_kwargs...)
+        end # do block
     end
 
     # Update parameters
