@@ -666,7 +666,10 @@ function __init__()
     end
 end # function __init__
 
-# ------------------------------------------------------------------------------
+# Set Zygote to ignore the function when computing gradients
+Zygote.@nograd randn_like
+
+## =============================================================================
 
 @doc raw"""
     sample_MvNormalCanon(Σ⁻¹::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -720,6 +723,9 @@ function sample_MvNormalCanon(
         Distributions.MvNormalCanon(Σ⁻¹ |> Flux.cpu)
     ) |> Flux.gpu
 end # function
+
+# Set Zygote to ignore the function when computing gradients
+Zygote.@nograd sample_MvNormalCanon
 
 ## =============================================================================
 

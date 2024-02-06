@@ -1,6 +1,7 @@
 # Import ML libraries
 import Flux
 import Zygote
+import CUDA
 
 # Import basic math
 import StatsBase
@@ -89,15 +90,40 @@ function reparameterize(
     σ::AbstractVecOrMat{T};
     log::Bool=true
 ) where {T<:AbstractFloat}
+    # Sample random Gaussian number
+    r = Zygote.ignore() do
+      randn(T, size(µ)...)
+    end
     # Check if logσ is provided
     if log
         # Sample random latent variable point estimates given the mean and log
         # standard deviation
-        return µ .+ randn_like(µ) .* exp.(σ)
+        return µ .+ r .* exp.(σ)
     else
         # Sample random latent variable point estimates given the mean and
         # standard deviation
-        return µ .+ randn_like(µ) .* σ
+        return µ .+ r .* σ
+    end # if
+end # function
+
+function reparameterize(
+    µ::CUDA.CuVecOrMat{T},
+    σ::CUDA.CuVecOrMat{T};
+    log::Bool=true
+) where {T<:AbstractFloat}
+    # Sample random Gaussian number
+    r = Zygote.ignore() do
+      CUDA.randn(T, size(µ)...)
+    end
+    # Check if logσ is provided
+    if log
+        # Sample random latent variable point estimates given the mean and log
+        # standard deviation
+        return µ .+ r .* exp.(σ)
+    else
+        # Sample random latent variable point estimates given the mean and
+        # standard deviation
+        return µ .+ r .* σ
     end # if
 end # function
 

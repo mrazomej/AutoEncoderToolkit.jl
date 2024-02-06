@@ -794,17 +794,11 @@ function riemannian_logprior(
     # Compute the inverse metric tensor
     G⁻¹ = σ^2 .* G_inv(z, metric_param)
 
-    # Compute the log determinant of the metric tensor
-    # logdetG = -slogdet(G⁻¹)
-    logdetG = CUDA.allowscalar() do
-        -LinearAlgebra.logdet(G⁻¹)
-    end
-
     # Compute the Cholesky decomposition of G⁻¹
-    # chol = LinearAlgebra.cholesky(G⁻¹)
+    chol = LinearAlgebra.cholesky(G⁻¹)
     # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
     # elements of the Cholesky decomposition
-    # logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
+    logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
 
     # Return the log-prior
     return -0.5f0 * (length(z) * log(2.0f0π) + logdetG) -
@@ -4081,6 +4075,33 @@ function train!(
     L, ∇L = Flux.withgradient(rhvae) do rhvae_model
         loss_function(rhvae_model, x; loss_kwargs...)
     end # do block
+
+    # Update parameters
+    Flux.Optimisers.update!(opt, rhvae, ∇L[1])
+
+    # Update metric
+    update_metric!(rhvae)
+
+    # Check if loss should be printed
+    if verbose
+        println("Loss: ", L)
+    end # if
+end # function
+
+function train!(
+    rhvae::RHVAE,
+    x::CUDA.CuArray{Float32},
+    opt::NamedTuple;
+    loss_function::Function=loss,
+    loss_kwargs::Dict=Dict(),
+    verbose::Bool=false,
+)
+    # Compute VAE gradient
+    L, ∇L = CUDA.allowscalar() do
+      Flux.withgradient(rhvae) do rhvae_model
+        loss_function(rhvae_model, x; loss_kwargs...)
+      end # do block
+    end
 
     # Update parameters
     Flux.Optimisers.update!(opt, rhvae, ∇L[1])
