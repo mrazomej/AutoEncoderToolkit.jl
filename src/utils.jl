@@ -598,80 +598,6 @@ end # function
 ## =============================================================================
 
 @doc raw"""
-    randn_like(x::AbstractArray{T}) where {T<:AbstractFloat}
-
-Generates an array of random numbers from the standard normal distribution that
-has the same type and shape as the input array.
-
-# Arguments
-- `x::AbstractArray{T}`: The input array. The output array will have the same
-  type and shape as this array.
-
-# Returns
-- An `AbstractArray{T}` of the same type and shape as `x`, where each element is
-  a random number from the standard normal distribution.
-
-# Description
-The function uses the `randn` function to generate random numbers from the
-standard normal distribution. The type of the random numbers is the same as the
-element type of `x`, and the shape of the output array is the same as the shape
-of `x`.
-"""
-function randn_like(x::AbstractArray{T}) where {T<:AbstractFloat}
-    return randn(T, size(x)...)
-end
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    randn_like(x::CuArray{T}) where {T<:AbstractFloat}
-
-Generates an array of random numbers from the standard normal distribution that
-has the same type and shape as the input array. This method is specific for the
-CUDA.jl package.
-
-# Arguments
-- `x::CuArray{T}`: The input array. The output array will have the same type and
-  shape as this array.
-
-# Returns
-- An `AbstractArray{T}` of the same type and shape as `x`, where each element is
-  a random number from the standard normal distribution.
-
-# Description
-The function uses the `randn` function to generate random numbers from the
-standard normal distribution. The type of the random numbers is the same as the
-element type of `x`, and the shape of the output array is the same as the shape
-of `x`.
-"""
-function randn_like(x::CUDA.CuArray{T}) where {T<:Float32}
-    return CUDA.randn(T, size(x)...)
-end
-
-# ------------------------------------------------------------------------------
-
-function __init__()
-    # Define randn for OpenCL
-    Requires.@require OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2" begin
-        function randn_like(x::OpenCL.CLArray{T}) where {T<:AbstractFloat}
-            return OpenCL.randn(T, size(x)...)
-        end
-    end
-
-    # Define randn for Metal
-    Requires.@require Metal = "dde4c033-4e86-420c-a63e-0dd931031962" begin
-        function randn_like(x::Metal.MtlArray{T}) where {T<:AbstractFloat}
-            return Metal.randn(T, size(x)...)
-        end
-    end
-end # function __init__
-
-# Set Zygote to ignore the function when computing gradients
-Zygote.@nograd randn_like
-
-## =============================================================================
-
-@doc raw"""
     sample_MvNormalCanon(Σ⁻¹::AbstractMatrix{T}) where {T<:AbstractFloat}
 
 Draw a random sample from a multivariate normal distribution in canonical form.
@@ -727,6 +653,8 @@ end # function
 # Set Zygote to ignore the function when computing gradients
 Zygote.@nograd sample_MvNormalCanon
 
+## =============================================================================
+# Define finite difference gradient function
 ## =============================================================================
 
 """
@@ -794,13 +722,8 @@ means that Zygote will ignore any call to this function when computing
 gradients.
 """
 function unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
-    # Initialize a vector of zeros
-    e = zeros(T, length(x))
-    # Set the i-th element to 1.
-    e[i] = one(T)
-
-    # Return unit vector uploaded to the GPU
-    return e |> Flux.gpu
+    # Create a unit vector with a list comprehension
+    return [j == i ? CUDA.one(T) : CUDA.zero(T) for j in 1:length(x)]
 end # function
 
 
@@ -861,6 +784,48 @@ function finite_difference_gradient(
     return grad
 end # function
 
+# ------------------------------------------------------------------------------
+
+"""
+    active_selection(
+        f::Function, x::CUDA.CuVector{T}; ε::T=sqrt(eps(Float32))
+    ) where {T<:AbstractFloat}
+
+Compute the finite difference gradient of a function `f` at a point `x` and
+upload it to the GPU.
+
+# Arguments
+- `f::Function`: The function for which the gradient is to be computed.
+- `x::CUDA.CuVector{T}`: The point at which the gradient is to be computed.
+
+# Optional Keyword Arguments
+- `ε::T=sqrt(eps(Float32))`: The step size for the finite difference
+  calculation. Defaults to the square root of the machine epsilon for type
+  `Float32`.
+
+# Returns
+- A CUDA array representing the gradient of `f` at `x`.
+
+# Description
+This function computes the finite difference gradient of a function `f` at a
+point `x`. The gradient is a CUDA array where the `i`-th element is the partial
+derivative of `f` with respect to the `i`-th element of `x`.
+
+The partial derivatives are computed using the central difference formula:
+
+∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
+
+where eᵢ is the `i`-th unit vector.
+
+The output is uploaded to the GPU for efficient computation with CUDA arrays.
+
+# Example
+```julia
+f(x) = sum(x.^2)
+x = CUDA.cu([1.0, 2.0, 3.0])
+active_selection(f, x)  # Returns the CUDA array [2.0, 4.0, 6.0]
+```
+"""
 function finite_difference_gradient(
     f::Function,
     x::CUDA.CuVector{T};
