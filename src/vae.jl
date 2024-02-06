@@ -893,9 +893,9 @@ given a loss function.
 # Arguments
 - `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
   struct containing the elements of a variational autoencoder.
-- `x_in::AbstractArray{Float32}`: Input data for the loss function.
-  Represents an individual sample. The last dimension is taken as having each of
-  the samples in a batch.
+- `x_in::AbstractArray{Float32}`: Input data for the loss function. Represents
+  an individual sample. The last dimension is taken as having each of the
+  samples in a batch.
 - `x_out::AbstractArray{Float32}`: Target output data for the loss function.
   Represents the corresponding output for the `x_in` sample. The last dimension
   is taken as having each of the samples in a batch.
@@ -908,6 +908,8 @@ given a loss function.
 - `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
   function. These might include parameters like `σ`, or `β`, depending on the
   specific loss function in use.
+- `verbose::Bool=false`: Whether to print the loss value after each training
+  step.
 
 # Description
 Trains the VAE by:
@@ -928,12 +930,19 @@ function train!(
     x_out::AbstractArray{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    verbose::Bool=false
 )
     # Compute VAE gradient
-    ∇loss_ = Flux.gradient(vae) do vae_model
+    L, ∇L = Flux.withgradient(vae) do vae_model
         loss_function(vae_model, x_in, x_out; loss_kwargs...)
     end # do block
+
     # Update parameters
-    Flux.Optimisers.update!(opt, vae, ∇loss_[1])
+    Flux.Optimisers.update!(opt, vae, ∇L[1])
+
+    # Check if loss should be printed
+    if verbose
+        println("Loss: ", L)
+    end # if
 end # function
