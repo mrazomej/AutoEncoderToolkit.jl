@@ -23,9 +23,6 @@ using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
     JointLogDecoder, SplitLogDecoder,
     JointDecoder, SplitDecoder
 
-# Import functions from the Utils module
-using ..utils: randn_like
-
 # Export functions to use elsewhere
 export reparameterize, reconstruction_decoder, kl_encoder
 
