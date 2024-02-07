@@ -179,8 +179,7 @@ end # function
 Perform a forward pass through the MetricChain.
 
 # Arguments
-- `x::AbstractArray{Float32}`: The input data to be processed. This should be a
-  Float32 array.
+- `x::AbstractArray{<:Number}`: The input data to be processed. 
 - `matrix::Bool=false`: A boolean flag indicating whether to return the result
   as a lower triangular matrix (if `true`) or as a tuple of diagonal and lower
   off-diagonal elements (if `false`). Defaults to `false`.
@@ -199,7 +198,7 @@ x = rand(Float32, 100, 10)
 m(x, matrix=true)  # Returns a lower triangular matrix
 ```
 """
-function (m::MetricChain)(x::AbstractArray{Float32}; matrix::Bool=false)
+function (m::MetricChain)(x::AbstractArray{<:Number}; matrix::Bool=false)
     # Compute the output of the MLP
     mlp_out = m.mlp(x)
 
@@ -247,14 +246,14 @@ regularization factor, and each column of `centroids` are the cᵢ.
   `AbstractVariationalEncoder` and an `AbstractVariationalDecoder`.
 - `metric_chain::MetricChain`: The `MetricChain` that computes the Riemannian
   metric in the latent space.
-- `centroids_data::AbstractArray{Float32}`: An array where the last dimension
+- `centroids_data::AbstractArray{<:Number}`: An array where the last dimension
   represents a data point xᵢ from which the centroids cᵢ are computed by passing
   them through the encoder.
 - `centroids_latent::AbstractMatrix{Float32}`: A matrix where each column
   represents a centroid cᵢ in the inverse metric computation.
 - `L::AbstractArray{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
   matrix. L_ψᵢ can intuitively be seen as the triangular matrix in the Cholesky
-  decomposition of G⁻¹(centroids_dataᵢ) up to a regularization factor.
+  decomposition of G⁻¹(centroids_latentᵢ) up to a regularization factor.
 - `M::AbstractArray{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
   L_ψᵢᵀ.
 - `T::Float32`: The temperature parameter in the inverse metric computation.  
@@ -265,7 +264,7 @@ struct RHVAE{
 } <: AbstractVariationalAutoEncoder
     vae::V
     metric_chain::MetricChain
-    centroids_data::AbstractArray{Float32}
+    centroids_data::AbstractArray{<:Number}
     centroids_latent::AbstractMatrix{Float32}
     L::AbstractArray{Float32,3}
     M::AbstractArray{Float32,3}

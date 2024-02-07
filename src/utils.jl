@@ -446,7 +446,7 @@ centroids = centroids_kmeans(data, 5)
 ```
 """
 function centroids_kmeans(
-    x::AbstractMatrix{<:AbstractFloat},
+    x::AbstractMatrix{<:Number},
     n_centroids::Int;
     assign::Bool=false
 )
@@ -505,7 +505,7 @@ centroids = centroids_kmeans(data, 5)
 ```
 """
 function centroids_kmeans(
-    x::AbstractArray{<:AbstractFloat},
+    x::AbstractArray{<:Number},
     n_centroids::Int;
     reshape_centroids::Bool=true,
     assign::Bool=false

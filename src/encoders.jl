@@ -644,7 +644,7 @@ input layer.
 """
 function (encoder::JointEncoder)(
     x::AbstractArray{T}
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Run input to encoder network
     h = encoder.encoder(x)
     # Map from last encoder layer to latent space mean
