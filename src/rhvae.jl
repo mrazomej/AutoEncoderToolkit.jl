@@ -744,11 +744,9 @@ function riemannian_logprior(
     # Compute the inverse metric tensor
     G⁻¹ = σ^2 .* G_inv(z, metric_param)
 
-    # Average with conjugate transpose to ensure G⁻¹ is symmetric
-    G⁻¹ = (G⁻¹ + LinearAlgebra.transpose(G⁻¹)) / 2
-
-    # Compute the Cholesky decomposition of G⁻¹
-    chol = LinearAlgebra.cholesky(G⁻¹)
+    # Compute the Cholesky decomposition of G⁻¹. Note that we set check=false to
+    # avoid errors when G⁻¹ is not positive definite due to rounding errors.
+    chol = LinearAlgebra.cholesky(G⁻¹; check=false)
     # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
     # elements of the Cholesky decomposition
     logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
