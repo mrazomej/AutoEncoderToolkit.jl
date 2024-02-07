@@ -614,6 +614,10 @@ Draw a random sample from a multivariate normal distribution in canonical form.
 function sample_MvNormalCanon(
     Σ⁻¹::AbstractMatrix{T}
 ) where {T<:AbstractFloat}
+    # Ensure matrix is symmetric
+    Σ⁻¹ = LinearAlgebra.symmetric(Σ⁻¹, :L)
+
+    # Sample from the multivariate normal distribution
     return Random.rand(
         Distributions.MvNormalCanon(Σ⁻¹)
     )
@@ -645,8 +649,11 @@ Finally, it transfers the sample back to the GPU using `Flux.gpu`.
 function sample_MvNormalCanon(
     Σ⁻¹::CUDA.CuMatrix{T}
 ) where {T<:AbstractFloat}
+    # Ensure matrix is symmetric
+    Σ⁻¹ = LinearAlgebra.symmetric(Σ⁻¹ |> Flux.cpu, :L)
+
     return Random.rand(
-        Distributions.MvNormalCanon(Σ⁻¹ |> Flux.cpu)
+        Distributions.MvNormalCanon(Σ⁻¹)
     ) |> Flux.gpu
 end # function
 
