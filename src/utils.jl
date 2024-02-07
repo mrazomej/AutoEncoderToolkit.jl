@@ -614,13 +614,20 @@ Draw a random sample from a multivariate normal distribution in canonical form.
 function sample_MvNormalCanon(
     Σ⁻¹::AbstractMatrix{T}
 ) where {T<:AbstractFloat}
-    # Ensure matrix is symmetric
-    Σ⁻¹ = LinearAlgebra.symmetric(Σ⁻¹, :L)
+    # Invert the precision matrix
+    Σ = LinearAlgebra.inv(Σ⁻¹)
 
-    # Sample from the multivariate normal distribution
-    return Random.rand(
-        Distributions.MvNormalCanon(Σ⁻¹)
-    )
+    # Make sure the matrix is symmetric
+    Σ = (Σ + LinearAlgebra.transpose(Σ)) / 2
+
+    # Cholesky decomposition of the covariance matrix
+    chol = LinearAlgebra.cholesky(Σ, check=false)
+
+    # Sample from standard normal distribution
+    r = randn(T, size(Σ⁻¹, 1))
+
+    # Return sample multiplied by the Cholesky decomposition
+    return chol.L * r
 end # function
 
 # ------------------------------------------------------------------------------
@@ -639,22 +646,24 @@ specifically for a precision matrix stored on the GPU.
 # Returns
 - A random sample drawn from the multivariate normal distribution specified by
   the input precision matrix, returned as a GPU array.
-
-# Behavior
-For `CuMatrix` inputs, this function first transfers the precision matrix to the
-CPU using `Flux.cpu`. It then draws a sample from the multivariate normal
-distribution using the `rand` function from the `Distributions.jl` package.
-Finally, it transfers the sample back to the GPU using `Flux.gpu`.
 """
 function sample_MvNormalCanon(
     Σ⁻¹::CUDA.CuMatrix{T}
 ) where {T<:AbstractFloat}
-    # Ensure matrix is symmetric
-    Σ⁻¹ = LinearAlgebra.symmetric(Σ⁻¹ |> Flux.cpu, :L)
+    # Invert the precision matrix
+    Σ = LinearAlgebra.inv(Σ⁻¹ |> Flux.cpu)
 
-    return Random.rand(
-        Distributions.MvNormalCanon(Σ⁻¹)
-    ) |> Flux.gpu
+    # Make sure the matrix is symmetric
+    Σ = (Σ + LinearAlgebra.transpose(Σ)) / 2
+
+    # Cholesky decomposition of the covariance matrix
+    chol = LinearAlgebra.cholesky(Σ, check=false)
+
+    # Sample from standard normal distribution
+    r = randn(T, size(Σ⁻¹, 1))
+
+    # Return sample multiplied by the Cholesky decomposition
+    return chol.L * r |> Flux.gpu
 end # function
 
 # Set Zygote to ignore the function when computing gradients
