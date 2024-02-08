@@ -1563,3 +1563,275 @@ function (decoder::BernoulliDecoder)(
     # Run input to decoder network
     return (p=decoder.decoder(z),)
 end # function
+
+# ==============================================================================
+# Defining functions to compute log-likelihoods
+# ==============================================================================
+
+@doc raw"""
+    decoder_loglikelihood(
+        decoder::BernoulliDecoder,
+        x::AbstractArray{T},
+        decoder_output::NamedTuple
+    ) where {T<:Float32}
+
+Computes the log-likelihood of the observed data `x` given the decoder output
+under a Bernoulli distribution with probability given by the decoder.
+
+# Arguments
+- `decoder::BernoulliDecoder`: The decoder of the VAE, which is used to compute
+  the probability of the Bernoulli distribution.
+- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. However, the
+  last dimension must be of size 1.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  probability of the Bernoulli distribution.
+
+# Returns
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
+  given the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+decoder output under a Bernoulli distribution. The probability of the Bernoulli
+distribution is extracted from the `decoder_output`. The log-likelihood is
+computed using the formula for the log-likelihood of a Bernoulli distribution.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`.
+"""
+function decoder_loglikelihood(
+    decoder::BernoulliDecoder,
+    x::AbstractArray{T},
+    decoder_output::NamedTuple;
+) where {T<:Float32}
+    # Extract the probability of the Bernoulli distribution from the decoder
+    p = decoder_output.p
+
+    # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
+    # distribution is given as follows:
+    # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
+    loglikelihood = -Flux.Losses.logitbinarycrossentropy(x, p; agg=sum)
+
+    return loglikelihood
+end
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    decoder_loglikelihood(
+        decoder::SimpleDecoder,
+        x::AbstractArray{T},
+        decoder_output::NamedTuple;
+        σ::T=1.0f0,
+    ) where {T<:Float32}
+
+Computes the log-likelihood of the observed data `x` given the decoder output
+under a Gaussian distribution with mean given by the decoder and a specified
+standard deviation.
+
+# Arguments
+- `decoder::SimpleDecoder`: The decoder of the VAE, which is used to compute the
+  mean of the Gaussian distribution.
+- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. However, the
+  last dimension must be of size 1.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  mean of the Gaussian distribution.
+
+# Optional Keyword Arguments
+- `σ::T=1.0f0`: The standard deviation of the Gaussian distribution. Defaults to
+  `1.0f0`.
+
+# Returns
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
+  given the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+decoder output under a Gaussian distribution. The mean of the Gaussian
+distribution is extracted from the `decoder_output`. The standard deviation of
+the Gaussian distribution is specified by the `σ` argument. The log-likelihood
+is computed using the formula for the log-likelihood of a Gaussian distribution.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`.
+"""
+function decoder_loglikelihood(
+    decoder::SimpleDecoder,
+    x::AbstractArray{T},
+    decoder_output::NamedTuple;
+    σ::T=1.0f0,
+) where {T<:Float32}
+    # Extract the mean of the Gaussian distribution from the decoder output
+    μ = decoder_output.µ
+
+    # Compute log-likelihood
+    loglikelihood = -0.5f0 * sum(abs2, (x - μ) / σ) -
+                    0.5f0 * length(x) * (2.0f0 * log(σ) + log(2.0f0π))
+    return loglikelihood
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    decoder_loglikelihood(
+        decoder::AbstractGaussianLogDecoder,
+        x::AbstractArray{T},
+        decoder_output::NamedTuple
+    ) where {T<:Float32}
+
+Computes the log-likelihood of the observed data `x` given the decoder output
+under a Gaussian distribution with mean and standard deviation given by the
+decoder.
+
+# Arguments
+- `decoder::AbstractGaussianLogDecoder`: The decoder of the VAE, which is used
+  to compute the mean and log standard deviation of the Gaussian distribution.
+- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. However, the
+  last dimension must be of size 1.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  mean and log standard deviation of the Gaussian distribution.
+
+# Returns
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
+  given the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+decoder output under a Gaussian distribution. The mean and log standard
+deviation of the Gaussian distribution are extracted from the `decoder_output`.
+The standard deviation is then computed by exponentiating the log standard
+deviation. The log-likelihood is computed using the formula for the
+log-likelihood of a Gaussian distribution.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`.
+"""
+function decoder_loglikelihood(
+    decoder::AbstractGaussianLogDecoder,
+    x::AbstractArray{T},
+    decoder_output::NamedTuple;
+) where {T<:Float32}
+    # Extract the mean and log standard deviation of the Gaussian distribution
+    μ, logσ = decoder_output.µ, decoder_output.logσ
+
+    # Compute standard deviation
+    σ = exp.(logσ)
+
+    # Compute log-likelihood
+    loglikelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+                    sum(logσ) -
+                    0.5f0 * length(x) * log(2.0f0π)
+
+    return loglikelihood
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    decoder_loglikelihood(
+        decoder::AbstractGaussianLinearDecoder,
+        x::AbstractArray{T},
+        decoder_output::NamedTuple
+    ) where {T<:Float32}
+
+Computes the log-likelihood of the observed data `x` given the decoder output
+under a Gaussian distribution with mean and standard deviation given by the
+decoder.
+
+# Arguments
+- `decoder::AbstractGaussianLinearDecoder`: The decoder of the VAE, which is
+  used to compute the mean and standard deviation of the Gaussian distribution.
+- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. However, the
+  last dimension must be of size 1.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  mean and standard deviation of the Gaussian distribution.
+
+# Returns
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
+  given the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+decoder output under a Gaussian distribution. The mean and standard deviation of
+the Gaussian distribution are extracted from the `decoder_output`. The
+log-likelihood is computed using the formula for the log-likelihood of a
+Gaussian distribution.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`.
+"""
+function decoder_loglikelihood(
+    decoder::AbstractGaussianLinearDecoder,
+    x::AbstractArray{T},
+    decoder_output::NamedTuple;
+) where {T<:Float32}
+    # Extract the mean and standard deviation of the Gaussian distribution
+    μ, σ = decoder_output.µ, decoder_output.σ
+
+    # Compute log-likelihood
+    loglikelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+                    sum(log, σ) -
+                    0.5f0 * length(x) * log(2.0f0π)
+
+    return loglikelihood
+end # function
+
+# ------------------------------------------------------------------------------
+@doc raw"""
+    decoder_loglikelihood(
+        decoder::AbstractVariationalDecoder,
+        x::AbstractArray{T},
+        z::AbstractVector{T};
+        kwargs::NamedTuple
+    ) where {T<:Float32}
+
+Computes the log-likelihood of the observed data `x` given the latent variable
+`z` under a distribution specified by the decoder.
+
+# Arguments
+- `decoder::AbstractVariationalDecoder`: The decoder of the VAE, which is used
+  to compute the parameters of the specified distribution.
+- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. However, the
+  last dimension must be of size 1.
+- `z::AbstractVector{T}`: The latent variable used to generate the decoder
+  output.
+
+# Optional Keyword Arguments
+- `kwargs::NamedTuple`: Additional keyword arguments that are passed to the
+  specific log-likelihood function of the decoder.
+
+# Returns
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
+  given the latent variable `z`.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+latent variable `z` under a distribution specified by the decoder. The decoder
+is used to compute the parameters of the distribution. The log-likelihood is
+then computed using the specific log-likelihood function of the decoder.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`.
+"""
+function decoder_loglikelihood(
+    decoder::AbstractVariationalDecoder,
+    x::AbstractArray{T},
+    z::AbstractVector{T};
+    kwargs::NamedTuple
+)
+    # Run z through the decoder
+    decoder_output = decoder(z)
+
+    # Call corresponding loglikelihood function
+    return decoder_loglikelihood(decoder, x, decoder_output; kwargs...)
+end # function
