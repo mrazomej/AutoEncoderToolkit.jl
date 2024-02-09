@@ -745,12 +745,12 @@ function spherical_logprior(
     σ = convert(T, σ)
 
     # Compute log-prior
-    log_prior = [
-        begin
-            -0.5f0 * sum(abs2, z[:, i] / σ) -
-            0.5f0 * length(z[:, i]) * (2.0f0 * log(σ) + log(2.0f0π))
-        end for i = 1:size(z, 2)
-    ]
+    log_prior = mapslices(
+        Ƶ -> -0.5f0 * sum((Ƶ / σ) .^ 2) -
+             0.5f0 * length(Ƶ) * (2.0f0 * log(σ) + log(2.0f0π)),
+        z,
+        dims=(1,)
+    )
 
-    return log_prior
+    return vec(log_prior)
 end # function
