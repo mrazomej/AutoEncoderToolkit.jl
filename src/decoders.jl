@@ -1680,7 +1680,7 @@ function decoder_loglikelihood(
             -Flux.Losses.logitbinarycrossentropy(x[.., i], p[.., i]; agg=sum)
         end
         for i in 1:size(z, 2)
-    ]
+    ] |> Flux.gpu
 
     return loglikelihood
 end
@@ -1809,7 +1809,7 @@ function decoder_loglikelihood(
             -0.5f0 * sum(abs2, (x[.., i] - μ[.., i]) / σ) -
             0.5f0 * length(x[.., i]) * (2.0f0 * log(σ) + log(2.0f0π))
         end for i in 1:size(z, 2)
-    ]
+    ] |> Flux.gpu
     return loglikelihood
 end # function
 
@@ -1935,7 +1935,7 @@ function decoder_loglikelihood(
             sum(logσ[.., i]) -
             0.5f0 * length(x[.., i]) * log(2.0f0π)
         end for i in 1:size(z, 2)
-    ]
+    ] |> Flux.gpu
 
     return loglikelihood
 end # function
@@ -2057,7 +2057,7 @@ function decoder_loglikelihood(
             sum(log, σ[.., i]) -
             0.5f0 * length(x[.., i]) * log(2.0f0π)
         end for i in 1:size(z, 2)
-    ]
+    ] |> Flux.gpu
 
     return loglikelihood
 end # function
