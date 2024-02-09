@@ -34,20 +34,17 @@ using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
 # Import Concrete VAE type
 using ..AutoEncode: VAE
 
-# Import decoder_loglikelihood functions
-using ..AutoEncode: decoder_loglikelihood
+# Import log-probability functions
+using ..AutoEncode: decoder_loglikelihood, spherical_logprior
 
 # Import functions from other modules
 using ..VAEs: reparameterize
 
 
 # Import functions
-using ..utils: vec_to_ltri, slogdet,
-    sample_MvNormalCanon,
-    finite_difference_gradient
+using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient
 
-using ..HVAEs: spherical_logprior,
-    quadratic_tempering, null_tempering
+using ..HVAEs: quadratic_tempering, null_tempering
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #  Chadebec, C., Mantoux, C. & Allassonnière, S. Geometry-Aware Hamiltonian
@@ -712,6 +709,95 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
+    G_inv(
+        z::CuMatrix,
+        centroids_latent::CuMatrix,
+        M::CuArray{N,3},
+        T::N,
+        λ::N,
+    ) where {N<:AbstractFloat}
+
+Compute the inverse of the metric tensor G for each column in the matrix `z`.
+
+This function takes a matrix `z` where each column represents a point in the
+latent space, the `centroids_latent` of the RHVAE instance, a 3D array `M`
+representing the metric tensor, a temperature `T`, and a regularization factor
+`λ`, and computes the inverse of the metric tensor G at each point. The
+computation is based on the centroids and the temperature, as well as a
+regularization term. The inverse metric is computed as follows:
+
+G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
+
+where each column of `centroids_latent` are the cᵢ.
+
+All operations in this function are broadcasted over the appropriate dimensions
+to avoid the need for explicit loops.
+
+# Arguments
+- `z::CuMatrix`: The matrix where each column is a point in the latent
+  space.
+- `centroids_latent::CuMatrix`: The centroids in the latent space.
+- `M::CuArray{N,3}`: The 3D array representing the metric tensor.
+- `T::N`: The temperature.
+- `λ::N`: The regularization factor.
+
+# Returns
+A 3D array where each slice along the third dimension represents the inverse of
+the metric tensor G at the corresponding column of `z`.
+
+# Notes
+The computation involves the squared Euclidean distance between each column of
+`z` and each centroid, the exponential of the negative of these distances
+divided by the square of the temperature, and a regularization term proportional
+to the identity matrix. The result is a 3D array where each slice along the
+third dimension is a matrix of the same size as the latent space.
+"""
+function G_inv(
+    z::CuMatrix,
+    centroids_latent::CuMatrix,
+    M::CuArray{N,3},
+    T::N,
+    λ::N,
+) where {N<:AbstractFloat}
+    # Find number of centroids
+    n_centroid = size(centroids_latent, 2)
+    # Find number of samples
+    n_sample = size(z, 2)
+
+    # Reshape arrays to broadcast subtraction
+    z = reshape(z, size(z, 1), 1, n_sample)
+    centroids_latent = reshape(
+        centroids_latent, size(centroids_latent, 1), n_centroid, 1
+    )
+
+    # Compute exp(-‖z - cᵢ‖₂² / T²). Notes:
+    # - We bradcast the operation by reshaping the input arrays.
+    # - We use Zygot.dropgrad to prevent the gradient from being computed for T.
+    # - The result is a 3D array of size (1, n_centroid, n_sample).
+    exp_term = exp.(-sum(
+        (z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2),
+        dims=1
+    ))
+
+    # Reshape exp_term to broadcast multiplication
+    exp_term = reshape(exp_term, 1, 1, n_centroid, n_sample)
+
+    # Perform the multiplication
+    LLexp = M .* exp_term
+
+    # Compute the regularization term.
+    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(size(z, 1)) .* λ)))
+
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    # original implementation, but without it, the metric tensor scales with the
+    # number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) .+ Λ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
     G_inv( 
         z::AbstractVecOrMat{Float32},
         metric_param::Union{RHVAE,NamedTuple},
@@ -831,6 +917,89 @@ function riemannian_logprior(
            0.5f0 * LinearAlgebra.dot(ρ, G⁻¹ * ρ)
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior(
+        ρ::AbstractMatrix{T},
+        G⁻¹::AbstractArray{T,3};
+        σ::T=1.0f0,
+    ) where {T<:AbstractFloat}
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric.
+
+# Arguments
+- `ρ::AbstractMatrix{T}`: The momentum matrix.
+- `G⁻¹::AbstractArray{T,3}`: The inverse of the Riemannian metric tensor.
+
+# Optional Keyword Arguments
+- `σ::T=1.0f0`: The standard deviation of the Gaussian distribution. This is
+  used to scale the inverse metric tensor. Default is `1.0f0`.
+
+# Returns
+The log-prior of the Gaussian distribution with a covariance matrix given by the
+Riemannian metric.
+
+# Description
+This function performs several operations to compute the log-prior of a Gaussian
+distribution with a covariance matrix given by the Riemannian metric. 
+
+First, it scales the inverse of the Riemannian metric tensor `G⁻¹` by `σ^2`.
+
+Next, the function computes the Cholesky decomposition of `G⁻¹` using the
+`mapslices` function to broadcast the computation over the third dimension of
+`G⁻¹`. The Cholesky decomposition is a decomposition of a Hermitian,
+positive-definite matrix into the product of a lower triangular matrix and its
+conjugate transpose.
+
+The function then computes the log determinant of `G⁻¹` as twice the sum of the
+logarithm of the diagonal elements of the lower triangular matrix from the
+Cholesky decomposition. This value represents the log-prior of the Gaussian
+distribution.
+
+Finally, the function computes `ρᵀ G⁻¹ ρ` in a broadcasted manner using the
+`Flux.batched_vec` function. This function reshapes the second argument to match
+the shape of the first argument, allowing for efficient broadcasting over the
+third dimension of `G⁻¹`.
+
+# Notes
+- Ensure that the dimensions of `ρ` match the dimensions of the latent space of
+  the RHVAE model.
+- This function is designed to work with CUDA arrays for GPU-accelerated
+  computations.
+"""
+function riemannian_logprior(
+    ρ::AbstractMatrix{T},
+    G⁻¹::AbstractArray{T,3};
+    σ::T=1.0f0,
+) where {T<:AbstractFloat}
+    # Multiply G⁻¹ by σ²
+    G⁻¹ = σ^2 .* G⁻¹
+
+    # Compute the Cholesky decomposition of G⁻¹. Note that we set check=false to
+    # avoid errors when G⁻¹ is not positive definite due to rounding errors.
+    chol = mapslices(
+        c -> LinearAlgebra.cholesky(c; check=false).L,
+        G⁻¹,
+        dims=(1, 2)
+    )
+
+    # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
+    # elements of the Cholesky decomposition
+    logdetG = mapslices(
+        c -> 2 * sum(log.(LinearAlgebra.diag(c))),
+        chol,
+        dims=(1, 2)
+    )
+
+    # Compute ρᵀ G⁻¹ ρ in a broadcasted manner
+    ρᵀ_G⁻¹_ρ = sum(ρ .* Flux.batched_vec(G⁻¹, ρ), dims=1)
+
+    return -0.5f0 * (size(ρ, 1) * log(2.0f0π) .+ vec(logdetG)) .-
+           0.5f0 .* vec(ρᵀ_G⁻¹_ρ)
+end # function
+
 # ==============================================================================
 # Hamiltonian and gradient computations
 # ==============================================================================
@@ -922,7 +1091,7 @@ function hamiltonian(
 
     # Compute log-likelihood
     loglikelihood_x_given_z = reconstruction_loglikelihood(
-        x, decoder, decoder_output
+        x, z, decoder, decoder_output
     )
 
     # Compute log-prior
