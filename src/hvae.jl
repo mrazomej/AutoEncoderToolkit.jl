@@ -76,48 +76,6 @@ Flux.@functor HVAE
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 # ==============================================================================
-# Function to compute log prior
-# ==============================================================================
-
-@doc raw"""
-    spherical_logprior(
-        z::AbstractVector{T},
-        σ::T=1.0f0,
-    ) where {T<:Float32}
-
-Computes the log-prior of the latent variable `z` under a spherical Gaussian
-distribution with zero mean and standard deviation `σ`.
-
-# Arguments
-- `z::AbstractVector{T}`: The latent variable for which the log-prior is to be
-  computed.
-- `σ::T=1.0f0`: The standard deviation of the spherical Gaussian distribution.
-  Defaults to `1.0f0`.
-
-# Returns
-- `log_prior::Float32`: The computed log-prior of the latent variable `z`.
-
-# Description
-The function computes the log-prior of the latent variable `z` under a spherical
-Gaussian distribution with zero mean and standard deviation `σ`. The log-prior
-is computed using the formula for the log-prior of a Gaussian distribution.
-
-# Note
-Ensure the dimension of `z` matches the expected dimensionality of the latent
-space.
-"""
-function spherical_logprior(
-    z::AbstractVector{T},
-    σ::T=1.0f0,
-) where {T<:Float32}
-    # Compute log-prior
-    log_prior = -0.5f0 * sum(abs2, z / σ) -
-                0.5f0 * length(z) * (2.0f0 * log(σ) + log(2.0f0π))
-
-    return log_prior
-end # function
-
-# ==============================================================================
 # Function to compute potential energy
 # ==============================================================================
 
