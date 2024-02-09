@@ -531,20 +531,20 @@ function G_inv(
     # dimension of M.
     # - The Zygote.dropgrad function is used to prevent the gradient from being
     # computed with respect to T.
-    # - We divide the result by the number of centroids. This is NOT done in the
-    #   original implementation, but without it, the metric tensor scales with
-    #   the number of centroids.
     LLexp = M .*
             reshape(
         exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
         1, 1, :
-    ) / size(centroids_latent, 2)
+    )
 
     # Compute the regularization term.
     Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(length(z)) .* λ))
 
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
-    return dropdims(sum(LLexp, dims=3), dims=3) + Λ
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    # original implementation, but without it, the metric tensor scales with the
+    # number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) + Λ
 end # function
 
 # ------------------------------------------------------------------------------
@@ -603,28 +603,117 @@ function G_inv(
     # dimension of M.
     # - The Zygote.dropgrad function is used to prevent the gradient from being
     # computed with respect to T.
-    # - We divide the result by the number of centroids. This is NOT done in the
-    #   original implementation, but without it, the metric tensor scales with
-    #   the number of centroids.
     LLexp = M .*
             reshape(
         exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
         1, 1, :
-    ) / size(centroids_latent, 2)
+    )
 
     # Compute the regularization term.
     Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
 
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix.
-    return dropdims(sum(LLexp, dims=3), dims=3) + Λ
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. NOTE:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    #   original implementation, but without it, the metric tensor scales with
+    #   the number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) + Λ
 end # function
 
 
 # ------------------------------------------------------------------------------
 
 @doc raw"""
+    G_inv(
+        z::AbstractMatrix,
+        centroids_latent::AbstractMatrix,
+        M::AbstractArray{N,3},
+        T::N,
+        λ::N,
+    ) where {N<:AbstractFloat}
+
+Compute the inverse of the metric tensor G for each column in the matrix `z`.
+
+This function takes a matrix `z` where each column represents a point in the
+latent space, the `centroids_latent` of the RHVAE instance, a 3D array `M`
+representing the metric tensor, a temperature `T`, and a regularization factor
+`λ`, and computes the inverse of the metric tensor G at each point. The
+computation is based on the centroids and the temperature, as well as a
+regularization term. The inverse metric is computed as follows:
+
+G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
+
+where each column of `centroids_latent` are the cᵢ.
+
+All operations in this function are broadcasted over the appropriate dimensions
+to avoid the need for explicit loops.
+
+# Arguments
+- `z::AbstractMatrix`: The matrix where each column is a point in the latent
+  space.
+- `centroids_latent::AbstractMatrix`: The centroids in the latent space.
+- `M::AbstractArray{N,3}`: The 3D array representing the metric tensor.
+- `T::N`: The temperature.
+- `λ::N`: The regularization factor.
+
+# Returns
+A 3D array where each slice along the third dimension represents the inverse of
+the metric tensor G at the corresponding column of `z`.
+
+# Notes
+The computation involves the squared Euclidean distance between each column of
+`z` and each centroid, the exponential of the negative of these distances
+divided by the square of the temperature, and a regularization term proportional
+to the identity matrix. The result is a 3D array where each slice along the
+third dimension is a matrix of the same size as the latent space.
+"""
+function G_inv(
+    z::AbstractMatrix,
+    centroids_latent::AbstractMatrix,
+    M::AbstractArray{N,3},
+    T::N,
+    λ::N,
+) where {N<:AbstractFloat}
+    # Find number of centroids
+    n_centroid = size(centroids_latent, 2)
+    # Find number of samples
+    n_sample = size(z, 2)
+
+    # Reshape arrays to broadcast subtraction
+    z = reshape(z, size(z, 1), 1, n_sample)
+    centroids_latent = reshape(
+        centroids_latent, size(centroids_latent, 1), n_centroid, 1
+    )
+
+    # Compute exp(-‖z - cᵢ‖₂² / T²). Notes:
+    # - We bradcast the operation by reshaping the input arrays.
+    # - We use Zygot.dropgrad to prevent the gradient from being computed for T.
+    # - The result is a 3D array of size (1, n_centroid, n_sample).
+    exp_term = exp.(-sum(
+        (z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2),
+        dims=1
+    ))
+
+    # Reshape exp_term to broadcast multiplication
+    exp_term = reshape(exp_term, 1, 1, n_centroid, n_sample)
+
+    # Perform the multiplication
+    LLexp = M .* exp_term
+
+    # Compute the regularization term.
+    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(size(z, 1)) .* λ))
+
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    # original implementation, but without it, the metric tensor scales with the
+    # number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) .+ Λ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
     G_inv( 
-        z::AbstractVector{Float32},
+        z::AbstractVecOrMat{Float32},
         metric_param::Union{RHVAE,NamedTuple},
     )
 
@@ -642,7 +731,8 @@ where L_ψᵢ is computed by the `MetricChain`, T is the temperature, λ is a
 regularization factor, and each column of `centroids_latent` are the cᵢ.
 
 # Arguments
-- `z::AbstractVector{Float32}`: The point in the latent space.
+- `z::AbstractVecOrMat{Float32}`: The point in the latent space. If a matrix,
+  each column represents a point in the latent space.
 - `metric_param::Union{RHVAE,NamedTuple}`: Either an `RHVAE` instance or a named
   tuple containing the fields `centroids_latent`, `M`, `T`, and `λ`.
 
@@ -658,7 +748,7 @@ proportional to the identity matrix. The result is a matrix of the same size as
 the latent space.
 """
 function G_inv(
-    z::AbstractVector,
+    z::AbstractVecOrMat,
     metric_param::Union{RHVAE,NamedTuple},
 )
     return G_inv(
@@ -1171,110 +1261,6 @@ function ∇hamiltonian_finite(
     )
 end # function
 
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    ∇hamiltonian_finite(
-        x::AbstractArray{T},
-        z::AbstractVector{T},
-        ρ::AbstractVector{T},
-        rhvae::RHVAE,
-        var::Symbol;
-        decoder_loglikelihood::Function=decoder_loglikelihood,
-        position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior,
-        G_inv::Function=G_inv,
-    ) where {T<:Float32}
-
-Compute the gradient of the Hamiltonian with respect to a given variable using a
-naive finite difference method.
-
-This function takes a point `x` in the data space, a point `z` in the latent
-space, a momentum `ρ`, a `decoder` of type `AbstractVariationalDecoder`, a
-`metric_param` NamedTuple, and a variable `var` (:z or :ρ), and computes the
-gradient of the Hamiltonian with respect to `var` using a simple finite
-differences method. The computation is based on the log-likelihood of the
-decoder, the log-prior of the latent space, and the inverse of the metric tensor
-G at the point `z`.
-
-The Hamiltonian is computed as follows:
-
-Hₓ(z, ρ) = Uₓ(z) + κ(ρ),
-
-where Uₓ(z) is the potential energy, and κ(ρ) is the kinetic energy. The
-potential energy is defined as follows:
-
-Uₓ(z) = -log p(x|z) - log p(z),
-
-where p(x|z) is the log-likelihood of the decoder and p(z) is the log-prior in
-latent space. The kinetic energy is defined as follows:
-
-κ(ρ) = 0.5 * log((2π)ᴰ det G(z)) + 0.5 * ρᵀ G(z)⁻¹ ρ
-
-where D is the dimension of the latent space, and G(z) is the metric tensor at
-the point `z`.
-
-# Arguments
-- `x::AbstractArray{T}`: The point in the data space. This does not necessarily
-  need to be a vector. Array inputs are supported, but the last dimension of the
-  array should be of size 1.
-- `z::AbstractVector{T}`: The point in the latent space.
-- `ρ::AbstractVector{T}`: The momentum.
-- `rhvae::RHVAE`: The `RHVAE` instance.
-- `var::Symbol`: The variable with respect to which the gradient is computed.
-  Must be :z or :ρ.
-
-# Optional Keyword Arguments
-- `decoder_loglikelihood::Function`: The function to compute the log-likelihood
-  of the decoder. Default is `decoder_loglikelihood`. This function must take as
-  input the decoder, the point `x` in the data space, and the point `z` in the
-  latent space.
-- `position_logprior::Function`: The function to compute the log-prior of the
-  latent space position. Default is `spherical_logprior`. This function must
-  take as input the point `z` in the latent space.
-- `momentum_logprior::Function`: The function to compute the log-prior of the
-  latent space momentum. Default is `riemannian_logprior`. This function must
-  take as input the point `z` in the latent space, the momentum `ρ`, and the
-  metric parameters.
-- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
-  metric tensor. This function should take two arguments: the latent variable
-  vector and the metric parameters, and return the inverse of the Riemannian
-  metric tensor.
-
-# Returns
-A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
-respect to variable `var`.
-"""
-function ∇hamiltonian_finite(
-    x::AbstractArray{T},
-    z::AbstractVector{T},
-    ρ::AbstractVector{T},
-    rhvae::RHVAE,
-    var::Symbol;
-    decoder_loglikelihood::Function=decoder_loglikelihood,
-    position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior,
-    G_inv::Function=G_inv,
-    ε::T=sqrt(eps(Float32))
-) where {T<:Float32}
-    # Call ∇hamiltonian function with metric_param as NamedTuple
-    return ∇hamiltonian_finite(
-        x, z, ρ, rhvae.vae.decoder,
-        (
-            centroids_latent=rhvae.centroids_latent,
-            M=rhvae.M,
-            T=rhvae.T,
-            λ=rhvae.λ
-        ),
-        var;
-        decoder_loglikelihood=decoder_loglikelihood,
-        position_logprior=position_logprior,
-        momentum_logprior=momentum_logprior,
-        G_inv=G_inv,
-        ε=ε
-    )
-end # function
-
 # ==============================================================================
 # Generalized Leapfrog Integrator
 # ==============================================================================
@@ -1392,8 +1378,8 @@ end # function
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
-                G_inv=G_inv,
         ),
+        G_inv::Function=G_inv,
     ) where {T<:Float32}
 
 Perform the first step of the generalized leapfrog integrator for Hamiltonian
@@ -1434,8 +1420,10 @@ variables `z`. The result is returned as ρ̃.
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian. Default is `∇hamiltonian_finite`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
-  is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
-  `momentum_logprior`, and `G_inv`.
+  is a tuple with `reconstruction_loglikelihood`, `position_logprior`, and
+  `momentum_logprior`.
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor. Default is `G_inv`.
 
 # Returns
 A vector representing the updated momentum after performing the first step of
@@ -1453,21 +1441,14 @@ function _leapfrog_first_step(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
-        G_inv=G_inv,
     ),
+    G_inv::Function=G_inv,
 ) where {T<:Float32}
     # Compute inverse of the metric tensor
-    G⁻¹ = ∇H_kwargs.G_inv(z, rhvae)
+    G⁻¹ = G_inv(z, rhvae)
 
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
-
-    # Rewrite ∇H_kwargs without G_inv
-    ∇H_kwargs = (
-        reconstruction_loglikelihood=∇H_kwargs.reconstruction_loglikelihood,
-        position_logprior=∇H_kwargs.position_logprior,
-        momentum_logprior=∇H_kwargs.momentum_logprior,
-    )
 
     # Call _leapfrog_first_step function with metric_param as NamedTuple
     return _leapfrog_first_step(
@@ -1599,8 +1580,8 @@ end # function
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
-                G_inv=G_inv,
         ),
+        G_inv::Function=G_inv,
     ) where {T<:Float32}
 
 Perform the second step of the generalized leapfrog integrator for Hamiltonian
@@ -1643,8 +1624,10 @@ variables `ρ`. The result is returned as z̄.
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian. Default is `∇hamiltonian_finite`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
-  is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
-  `momentum_logprior`, and `G_inv`.
+  is a tuple with `reconstruction_loglikelihood`, `position_logprior`, and
+  `momentum_logprior`.
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor. Default is `G_inv`.
 
 # Returns
 A vector representing the updated position after performing the second step of
@@ -1662,21 +1645,14 @@ function _leapfrog_second_step(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
-        G_inv=G_inv,
     ),
+    G_inv::Function=G_inv,
 ) where {T<:Float32}
     # Compute inverse of the metric tensor
-    G⁻¹ = ∇H_kwargs.G_inv(z, rhvae)
+    G⁻¹ = G_inv(z, rhvae)
 
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
-
-    # Rewrite ∇H_kwargs without G_inv
-    ∇H_kwargs = (
-        reconstruction_loglikelihood=∇H_kwargs.reconstruction_loglikelihood,
-        position_logprior=∇H_kwargs.position_logprior,
-        momentum_logprior=∇H_kwargs.momentum_logprior,
-    )
 
     # Call _leapfrog_first_step function with metric_param as NamedTuple
     return _leapfrog_second_step(
@@ -1788,8 +1764,8 @@ end # function
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
-                G_inv=G_inv,
         ),
+        G_inv::Function=G_inv,
     ) where {T<:Float32}
 
 Perform the third step of the generalized leapfrog integrator for Hamiltonian
@@ -1829,8 +1805,10 @@ variables `z`. The result is returned as ρ̃.
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian. Default is `∇hamiltonian_finite`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
-  is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
-  `momentum_logprior`, and `G_inv`.
+  is a tuple with `reconstruction_loglikelihood`, `position_logprior`, and
+  `momentum_logprior`.
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor. Default is `G_inv`.
 
 # Returns
 A vector representing the updated momentum after performing the third step of
@@ -1848,21 +1826,14 @@ function _leapfrog_third_step(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
-        G_inv=G_inv,
     ),
+    G_inv::Function=G_inv,
 ) where {T<:Float32}
     # Compute inverse of the metric tensor
-    G⁻¹ = ∇H_kwargs.G_inv(z, rhvae)
+    G⁻¹ = G_inv(z, rhvae)
 
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
-
-    # Rewrite ∇H_kwargs without G_inv
-    ∇H_kwargs = (
-        reconstruction_loglikelihood=∇H_kwargs.reconstruction_loglikelihood,
-        position_logprior=∇H_kwargs.position_logprior,
-        momentum_logprior=∇H_kwargs.momentum_logprior,
-    )
 
     # Call _leapfrog_first_step function with metric_param as NamedTuple
     return _leapfrog_third_step(
@@ -1880,17 +1851,19 @@ end # function
         x::AbstractArray{T},
         z::AbstractVector{T},
         ρ::AbstractVector{T},
+        G⁻¹::AbstractMatrix{T},
         decoder::AbstractVariationalDecoder,
+        decoder_output::NamedTuple,
         metric_param::NamedTuple;
         ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
         steps::Int=3,
         ∇H::Function=∇hamiltonian_finite,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
-            decoder_loglikelihood=decoder_loglikelihood,
-            position_logprior=spherical_logprior,
-            momentum_logprior=riemannian_logprior,
-            G_inv=G_inv,
+                decoder_loglikelihood=decoder_loglikelihood,
+                position_logprior=spherical_logprior,
+                momentum_logprior=riemannian_logprior,
         ),
+        G_inv::Function=G_inv,
     ) where {T<:Float32}
 
 Perform a full step of the generalized leapfrog integrator for Hamiltonian
@@ -1899,14 +1872,17 @@ dynamics.
 The leapfrog integrator is a numerical integration scheme used to simulate
 Hamiltonian dynamics. It consists of three steps:
 
-1. Half update of the momentum variable: ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ *
-    ∇z_H(z(t), ρ(t + ϵ/2)).
+1. Half update of the momentum variable: 
 
-2. Full update of the position variable: z(t + ϵ) = z(t) + 0.5 * ϵ * [∇ρ_H(z(t),
-ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
+    ρ(t + ϵ/2) = ρ(t) - 0.5 * ϵ * ∇z_H(z(t), ρ(t + ϵ/2)).
 
-3. Half update of the momentum variable: ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ *
-    ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
+2. Full update of the position variable: 
+
+z(t + ϵ) = z(t) + 0.5 * ϵ * [∇ρ_H(z(t), ρ(t+ϵ/2)) + ∇ρ_H(z(t + ϵ), ρ(t+ϵ/2))].
+
+3. Half update of the momentum variable: 
+
+    ρ(t + ϵ) = ρ(t + ϵ/2) - 0.5 * ϵ * ∇z_H(z(t + ϵ), ρ(t + ϵ/2)).
 
 This function performs these three steps in sequence, using the
 `_leapfrog_first_step`, `_leapfrog_second_step` and `_leapfrog_third_step`
@@ -1918,60 +1894,73 @@ helper functions.
   array should be of size 1.
 - `z::AbstractVector{T}`: The point in the latent space.
 - `ρ::AbstractVector{T}`: The momentum.
+- `G⁻¹::AbstractMatrix{T}`: The inverse of the Riemannian metric tensor.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
+- `decoder_output::NamedTuple`: The output of the decoder.
 - `metric_param::NamedTuple`: The parameters for the metric tensor.
 
 # Optional Keyword Arguments
 - `ϵ::Union{T,<:AbstractVector{T}}=0.01f0`: The step size. Default is 0.01.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of the
-  Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
+  the Hamiltonian. Default is `∇hamiltonian_finite`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `decoder_loglikelihood`, `position_logprior`,
   `momentum_logprior`, and `G_inv`.
+- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
+  metric tensor.
 
 # Returns
-A tuple `(z̄, ρ̄)` representing the updated position and momentum after
-performing the full leapfrog step.
+A tuple `(z̄, ρ̄, Ḡ⁻¹)` representing the updated position, momentum, and the
+inverse of the updated Riemannian metric tensor after performing the full
+leapfrog step.
 """
 function general_leapfrog_step(
     x::AbstractArray{T},
     z::AbstractVector{T},
     ρ::AbstractVector{T},
+    G⁻¹::AbstractMatrix{T},
     decoder::AbstractVariationalDecoder,
+    decoder_output::NamedTuple,
     metric_param::NamedTuple;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
     steps::Int=3,
     ∇H::Function=∇hamiltonian_finite,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
-        decoder_loglikelihood=decoder_loglikelihood,
+        reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
-        G_inv=G_inv,
     ),
+    G_inv::Function=G_inv,
 ) where {T<:Float32}
     # Update momentum variable with half step. This step peforms fixed-point
     # iterations
     ρ̃ = _leapfrog_first_step(
-        x, z, ρ, decoder, metric_param;
+        x, z, ρ, G⁻¹, decoder, decoder_output;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
     # Update position variable with full step. This step peforms fixed-point
     # iterations
     z̄ = _leapfrog_second_step(
-        x, z, ρ̃, decoder, metric_param;
+        x, z, ρ̃, G⁻¹, decoder, decoder_output;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
+    # Update decoder output
+    decoder_output_z̄ = decoder(z̄)
+
+    # Update Riemannian metric tensor
+    Ḡ⁻¹ = G_inv(z̄, metric_param)
+
     # Update momentum variable with half step. No fixed-point iterations needed
     ρ̄ = _leapfrog_third_step(
-        x, z̄, ρ̃, decoder, metric_param;
+        x, z̄, ρ̃, G⁻¹, decoder, decoder_output_z̄;
         ϵ=ϵ, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
-    return z̄, ρ̄
+    return z̄, ρ̄, Ḡ⁻¹
 end # function 
 
 # ------------------------------------------------------------------------------
@@ -2041,44 +2030,64 @@ function general_leapfrog_step(
     x::AbstractArray{T},
     z::AbstractMatrix{T},
     ρ::AbstractMatrix{T},
+    G⁻¹::AbstractArray{T,3},
     decoder::AbstractVariationalDecoder,
+    decoder_output::Vector{NamedTuple},
     metric_param::NamedTuple;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
     steps::Int=3,
     ∇H::Function=∇hamiltonian_finite,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
-        decoder_loglikelihood=decoder_loglikelihood,
+        reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
-        G_inv=G_inv,
     ),
+    G_inv::Function=G_inv,
 ) where {T<:Float32}
-    # Apply general_leapfrog_step to each data point
-    if typeof(x) <: AbstractMatrix
-        results = [
-            general_leapfrog_step(
-                x[:, i], z[:, i], ρ[:, i], decoder, metric_param;
-                ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
-            )
+    # Update momentum variable with half step. This step peforms fixed-point
+    # iterations
+    ρ̃ = reduce(
+        hcat,
+        [
+            begin
+                _leapfrog_first_step(
+                    x[.., i:i], z[:, i], ρ[:, i], G⁻¹[:, :, i],
+                    decoder, decoder_output[i];
+                    ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+                )
+            end
             for i in axes(z, 2)
         ]
-    else
-        # For array inputs we use the EllipsisNotation package to index the last
-        # dimension
-        results = [
-            general_leapfrog_step(
-                x[.., i:i], z[:, i], ρ[:, i], decoder, metric_param;
-                ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
-            )
-            for i in axes(z, 2)
-        ]
-    end
+    )
 
-    # Split the results into separate matrices for z̄ and ρ̄
-    z̄ = reduce(hcat, [result[1] for result in results])
-    ρ̄ = reduce(hcat, [result[2] for result in results])
+    return ρ̃
 
-    return z̄, ρ̄
+    # # Apply general_leapfrog_step to each data point
+    # if typeof(x) <: AbstractMatrix
+    #     results = [
+    #         general_leapfrog_step(
+    #             x[:, i], z[:, i], ρ[:, i], decoder, metric_param;
+    #             ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+    #         )
+    #         for i in axes(z, 2)
+    #     ]
+    # else
+    #     # For array inputs we use the EllipsisNotation package to index the last
+    #     # dimension
+    #     results = [
+    #         general_leapfrog_step(
+    #             x[.., i:i], z[:, i], ρ[:, i], decoder, metric_param;
+    #             ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
+    #         )
+    #         for i in axes(z, 2)
+    #     ]
+    # end
+
+    # # Split the results into separate matrices for z̄ and ρ̄
+    # z̄ = reduce(hcat, [result[1] for result in results])
+    # ρ̄ = reduce(hcat, [result[2] for result in results])
+
+    # return z̄, ρ̄
 end # function
 
 # ------------------------------------------------------------------------------
