@@ -615,42 +615,6 @@ function sample_MvNormalCanon(
     Σ⁻¹::AbstractMatrix{T}
 ) where {T<:AbstractFloat}
     # Invert the precision matrix
-    Σ = LinearAlgebra.inv(Σ⁻¹)
-
-    # Make sure the matrix is symmetric
-    Σ = (Σ + LinearAlgebra.transpose(Σ)) / 2
-
-    # Cholesky decomposition of the covariance matrix
-    chol = LinearAlgebra.cholesky(Σ, check=false)
-
-    # Sample from standard normal distribution
-    r = randn(T, size(Σ⁻¹, 1))
-
-    # Return sample multiplied by the Cholesky decomposition
-    return chol.L * r
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    sample_MvNormalCanon(Σ⁻¹::CUDA.CuMatrix{T}) where {T<:AbstractFloat}
-
-Draw a random sample from a multivariate normal distribution in canonical form,
-specifically for a precision matrix stored on the GPU.
-
-# Arguments
-- `Σ⁻¹::CUDA.CuMatrix{T}`: The precision matrix (inverse of the covariance
-  matrix) of the multivariate normal distribution, stored on the GPU. `T` is a
-  subtype of `AbstractFloat`.
-
-# Returns
-- A random sample drawn from the multivariate normal distribution specified by
-  the input precision matrix, returned as a GPU array.
-"""
-function sample_MvNormalCanon(
-    Σ⁻¹::CUDA.CuMatrix{T}
-) where {T<:AbstractFloat}
-    # Invert the precision matrix
     Σ = LinearAlgebra.inv(Σ⁻¹ |> Flux.cpu)
 
     # Make sure the matrix is symmetric
@@ -664,6 +628,50 @@ function sample_MvNormalCanon(
 
     # Return sample multiplied by the Cholesky decomposition
     return chol.L * r |> Flux.gpu
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    sample_MvNormalCanon(Σ⁻¹::AbstractArray{T,3}) where {T<:AbstractFloat}
+
+Draw a random sample from a multivariate normal distribution in canonical form.
+
+# Arguments
+- `Σ⁻¹::AbstractArray{T,3}`: The precision matrix (inverse of the covariance
+  matrix) of the multivariate normal distribution. Each slice of the 3D tensor
+  corresponds to one precision matrix. `T` is a subtype of `AbstractFloat`.
+
+# Returns
+- A random sample drawn from the multivariate normal distributions specified by
+  the input precision matrices.
+"""
+function sample_MvNormalCanon(
+    Σ⁻¹::AbstractArray{T,3}
+) where {T<:AbstractFloat}
+    # Extract dimensions
+    dim = size(Σ⁻¹, 1)
+    # Extract number of samples
+    n_sample = size(Σ⁻¹, 3)
+
+    # Invert the precision matrix
+    Σ = LinearAlgebra.inv.(eachslice(Σ⁻¹ |> Flux.cpu, dims=3))
+
+    # Cholesky decomposition of the covariance matrix
+    chol = reduce(
+        (x, y) -> cat(x, y, dims=3),
+        [
+            begin
+                LinearAlgebra.cholesky(slice, check=false).L
+            end for slice in Σ
+        ]
+    )
+
+    # Sample from standard normal distribution
+    r = randn(T, dim, n_sample)
+
+    # Return sample multiplied by the Cholesky decomposition
+    return Flux.batched_vec(chol, r) |> Flux.gpu
 end # function
 
 # Set Zygote to ignore the function when computing gradients
@@ -700,12 +708,13 @@ means that Zygote will ignore any call to this function when computing
 gradients.
 """
 function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
-    # Initialize a vector of zeros
-    e = zeros(T, length(x))
-    # Set the i-th element to 1
-    e[i] = one(T)
-    return e
+    return [j == i ? one(T) : zero(T) for j in 1:length(x)]
 end # function
+
+function unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
+    return [j == i ? one(T) : zero(T) for j in 1:size(x, 1)]
+end # function
+
 
 # ------------------------------------------------------------------------------
 
@@ -797,62 +806,67 @@ function finite_difference_gradient(
             f(x .- ε * unit_vector(x, i, T))
         ) / 2ε for i in eachindex(x)
     ]
-    return grad
+    return grad |> Flux.gpu
 end # function
 
 # ------------------------------------------------------------------------------
 
 """
-    active_selection(
-        f::Function, x::CUDA.CuVector{T}; ε::T=sqrt(eps(Float32))
+    finite_difference_gradient(
+        f::Function, x::AbstractMatrix{T}; ε::T=sqrt(eps(T))
     ) where {T<:AbstractFloat}
 
-Compute the finite difference gradient of a function `f` at a point `x` and
-upload it to the GPU.
+Compute the finite difference gradient of a function `f` at multiple points
+represented by the columns of `x`.
 
 # Arguments
 - `f::Function`: The function for which the gradient is to be computed.
-- `x::CUDA.CuVector{T}`: The point at which the gradient is to be computed.
+- `x::AbstractMatrix{T}`: The matrix where each column represents a point at
+  which the gradient is to be computed.
 
 # Optional Keyword Arguments
-- `ε::T=sqrt(eps(Float32))`: The step size for the finite difference
-  calculation. Defaults to the square root of the machine epsilon for type
-  `Float32`.
+- `ε::T=sqrt(eps(T))`: The step size for the finite difference calculation.
+  Defaults to the square root of the machine epsilon for type `T`.
 
 # Returns
-- A CUDA array representing the gradient of `f` at `x`.
+- A matrix where each column represents the gradient of `f` at the corresponding
+  column of `x`.
 
 # Description
-This function computes the finite difference gradient of a function `f` at a
-point `x`. The gradient is a CUDA array where the `i`-th element is the partial
-derivative of `f` with respect to the `i`-th element of `x`.
+This function computes the finite difference gradient of a function `f` at
+multiple points. Each column of `x` represents a point, and the corresponding
+column in the output matrix represents the gradient at that point.
 
-The partial derivatives are computed using the central difference formula:
+The gradient is computed using the central difference formula:
 
 ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
 
 where eᵢ is the `i`-th unit vector.
 
-The output is uploaded to the GPU for efficient computation with CUDA arrays.
-
 # Example
 ```julia
-f(x) = sum(x.^2)
-x = CUDA.cu([1.0, 2.0, 3.0])
-active_selection(f, x)  # Returns the CUDA array [2.0, 4.0, 6.0]
+f(x) = sum(x.^2, dims=1)
+x = [1.0 2.0 3.0; 4.0 5.0 6.0]
+finite_difference_gradient(f, x)  # Returns a matrix where each column is the gradient at the corresponding column of `x`
 ```
 """
 function finite_difference_gradient(
     f::Function,
-    x::CUDA.CuVector{T};
-    ε::T=sqrt(CUDA.eps(Float32))
+    x::AbstractMatrix{T};
+    ε::T=sqrt(eps(Float32))
 ) where {T<:AbstractFloat}
     # Compute the finite difference gradient for each element of x
-    grad = CUDA.cu([
-        (
-            f(x .+ ε * unit_vector(x, i, T)) -
-            f(x .- ε * unit_vector(x, i, T))
-        ) / 2ε for i in eachindex(x)
-    ])
-    return grad
+    grad = permutedims(
+        reduce(
+            hcat,
+            [
+                (
+                    f(x .+ ε * unit_vector(x, i, T)) -
+                    f(x .- ε * unit_vector(x, i, T))
+                ) / 2ε for i in 1:size(x, 1)
+            ]
+        ),
+        [2, 1]
+    )
+    return grad |> Flux.gpu
 end # function
