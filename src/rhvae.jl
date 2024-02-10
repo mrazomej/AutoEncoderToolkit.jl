@@ -2581,8 +2581,8 @@ end # function
                         reconstruction_loglikelihood=decoder_loglikelihood,
                         position_logprior=spherical_logprior,
                         momentum_logprior=riemannian_logprior,
-                        G_inv=G_inv,
         ),
+        G_inv::Function=G_inv,
         tempering_schedule::Function=quadratic_tempering,
         latent::Bool=false,
     ) where {D<:AbstractVariationalDecoder,T<:Float32}
@@ -2609,8 +2609,10 @@ separate input in the form of a NamedTuple.
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian in the HMC part of the RHVAE.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
-  to the `∇H` function. Default is a NamedTuple with `reconstruction_loglikelihood`,
-  `position_logprior`, `momentum_logprior`, and `G_inv`.  
+  to the `∇H` function. Default is a NamedTuple with
+  `reconstruction_loglikelihood`, `position_logprior`, and `momentum_logprior`.  
+- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
+  metric tensor.
 - `tempering_schedule::Function=quadratic_tempering`: The function to compute
   the tempering schedule in the RHVAE.
 - `latent::Bool=false`: If `true`, the function returns a NamedTuple containing
@@ -2729,8 +2731,10 @@ input.
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian in the HMC part of the RHVAE.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
-  to the `∇H` function. Default is a NamedTuple with `reconstruction_loglikelihood`,
-  `position_logprior`, `momentum_logprior`, and `G_inv`.  
+  to the `∇H` function. Default is a NamedTuple with
+  `reconstruction_loglikelihood`, `position_logprior`, and `momentum_logprior`.  
+- `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
+  metric tensor.
 - `tempering_schedule::Function=quadratic_tempering`: The function to compute
   the tempering schedule in the RHVAE.
 - `latent::Bool=false`: If `true`, the function returns a NamedTuple containing
@@ -2817,12 +2821,15 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-        _log_p̄(
-                x::AbstractArray{T},
-                rhvae::RHVAE{VAE{E,D}},
-                metric_param::NamedTuple,
-                rhvae_outputs::NamedTuple,
-        ) where {E<:AbstractGaussianEncoder,D<:BernoulliDecoder,T<:Float32}
+    _log_p̄(
+        x::AbstractArray{T},
+        rhvae::RHVAE{VAE{E,D}},
+        metric_param::NamedTuple,
+        rhvae_outputs::NamedTuple;
+        reconstruction_loglikelihood::Function=decoder_loglikelihood,
+        position_logprior::Function=spherical_logprior,
+        momentum_logprior::Function=riemannian_logprior,
+    ) where {T<:Float32}
 
 This is an internal function used in `riemannian_hamiltonian_elbo` to compute
 the numerator of the unbiased estimator of the marginal likelihood. The function
@@ -2835,314 +2842,20 @@ variables.
 # Arguments
 - `x::AbstractArray{T}`: The input data, where `T` is a subtype of `Float32`. If
   `Array`, the last dimension must contain each of the data points.
-- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,BernoulliDecoder}}`: The
-  Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
-- `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
-- `hvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
-  latent variables `zₖ` and the final momentum variables `ρₖ`.
-
-# Returns
-- `log_p̄::T`: The first term of the log of the unbiased estimator of the
-  marginal likelihood.
-
-# Note
-This is an internal function and should not be called directly. It is used as
-part of the `riemannian_hamiltonian_elbo` function.
-"""
-function _log_p̄(
-    x::AbstractArray{T},
-    rhvae::RHVAE{VAE{E,D}},
-    metric_param::NamedTuple,
-    rhvae_outputs::NamedTuple,
-) where {E<:AbstractGaussianEncoder,D<:BernoulliDecoder,T<:Float32}
-    # Unpack necessary variables
-    p = rhvae_outputs.decoder.p
-    zₖ = rhvae_outputs.phase_space.z_final
-    ρₖ = rhvae_outputs.phase_space.ρ_final
-
-    # Initialize log p̄.
-    # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-    log_p̄ = zero(T)
-
-    # Iterate over samples.
-    # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in axes(zₖ, 2)
-        # Compute log p(x | zₖ) = ∑ᵢ log p(xᵢ | zₖ)
-        log_p_x_given_zₖ = -Flux.Losses.logitbinarycrossentropy(
-            x[.., i:i], p[.., i:i]; agg=sum
-        )
-
-        # Compute log p(zₖ)
-        log_p_zₖ = spherical_logprior(zₖ[:, i])
-
-        # Compute log p(ρₖ|zₖ) = log p(x | zₖ) + log p(zₖ) + log p(ρₖ|zₖ)
-        log_p_ρₖ_given_zₖ = riemannian_logprior(zₖ[:, i], ρₖ[:, i], metric_param)
-
-        # Update log p̄
-        log_p = log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ
-        log_p̄ = log_p̄ + log_p
-    end # for
-
-    return log_p̄
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    _log_p̄(
-        x::AbstractArray{T},
-        rhvae::RHVAE{VAE{E,D}},
-        metric_param::NamedTuple,
-        rhvae_outputs::NamedTuple,
-    ) where {
-        E<:AbstractGaussianEncoder,D<:SimpleDecoder,T<:Float32
-    }
-
-This is an internal function used in `riemannian_hamiltonian_elbo` to compute
-the numerator of the unbiased estimator of the marginal likelihood. The function
-computes the sum of the log likelihood of the data given the latent variables,
-the log prior of the latent variables, and the log prior of the momentum
-variables.
-
-        log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-
-# Arguments
-- `x::AbstractArray{T}`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points. 
-- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,SimpleDecoder}}`: The Riemannian
-  Hamiltonian Variational Autoencoder (RHVAE) model.
-- `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
-- `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
-  latent variables `zₖ` and the final momentum variables `ρₖ`.
-
-# Returns
-- `log_p̄::T`: The first term of the log of the unbiased estimator of the
-  marginal likelihood.
-
-# Note
-This is an internal function and should not be called directly. It is used as
-part of the `riemannian_hamiltonian_elbo` function.
-"""
-function _log_p̄(
-    x::AbstractArray{T},
-    rhvae::RHVAE{VAE{E,D}},
-    metric_param::NamedTuple,
-    rhvae_outputs::NamedTuple,
-) where {E<:AbstractGaussianEncoder,D<:SimpleDecoder,T<:Float32}
-    # Unpack necessary variables
-    µ = rhvae_outputs.decoder.µ
-    σ = 1.0f0
-    zₖ = rhvae_outputs.phase_space.z_final
-    ρₖ = rhvae_outputs.phase_space.ρ_final
-
-    # Initialize log p̄.
-    # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-    log_p̄ = zero(T)
-
-    # Iterate over samples.
-    # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in axes(zₖ, 2)
-        # Compute log p(x | zₖ)
-        log_p_x_given_zₖ = -0.5f0 * sum((x[.., i:i] - µ[.., i:i]) .^ 2 ./ σ^2) -
-                           0.5f0 * length(x[.., i:i]) *
-                           (2.0f0 * log(σ) + log(2.0f0π))
-
-        # Compute log p(zₖ)
-        log_p_zₖ = spherical_logprior(zₖ[:, i])
-
-        # Compute log p(ρₖ)
-        log_p_ρₖ = riemannian_logprior(zₖ[:, i], ρₖ[:, i], metric_param)
-
-        # compute log p̄
-        log_p = log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
-        # Accumulate results
-        log_p̄ = log_p̄ + log_p
-    end # for
-
-    return log_p̄
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    _log_p̄(
-        x::AbstractArray{T},
-        rhvae::RHVAE{VAE{E,D}},
-        metric_param::NamedTuple,
-        rhvae_outputs::NamedTuple,
-    ) where {
-        E<:AbstractGaussianEncoder,D<:AbstractGaussianLogDecoder,T<:Float32
-    }
-
-This is an internal function used in `riemannian_hamiltonian_elbo` to compute
-the numerator of the unbiased estimator of the marginal likelihood. The function
-computes the sum of the log likelihood of the data given the latent variables,
-the log prior of the latent variables, and the log prior of the momentum
-variables.
-
-        log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-
-# Arguments
-- `x::AbstractArray{T}`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points.
 - `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}}`:
   The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
 - `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
 - `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
   latent variables `zₖ` and the final momentum variables `ρₖ`.
 
-# Returns
-- `log_p̄::T`: The first term of the log of the unbiased estimator of the
-  marginal likelihood.
-
-# Note
-This is an internal function and should not be called directly. It is used as
-part of the `riemannian_hamiltonian_elbo` function.
-"""
-function _log_p̄(
-    x::AbstractArray{T},
-    rhvae::RHVAE{VAE{E,D}},
-    metric_param::NamedTuple,
-    rhvae_outputs::NamedTuple,
-) where {E<:AbstractGaussianEncoder,D<:AbstractGaussianLogDecoder,T<:Float32}
-    # Unpack necessary variables
-    µ = rhvae_outputs.decoder.µ
-    logσ = rhvae_outputs.decoder.logσ
-    σ = exp.(logσ)
-    zₖ = rhvae_outputs.phase_space.z_final
-    ρₖ = rhvae_outputs.phase_space.ρ_final
-
-    # Initialize log p̄.
-    # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-    log_p̄ = zero(T)
-
-    # Iterate over samples.
-    # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in axes(zₖ, 2)
-        # Compute log p(x | zₖ)
-        log_p_x_given_zₖ = -0.5f0 *
-                           sum(((x[.., i:i] - µ[.., i:i]) ./ σ[.., i:i])) .^ 2 -
-                           sum(logσ[.., i:i]) -
-                           0.5f0 * length(x[.., i:i]) * log(2.0f0π)
-
-        # Compute log p(zₖ)
-        log_p_zₖ = spherical_logprior(zₖ[:, i])
-
-        # Compute log p(ρₖ)
-        log_p_ρₖ = riemannian_logprior(zₖ[:, i], ρₖ[:, i], metric_param)
-
-        # compute log p̄
-        log_p = log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
-        # Accumulate results
-        log_p̄ = log_p̄ + log_p
-    end # for
-
-    return log_p̄
-end # function
-
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    _log_p̄(
-        x::AbstractArray{T},
-        rhvae::RHVAE{VAE{E,D}},
-        metric_param::NamedTuple,
-        rhvae_outputs::NamedTuple,
-    ) where {
-        E<:AbstractGaussianEncoder,D<:AbstractGaussianLinearDecoder,T<:Float32
-    }
-
-This is an internal function used in `riemannian_hamiltonian_elbo` to compute
-the numerator of the unbiased estimator of the marginal likelihood. The function
-computes the sum of the log likelihood of the data given the latent variables,
-the log prior of the latent variables, and the log prior of the momentum
-variables.
-
-        log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-
-# Arguments
-- `x::AbstractArray{T}`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points.
-- `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLinearDecoder}}`:
-    The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
-- `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
-- `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
-    latent variables `zₖ` and the final momentum variables `ρₖ`.
-
-# Returns
-- `log_p̄::T`: The first term of the log of the unbiased estimator of the
-    marginal likelihood.
-
-# Note
-This is an internal function and should not be called directly. It is used as
-part of the `riemannian_hamiltonian_elbo` function.
-"""
-function _log_p̄(
-    x::AbstractArray{T},
-    rhvae::RHVAE{VAE{E,D}},
-    metric_param::NamedTuple,
-    rhvae_outputs::NamedTuple,
-) where {E<:AbstractGaussianEncoder,D<:AbstractGaussianLinearDecoder,T<:Float32}
-    # Unpack necessary variables
-    µ = rhvae_outputs.decoder.µ
-    σ = rhvae_outputs.decoder.σ
-    zₖ = rhvae_outputs.phase_space.z_final
-    ρₖ = rhvae_outputs.phase_space.ρ_final
-
-    # Initialize log p̄.
-    # NOTE: log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-    log_p̄ = zero(T)
-
-    # Iterate over samples.
-    # NOTE: We will use the EllipsisNotation to iterate over the last dimension
-    for i in axes(zₖ, 2)
-        # Compute log p(x | zₖ)
-        log_p_x_given_zₖ = -0.5f0 *
-                           sum(((x[.., i:i] - µ[.., i:i]) ./ σ[.., i:i])) .^ 2 -
-                           sum(log, σ[.., i:i]) -
-                           0.5f0 * length(x[.., i:i]) * log(2.0f0π)
-
-        # Compute log p(zₖ)
-        log_p_zₖ = spherical_logprior(zₖ[:, i])
-
-        # Compute log p(ρₖ)
-        log_p_ρₖ = riemannian_logprior(zₖ[:, i], ρₖ[:, i], metric_param)
-
-        # compute log p̄
-        log_p = log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ
-
-        # Accumulate results
-        log_p̄ = log_p̄ + log_p
-    end # for
-
-    return log_p̄
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    _log_p̄(
-        x::AbstractArray{T},
-        rhvae::RHVAE,
-        rhvae_outputs::NamedTuple,
-    ) where {T<:Float32}
-
-This is an internal function used in `riemannian_hamiltonian_elbo` to compute
-the numerator of the unbiased estimator of the marginal likelihood. The function
-computes the sum of the log likelihood of the data given the latent variables,
-the log prior of the latent variables, and the log prior of the momentum
-variables.
-
-        log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
-
-# Arguments
-- `x::AbstractArray{T}`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points.
-- `rhvae::RHVAE`: The Riemannian Hamiltonian Variational Autoencoder (RHVAE)
-  model.
-- `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
-  latent variables `zₖ` and the final momentum variables `ρₖ`.
+# Optional Keyword Arguments
+- `reconstruction_loglikelihood::Function`: The function to compute the log
+  likelihood of the data given the latent variables. Default is
+  `decoder_loglikelihood`.
+- `position_logprior::Function`: The function to compute the log prior of the
+  latent variables. Default is `spherical_logprior`.
+- `momentum_logprior::Function`: The function to compute the log prior of the
+  momentum variables. Default is `riemannian_logprior`.
 
 # Returns
 - `log_p̄::T`: The first term of the log of the unbiased estimator of the
@@ -3154,20 +2867,33 @@ part of the `riemannian_hamiltonian_elbo` function.
 """
 function _log_p̄(
     x::AbstractArray{T},
-    rhvae::RHVAE{VAE{E,D}},
-    rhvae_outputs::NamedTuple,
-) where {E<:AbstractGaussianEncoder,D<:AbstractVariationalDecoder,T<:Float32}
-    return _log_p̄(
+    rhvae::RHVAE,
+    metric_param::NamedTuple,
+    rhvae_outputs::NamedTuple;
+    reconstruction_loglikelihood::Function=decoder_loglikelihood,
+    position_logprior::Function=spherical_logprior,
+    momentum_logprior::Function=riemannian_logprior,
+) where {T<:Float32}
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+
+    # Compute log p(x | zₖ)
+    log_p_given_zₖ = reconstruction_loglikelihood(
         x,
-        rhvae,
-        (
-            centroids_latent=rhvae.centroids_latent,
-            M=rhvae.M,
-            T=rhvae.T,
-            λ=rhvae.λ
-        ),
-        rhvae_outputs
+        rhvae_outputs.phase_space.z_final,
+        rhvae.vae.decoder,
+        rhvae_outputs.decoder
     )
+
+    # Compute log p(zₖ)
+    log_p_zₖ = position_logprior(rhvae_outputs.phase_space.z_final)
+
+    # Compute log p(ρₖ(zₖ))
+    log_p_ρₖ_given_zₖ = momentum_logprior(
+        rhvae_outputs.phase_space.ρ_final,
+        rhvae_outputs.phase_space.Ginv_final,
+    )
+
+    return sum(log_p_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ)
 end # function
 
 # ------------------------------------------------------------------------------
