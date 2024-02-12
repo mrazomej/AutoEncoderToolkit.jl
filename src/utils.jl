@@ -269,46 +269,6 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T})
-
-Convert two one-dimensional vectors into a lower triangular matrix.
-
-# Arguments
-- `diag::AbstractVector{T}`: The input vector to be converted into the diagonal
-    of the matrix.
-- `lower::AbstractVector{T}`: The input vector to be converted into the lower
-    triangular part of the matrix. The length of this vector should be a
-    triangular number (i.e., the sum of the first `n` natural numbers for some
-    `n`).
-
-# Returns
-- A lower triangular matrix constructed from `diag` and `lower`.
-
-# Description
-This function constructs a lower triangular matrix from two input vectors,
-`diag` and `lower`. The `diag` vector provides the diagonal elements of the
-matrix, while the `lower` vector provides the elements below the diagonal. The
-function uses a comprehension to construct the matrix, with the `lower_index`
-function calculating the appropriate index in the `lower` vector for each
-element below the diagonal.
-
-# Example
-```julia
-using CUDA
-diag = cu([1, 2, 3])
-lower = cu([4, 5, 6])
-vec_to_ltri(diag, lower)  # Returns a 3x3 lower triangular matrix
-```
-"""
-function vec_to_ltri(
-    diag::CUDA.CuVector{T}, lower::CUDA.CuVector{T},
-) where {T<:Number}
-    return vec_to_ltri(diag |> Flux.cpu, lower |> Flux.cpu) |> Flux.gpu
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
     vec_to_ltri(
         diag::AbstractMatrix{T}, lower::AbstractMatrix{T}
     ) where {T<:Number}
@@ -375,16 +335,16 @@ end # function
 
 @doc raw"""
     vec_to_ltri(
-        diag::AbstractMatrix{T}, lower::AbstractMatrix{T}
+        diag::CUDA.CuVecOrMat{T}, lower::CUDA.CuVecOrMat{T}
     ) where {T<:Number}
 
 Construct a set of lower triangular matrices from a matrix of diagonal elements
 and a matrix of lower triangular elements, each column representing a sample.
 
 # Arguments
-- `diag::AbstractMatrix{T}`: A matrix of `T` where each column contains the
+- `diag::CUDA.CuVecOrMat{T}`: A matrix of `T` where each column contains the
     diagonal elements of the matrix for a specific sample.
-- `lower::AbstractMatrix{T}`: A matrix of `T` where each column contains the
+- `lower::CUDA.CuVecOrMat{T}`: A matrix of `T` where each column contains the
     elements of the lower triangle of the matrix for a specific sample.
 
 # Returns
@@ -409,7 +369,7 @@ non-zero elements per column, corresponding to the lower triangular part of the
 matrix.
 """
 function vec_to_ltri(
-    diag::CUDA.CuMatrix{T}, lower::CUDA.CuMatrix{T}
+    diag::CUDA.CuVecOrMat{T}, lower::CUDA.CuVecOrMat{T}
 ) where {T<:Number}
     return CUDA.cu(vec_to_ltri(diag |> Flux.cpu, lower |> Flux.cpu))
 end # function
@@ -679,9 +639,6 @@ function sample_MvNormalCanon(
 ) where {T<:AbstractFloat}
     # Invert the precision matrix
     Σ = LinearAlgebra.inv(Σ⁻¹ |> Flux.cpu)
-
-    # Make sure the matrix is symmetric
-    Σ = (Σ + LinearAlgebra.transpose(Σ)) / 2
 
     # Cholesky decomposition of the covariance matrix
     chol = LinearAlgebra.cholesky(Σ, check=false)
