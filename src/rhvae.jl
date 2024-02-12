@@ -3346,7 +3346,7 @@ Trains the RHVAE by:
 """
 function train!(
     rhvae::RHVAE,
-    x::AbstractArray{Float32};
+    x::AbstractArray{Float32},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict(),
