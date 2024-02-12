@@ -550,47 +550,110 @@ function centroids_kmeans(
 end # function
 
 # =============================================================================
-# Computing the log determinant of a matrix via LU decomposition.
-# This is inspired by TensorFlow's slogdet function.
+# Computing the log determinant of a matrix via Cholesky decomposition.
 # =============================================================================
 
-@doc raw"""
-    slogdet(A::AbstractMatrix{T}) where {T<:AbstractFloat}
+"""
+    slogdet(A::AbstractMatrix{T}; check::Bool=false) where {T<:AbstractFloat}
 
-Calculate the signed logarithm of the determinant of a matrix `A`.
+Compute the log determinant of a positive-definite matrix `A`.
 
 # Arguments
-- `A::AbstractMatrix{T}`: The input matrix, where `T` is a subtype of
-  `AbstractFloat`.
+- `A::AbstractMatrix{T}`: A positive-definite matrix whose log determinant is to
+  be computed.
+- `check::Bool=false`: A flag that determines whether to check if the input
+  matrix `A` is positive-definite. Defaults to `false`.
 
 # Returns
-- The signed logarithm of the determinant of `A`.
+- The log determinant of `A`.
 
-# Details
-This function computes the sign and the logarithm of the absolute value of the
-determinant of a matrix using a partially pivoted LU decomposition. The sign and
-the logarithm of the absolute value of the determinant are multiplied to return
-the signed logarithm of the determinant.
+# Description
+This function computes the log determinant of a positive-definite matrix `A`. It
+first computes the Cholesky decomposition of `A`, and then calculates the log
+determinant as twice the sum of the log of the diagonal elements of the lower
+triangular matrix from the Cholesky decomposition.
+
+# Conditions
+The input matrix `A` must be a positive-definite matrix, i.e., it must be
+symmetric and all its eigenvalues must be positive. If `check` is set to `true`,
+the function will throw an error if `A` is not positive-definite.
+
+# Example
+```julia
+A = rand(3, 3)
+A = A * A'  # make A positive-definite
+println(slogdet(A))
+```
 """
-function slogdet(A::AbstractMatrix{T}) where {T<:AbstractFloat}
-    # Compute the log determinant through a Partially Pivoted LU decomposition
-    # Perform LU decomposition
-    lu = LinearAlgebra.lu(A)
-    # Get the LU factors
-    LU = lu.factors
-    # Compute the sign of the permutation matrix
-    sign = LinearAlgebra.det(lu.P)
-    # Get the diagonal elements of LU
-    diag = LinearAlgebra.diag(LU)
-    # Take the absolute value of the diagonal elements
-    abs_diag = abs.(diag)
-    # Compute the sum of the logarithm of absolute diagonal elements
-    log_abs_det = sum(log.(abs_diag))
-    # Compute the sign of the determinant
-    sign = prod(diag ./ abs_diag)
+function slogdet(
+    A::AbstractMatrix{T}; check::Bool=false
+) where {T<:AbstractFloat}
+    # Compute the Cholesky decomposition of A. 
+    chol = LinearAlgebra.cholesky(A; check=check)
+    # compute the log determinant of A as the sum of the log of the diagonal
+    # elements of the Cholesky decomposition
+    return 2 * sum(log.(LinearAlgebra.diag(chol.L)))
+end # function
 
-    # Return the signed logarithm of the determinant
-    return log_abs_det * sign
+# ------------------------------------------------------------------------------
+
+"""
+    slogdet(A::AbstractArray{T,3}; check::Bool=false) where {T<:AbstractFloat}
+
+Compute the log determinant of each 2D slice along the third dimension of a 3D
+array `A`, where each 2D slice is a positive-definite matrix.
+
+# Arguments
+- `A::AbstractArray{T,3}`: A 3D array whose 2D slices along the third dimension
+  are positive-definite matrices whose log determinants are to be computed.
+- `check::Bool=false`: A flag that determines whether to check if each 2D slice
+  of the input array `A` is positive-definite. Defaults to `false`.
+
+# Returns
+- A 1D array containing the log determinant of each 2D slice of `A`.
+
+# Description
+This function computes the log determinant of each 2D slice along the third
+dimension of a 3D array `A`. It first computes the Cholesky decomposition of
+each 2D slice, and then calculates the log determinant as twice the sum of the
+log of the diagonal elements of the lower triangular matrix from the Cholesky
+decomposition.
+
+# Conditions
+Each 2D slice of the input array `A` along the third dimension must be a
+positive-definite matrix, i.e., it must be symmetric and all its eigenvalues
+must be positive. If `check` is set to `true`, the function will throw an error
+if any 2D slice is not positive-definite.
+
+# Note
+This function uses a list comprehension to compute the Cholesky decomposition on
+each slice. Therefore, the function is not performed on the GPU. This might
+change in the future if a batched Cholesky decomposition is implemented.
+
+# Example
+```julia
+A = rand(3, 3, 3)
+A = A .* A'  # make each 2D slice of A positive-definite
+println(slogdet(A))
+```
+"""
+function slogdet(
+    A::AbstractArray{T,3}; check::Bool=false
+) where {T<:AbstractFloat}
+    # Compute the Cholesky decomposition of each slice of A. 
+    chol = [
+        begin
+            LinearAlgebra.cholesky(x; check=check).L
+        end for x in eachslice(A, dims=3)
+    ]
+
+    # compute the log determinant of each slice of A as the sum of the log of
+    # the diagonal elements of the Cholesky decomposition
+    return [
+        begin
+            2 * sum(log.(LinearAlgebra.diag(c)))
+        end for c in chol
+    ] |> Flux.gpu
 end # function
 
 ## =============================================================================

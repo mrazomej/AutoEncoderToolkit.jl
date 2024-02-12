@@ -43,7 +43,8 @@ using ..VAEs: reparameterize
 
 
 # Import functions
-using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient
+using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
+    slogdet
 
 using ..HVAEs: quadratic_tempering, null_tempering
 
@@ -856,12 +857,12 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-        riemannian_logprior(
-                z::AbstractVector{T},
-                ρ::AbstractVector{T},
-                G⁻¹::AbstractMatrix{T}, ;
-                σ::T=1.0f0,
-        ) where {T<:AbstractFloat}
+    riemannian_logprior(
+        ρ::AbstractVector{T},
+        G⁻¹::AbstractMatrix{T},
+        logdetG::T;
+        σ::T=1.0f0,
+    ) where {T<:AbstractFloat}
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
 by the Riemannian metric.
@@ -869,6 +870,7 @@ by the Riemannian metric.
 # Arguments
 - `ρ::AbstractVector{T}`: The momentum vector.
 - `G⁻¹::AbstractMatrix{T}`: The inverse of the Riemannian metric tensor.
+- `logdetG::T`: The log determinant of the Riemannian metric tensor.
 
 # Optional Keyword Arguments
 - `σ::T=1.0f0`: The standard deviation of the Gaussian distribution. This is
@@ -878,21 +880,6 @@ by the Riemannian metric.
 The log-prior of the Gaussian distribution with a covariance matrix given by the
 Riemannian metric.
 
-# Description
-This function performs several operations to compute the log-prior of a Gaussian
-distribution with a covariance matrix given by the Riemannian metric. 
-
-First, it scales the inverse of the Riemannian metric tensor `G⁻¹` by `σ^2`.
-
-Next, the function computes the Cholesky decomposition of `G⁻¹`. The Cholesky
-decomposition is a decomposition of a Hermitian, positive-definite matrix into
-the product of a lower triangular matrix and its conjugate transpose.
-
-Finally, the function computes the log determinant of `G⁻¹` as twice the sum of
-the logarithm of the diagonal elements of the lower triangular matrix from the
-Cholesky decomposition. This value represents the log-prior of the Gaussian
-distribution.
-
 # Notes
 - Ensure that the dimensions of `ρ` match the dimensions of the latent space of
   the RHVAE model.
@@ -901,17 +888,12 @@ distribution.
 """
 function riemannian_logprior(
     ρ::AbstractVector{T},
-    G⁻¹::AbstractMatrix{T};
+    G⁻¹::AbstractMatrix{T},
+    logdetG::T;
     σ::T=1.0f0,
 ) where {T<:AbstractFloat}
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹
-    # Compute the Cholesky decomposition of G⁻¹. Note that we set check=false to
-    # avoid errors when G⁻¹ is not positive definite due to rounding errors.
-    chol = LinearAlgebra.cholesky(G⁻¹; check=false)
-    # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
-    # elements of the Cholesky decomposition
-    logdetG = 2 * sum(log.(LinearAlgebra.diag(chol.L)))
 
     # Return the log-prior
     return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) -
@@ -923,7 +905,8 @@ end # function
 @doc raw"""
     riemannian_logprior(
         ρ::AbstractMatrix{T},
-        G⁻¹::AbstractArray{T,3};
+        G⁻¹::AbstractArray{T,3},
+        logdetG::AbstractVector{T};
         σ::T=1.0f0,
     ) where {T<:AbstractFloat}
 
@@ -931,8 +914,13 @@ Compute the log-prior of a Gaussian distribution with a covariance matrix given
 by the Riemannian metric.
 
 # Arguments
-- `ρ::AbstractMatrix{T}`: The momentum matrix.
-- `G⁻¹::AbstractArray{T,3}`: The inverse of the Riemannian metric tensor.
+- `ρ::AbstractMatrix{T}`: The momentum variables. Each column represents a
+  different set of momentum variables.
+- `G⁻¹::AbstractArray{T,3}`: The inverse of the Riemannian metric tensor. Each
+  slice along the third dimension represents the inverse metric tensor at a
+  different point in the latent space.
+- `logdetG::AbstractVector{T}`: The log determinant of the Riemannian metric
+  tensor for each slice of `G⁻¹` along the third dimension.
 
 # Optional Keyword Arguments
 - `σ::T=1.0f0`: The standard deviation of the Gaussian distribution. This is
@@ -942,28 +930,6 @@ by the Riemannian metric.
 The log-prior of the Gaussian distribution with a covariance matrix given by the
 Riemannian metric.
 
-# Description
-This function performs several operations to compute the log-prior of a Gaussian
-distribution with a covariance matrix given by the Riemannian metric. 
-
-First, it scales the inverse of the Riemannian metric tensor `G⁻¹` by `σ^2`.
-
-Next, the function computes the Cholesky decomposition of `G⁻¹` using the
-`mapslices` function to broadcast the computation over the third dimension of
-`G⁻¹`. The Cholesky decomposition is a decomposition of a Hermitian,
-positive-definite matrix into the product of a lower triangular matrix and its
-conjugate transpose.
-
-The function then computes the log determinant of `G⁻¹` as twice the sum of the
-logarithm of the diagonal elements of the lower triangular matrix from the
-Cholesky decomposition. This value represents the log-prior of the Gaussian
-distribution.
-
-Finally, the function computes `ρᵀ G⁻¹ ρ` in a broadcasted manner using the
-`Flux.batched_vec` function. This function reshapes the second argument to match
-the shape of the first argument, allowing for efficient broadcasting over the
-third dimension of `G⁻¹`.
-
 # Notes
 - Ensure that the dimensions of `ρ` match the dimensions of the latent space of
   the RHVAE model.
@@ -972,28 +938,12 @@ third dimension of `G⁻¹`.
 """
 function riemannian_logprior(
     ρ::AbstractMatrix{T},
-    G⁻¹::AbstractArray{T,3};
+    G⁻¹::AbstractArray{T,3},
+    logdetG::AbstractVector{T};
     σ::T=1.0f0,
 ) where {T<:AbstractFloat}
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹
-
-    # Compute the Cholesky decomposition of G⁻¹. Note that we set check=false to
-    # avoid errors when G⁻¹ is not positive definite due to rounding errors.
-    chol = [
-        begin
-            LinearAlgebra.cholesky(G⁻¹[:, :, i]; check=false).L
-        end for i in 1:size(ρ, 2)
-    ]
-
-    # compute the log determinant of G⁻¹ as the sum of the log of the diagonal
-    # elements of the Cholesky decomposition
-    logdetG = [
-        begin
-            2 * sum(log.(LinearAlgebra.diag(c)))
-        end for c in chol
-    ] |> Flux.gpu
-
 
     # Compute ρᵀ G⁻¹ ρ in a broadcasted manner
     ρᵀ_G⁻¹_ρ = sum(ρ .* Flux.batched_vec(G⁻¹, ρ), dims=1)
@@ -1012,6 +962,7 @@ end # function
         z::AbstractVecOrMat{T},
         ρ::AbstractVecOrMat{T},
         G⁻¹::AbstractArray{T},
+        logdetG::Union{T,AbstractVector{T}},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         decoder_loglikelihood::Function=decoder_loglikelihood,
@@ -1053,6 +1004,9 @@ where p(ρ) is the log-prior of the momentum.
 - `ρ::AbstractVecOrMat{T}`: The momentum.
 - `G⁻¹::AbstractArray{T}`: The inverse of the Riemannian metric tensor. This
   should be computed elsewhere and should correspond to the given `z` value.
+- `logdetG::Union{T,AbstractVector{T}}`: The log determinant of the Riemannian
+  metric tensor. This should be computed elsewhere and should correspond to the
+  given `z` value.
 - `decoder::AbstractVariationalDecoder`: The decoder instance. This is not used
   in the computation of the Hamiltonian, but is passed to the
   `decoder_loglikelihood` function to know which method to use.
@@ -1083,6 +1037,7 @@ function hamiltonian(
     z::AbstractVecOrMat{T},
     ρ::AbstractVecOrMat{T},
     G⁻¹::AbstractArray{T},
+    logdetG::Union{T,AbstractVector{T}},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
@@ -1103,7 +1058,7 @@ function hamiltonian(
     U = -loglikelihood_x_given_z - logprior_z
 
     # 2. Kinetic energy K(ρ) = -log p(ρ)
-    κ = -momentum_logprior(ρ, G⁻¹)
+    κ = -momentum_logprior(ρ, G⁻¹, logdetG)
 
     # Return Hamiltonian
     return U + κ
@@ -1176,9 +1131,9 @@ where p(ρ) is the log-prior of the momentum.
 A scalar representing the Hamiltonian at the point `z` with the momentum `ρ`.
 
 # Note
-The inverse of the Riemannian metric tensor `G⁻¹` and the output of the decoder
-are computed internally in this function. The user does not need to provide
-these as inputs.
+The inverse of the Riemannian metric tensor `G⁻¹`, the log determinant of the
+metric tensor, and the output of the decoder are computed internally in this
+function. The user does not need to provide these as inputs.
 """
 function hamiltonian(
     x::AbstractArray{T},
@@ -1193,12 +1148,15 @@ function hamiltonian(
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
 
     # Call hamiltonian function with metric_param as NamedTuple
     return hamiltonian(
-        x, z, ρ, G⁻¹, rhvae.vae.decoder, decoder_output;
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output;
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
         momentum_logprior=momentum_logprior,
@@ -1213,6 +1171,7 @@ end # function
         z::AbstractVecOrMat{T},
         ρ::AbstractVecOrMat{T},
         G⁻¹::AbstractArray{T},
+        logdetG::Union{T,AbstractVector{T}},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple,
         var::Symbol;
@@ -1261,6 +1220,9 @@ the point `z`.
 - `G⁻¹::AbstractArray{T}`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
+- `logdetG::Union{T,AbstractVector{T}}`: The log determinant of the Riemannian
+  metric tensor. If vector, each element represents the log determinant of the
+  metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 - `var::Symbol`: The variable with respect to which the gradient is computed.
@@ -1289,6 +1251,7 @@ function ∇hamiltonian_finite(
     z::AbstractVecOrMat{T},
     ρ::AbstractVecOrMat{T},
     G⁻¹::AbstractArray{T},
+    logdetG::Union{T,AbstractVector{T}},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple,
     var::Symbol;
@@ -1306,7 +1269,7 @@ function ∇hamiltonian_finite(
     if var == :z
         return finite_difference_gradient(
             z -> hamiltonian(
-                x, z, ρ, G⁻¹, decoder, decoder_output;
+                x, z, ρ, G⁻¹, logdetG, decoder, decoder_output;
                 reconstruction_loglikelihood=reconstruction_loglikelihood,
                 position_logprior=position_logprior,
                 momentum_logprior=momentum_logprior,
@@ -1316,7 +1279,7 @@ function ∇hamiltonian_finite(
     elseif var == :ρ
         return finite_difference_gradient(
             ρ -> hamiltonian(
-                x, z, ρ, G⁻¹, decoder, decoder_output;
+                x, z, ρ, G⁻¹, logdetG, decoder, decoder_output;
                 reconstruction_loglikelihood=reconstruction_loglikelihood,
                 position_logprior=position_logprior,
                 momentum_logprior=momentum_logprior,
@@ -1403,9 +1366,9 @@ A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` wit
 respect to variable `var`.
 
 # Note
-The inverse of the Riemannian metric tensor `G⁻¹` and the output of the decoder
-are computed internally in this function. The user does not need to provide
-these as inputs.
+The inverse of the Riemannian metric tensor `G⁻¹`, the log determinant of the
+metric tensor, and the output of the decoder are computed internally in this
+function. The user does not need to provide these as inputs.
 """
 function ∇hamiltonian_finite(
     x::AbstractArray{T},
@@ -1427,11 +1390,14 @@ function ∇hamiltonian_finite(
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
 
     return ∇hamiltonian_finite(
-        x, z, ρ, G⁻¹, rhvae.vae.decoder, decoder_output, var;
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output, var;
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
         momentum_logprior=momentum_logprior,
@@ -1449,6 +1415,7 @@ end # function
         z::AbstractVecOrMat{T},
         ρ::AbstractVecOrMat{T},
         G⁻¹::AbstractArray{T},
+        logdetG::Union{T,AbstractVector{T}},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -1496,6 +1463,9 @@ variables `z`. The result is returned as ρ̃.
 - `G⁻¹::AbstractArray{T}`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
+- `logdetG::Union{T,AbstractVector{T}}`: The log determinant of the Riemannian
+  metric tensor. If vector, each element represents the log determinant of the
+  metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 
@@ -1518,6 +1488,7 @@ function _leapfrog_first_step(
     z::AbstractVecOrMat{T},
     ρ::AbstractVecOrMat{T},
     G⁻¹::AbstractArray{T},
+    logdetG::Union{T,AbstractVector{T}},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -1536,7 +1507,7 @@ function _leapfrog_first_step(
     for _ in 1:steps
         # Update momentum variable into a new temporary variable
         ρ̃_ = ρ̃ - (0.5f0 * ϵ) .* ∇H(
-            x, z, ρ̃, G⁻¹, decoder, decoder_output, :z; ∇H_kwargs...
+            x, z, ρ̃, G⁻¹, logdetG, decoder, decoder_output, :z; ∇H_kwargs...
         )
         # Update momentum variable for next cycle
         ρ̃ = ρ̃_
@@ -1631,12 +1602,15 @@ function _leapfrog_first_step(
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
 
     # Call _leapfrog_first_step function with metric_param as NamedTuple
     return _leapfrog_first_step(
-        x, z, ρ, G⁻¹, rhvae.vae.decoder, decoder_output;
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output;
         ϵ=ϵ,
         steps=steps,
         ∇H=∇H,
@@ -1652,6 +1626,7 @@ end # function
         z::AbstractVecOrMat{T},
         ρ::AbstractVecOrMat{T},
         G⁻¹::AbstractArray{T},
+        logdetG::Union{T,AbstractVector{T}},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -1700,6 +1675,9 @@ variables `ρ`. The result is returned as z̄.
 - `G⁻¹::AbstractArray{T}`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
+- `logdetG::Union{T,AbstractVector{T}}`: The log determinant of the Riemannian
+  metric tensor. If vector, each element represents the log determinant of the
+  metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 
@@ -1721,6 +1699,7 @@ function _leapfrog_second_step(
     z::AbstractVecOrMat{T},
     ρ::AbstractVecOrMat{T},
     G⁻¹::AbstractArray{T},
+    logdetG::Union{T,AbstractVector{T}},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -1734,7 +1713,7 @@ function _leapfrog_second_step(
 ) where {T<:Float32}
     # Compute Hamiltonian gradient for initial point not to repeat it at each
     # iteration 
-    ∇H_ = ∇H(x, z, ρ, G⁻¹, decoder, decoder_output, :ρ; ∇H_kwargs...)
+    ∇H_ = ∇H(x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, :ρ; ∇H_kwargs...)
 
     # Copy z to iterate over it
     z̄ = deepcopy(z)
@@ -1744,7 +1723,10 @@ function _leapfrog_second_step(
         # Update position variable into a new temporary variable
         z̄_ = z̄ + (0.5f0 * ϵ) .*
                    (∇H_ +
-                    ∇H(x, z̄, ρ, G⁻¹, decoder, decoder_output, :ρ; ∇H_kwargs...))
+                    ∇H(
+            x, z̄, ρ, G⁻¹, logdetG, decoder, decoder_output, :ρ;
+            ∇H_kwargs...
+        ))
 
         # Update position variable for next cycle
         z̄ = z̄_
@@ -1841,12 +1823,15 @@ function _leapfrog_second_step(
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
 
     # Call _leapfrog_first_step function with metric_param as NamedTuple
     return _leapfrog_second_step(
-        x, z, ρ, G⁻¹, rhvae.vae.decoder, decoder_output;
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output;
         ϵ=ϵ,
         steps=steps,
         ∇H=∇H,
@@ -1862,6 +1847,7 @@ end # function
         z::AbstractVecOrMat{T},
         ρ::AbstractVecOrMat{T},
         G⁻¹::AbstractArray{T},
+        logdetG::Union{T,AbstractVector{T}},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -1907,6 +1893,9 @@ variables `z`. The result is returned as ρ̃.
 - `G⁻¹::AbstractArray{T}`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
+- `logdetG::Union{T,AbstractVector{T}}`: The log determinant of the Riemannian
+  metric tensor. If vector, each element represents the log determinant of the
+  metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 
@@ -1927,6 +1916,7 @@ function _leapfrog_third_step(
     z::AbstractVecOrMat{T},
     ρ::AbstractVecOrMat{T},
     G⁻¹::AbstractArray{T},
+    logdetG::Union{T,AbstractVector{T}},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple;
     ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
@@ -1939,8 +1929,9 @@ function _leapfrog_third_step(
 ) where {T<:Float32}
     # Update momentum variable with half step. No fixed-point iterations are
     # needed.
-    return ρ - (0.5f0 * ϵ) .*
-               ∇H(x, z, ρ, G⁻¹, decoder, decoder_output, :z; ∇H_kwargs...)
+    return ρ - (0.5f0 * ϵ) .* ∇H(
+        x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, :z; ∇H_kwargs...
+    )
 end # function
 
 # ------------------------------------------------------------------------------
@@ -2028,12 +2019,15 @@ function _leapfrog_third_step(
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
     # Compute output of the decoder
     decoder_output = rhvae.vae.decoder(z)
 
     # Call _leapfrog_first_step function with metric_param as NamedTuple
     return _leapfrog_third_step(
-        x, z, ρ, G⁻¹, rhvae.vae.decoder, decoder_output;
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output;
         ϵ=ϵ,
         ∇H=∇H,
         ∇H_kwargs=∇H_kwargs,
@@ -2048,6 +2042,7 @@ end # function
         z::AbstractVecOrMat{T},
         ρ::AbstractVecOrMat{T},
         G⁻¹::AbstractArray{T},
+        logdetG::Union{T,AbstractVector{T}},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple,
         metric_param::NamedTuple;
@@ -2095,6 +2090,9 @@ helper functions.
 - `G⁻¹::AbstractArray{T}`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
+- `logdetG::Union{T,AbstractVector{T}}`: The log determinant of the Riemannian
+  metric tensor. If vector, each element represents the log determinant of the
+  metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder{T}`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 - `metric_param::NamedTuple`: The parameters for the metric tensor.
@@ -2112,15 +2110,17 @@ helper functions.
   metric tensor.
 
 # Returns
-A tuple `(z̄, ρ̄, Ḡ⁻¹, decoder_update)` representing the updated position,
-momentum, the inverse of the updated Riemannian metric tensor, and the updated
-decoder outputs after performing the full leapfrog step.
+A tuple `(z̄, ρ̄, Ḡ⁻¹, logdetḠ, decoder_update)` representing the updated
+position, momentum, the inverse of the updated Riemannian metric tensor, the log
+of the determinant of the metric tensor and the updated decoder outputs after
+performing the full leapfrog step.
 """
 function general_leapfrog_step(
     x::AbstractArray{T},
     z::AbstractVecOrMat{T},
     ρ::AbstractVecOrMat{T},
     G⁻¹::AbstractArray{T},
+    logdetG::Union{T,AbstractVector{T}},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple,
     metric_param::NamedTuple;
@@ -2137,14 +2137,14 @@ function general_leapfrog_step(
     # Update momentum variable with half step. This step peforms fixed-point
     # iterations
     ρ̃ = _leapfrog_first_step(
-        x, z, ρ, G⁻¹, decoder, decoder_output;
+        x, z, ρ, G⁻¹, logdetG, decoder, decoder_output;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
     # Update position variable with full step. This step peforms fixed-point
     # iterations
     z̄ = _leapfrog_second_step(
-        x, z, ρ̃, G⁻¹, decoder, decoder_output;
+        x, z, ρ̃, G⁻¹, logdetG, decoder, decoder_output;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
@@ -2154,33 +2154,36 @@ function general_leapfrog_step(
     # Update Riemannian metric tensor
     Ḡ⁻¹ = G_inv(z̄, metric_param)
 
+    # Update log determinant of the metric tensor
+    logdetḠ = -slogdet(Ḡ⁻¹)
+
     # Update momentum variable with half step. No fixed-point iterations needed
     ρ̄ = _leapfrog_third_step(
-        x, z̄, ρ̃, Ḡ⁻¹, decoder, decoder_output_z̄;
+        x, z̄, ρ̃, Ḡ⁻¹, logdetḠ, decoder, decoder_output_z̄;
         ϵ=ϵ, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
-    return z̄, ρ̄, Ḡ⁻¹, decoder_output_z̄
+    return z̄, ρ̄, Ḡ⁻¹, logdetḠ, decoder_output_z̄
 end # function 
 
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        general_leapfrog_step(
-                x::AbstractArray{T},
-                z::AbstractVecOrMat{T},
-                ρ::AbstractVecOrMat{T},
-                rhvae::RHVAE;
-                ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
-                steps::Int=3,
-                ∇H::Function=∇hamiltonian_finite,
-                ∇H_kwargs::Union{NamedTuple,Dict}=(
-                        reconstruction_loglikelihood=decoder_loglikelihood,
-                        position_logprior=spherical_logprior,
-                        momentum_logprior=riemannian_logprior,
-                        G_inv=G_inv,
-                ),
-        ) where {T<:Float32}
+    general_leapfrog_step(
+        x::AbstractArray{T},
+        z::AbstractVecOrMat{T},
+        ρ::AbstractVecOrMat{T},
+        rhvae::RHVAE;
+        ϵ::Union{T,<:AbstractVector{T}}=Float32(1E-4),
+        steps::Int=3,
+        ∇H::Function=∇hamiltonian_finite,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+                reconstruction_loglikelihood=decoder_loglikelihood,
+                position_logprior=spherical_logprior,
+                momentum_logprior=riemannian_logprior,
+                G_inv=G_inv,
+        ),
+    ) where {T<:Float32}
 
 Perform a full step of the generalized leapfrog integrator for Hamiltonian
 dynamics.
@@ -2223,9 +2226,10 @@ This function performs these three steps in sequence, using the
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor. Default is `G_inv`.
 
-  A tuple `(z̄, ρ̄, Ḡ⁻¹, decoder_update)` representing the updated position,
-  momentum, the inverse of the updated Riemannian metric tensor, and the updated
-  decoder outputs after performing the full leapfrog step.
+  A tuple `(z̄, ρ̄, Ḡ⁻¹, logdetḠ, decoder_update)` representing the updated
+  position, momentum, the inverse of the updated Riemannian metric tensor, the
+  log of the determinant of the metric tensor, and the updated decoder outputs
+  after performing the full leapfrog step.
 """
 function general_leapfrog_step(
     x::AbstractArray{T},
@@ -2245,20 +2249,23 @@ function general_leapfrog_step(
     # Compute the riemannian metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
     # Compute the output of the decoder
     decoder_output = rhvae.vae.decoder(z)
 
     # Update momentum variable with half step. This step peforms fixed-point
     # iterations
     ρ̃ = _leapfrog_first_step(
-        x, z, ρ, G⁻¹, rhvae.vae.decoder, decoder_output;
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
     # Update position variable with full step. This step peforms fixed-point
     # iterations
     z̄ = _leapfrog_second_step(
-        x, z, ρ̃, G⁻¹, rhvae.vae.decoder, decoder_output;
+        x, z, ρ̃, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output;
         ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
@@ -2268,13 +2275,16 @@ function general_leapfrog_step(
     # Update Riemannian metric tensor
     Ḡ⁻¹ = G_inv(z̄, rhvae)
 
+    # Update the log determinant of the metric tensor
+    logdetḠ = -slogdet(Ḡ⁻¹)
+
     # Update momentum variable with half step. No fixed-point iterations needed
     ρ̄ = _leapfrog_third_step(
-        x, z̄, ρ̃, Ḡ⁻¹, rhvae.vae.decoder, decoder_output_z̄;
+        x, z̄, ρ̃, Ḡ⁻¹, logdetḠ, rhvae.vae.decoder, decoder_output_z̄;
         ϵ=ϵ, ∇H=∇H, ∇H_kwargs=∇H_kwargs
     )
 
-    return z̄, ρ̄, Ḡ⁻¹, decoder_output_z̄
+    return z̄, ρ̄, Ḡ⁻¹, logdetḠ, decoder_output_z̄
 end # function
 
 # ==============================================================================
@@ -2286,6 +2296,7 @@ end # function
         x::AbstractArray{T},
         zₒ::AbstractVecOrMat{T},
         Gₒ⁻¹::AbstractArray{T},
+        logdetGₒ::Union{T,AbstractVector{T}},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple,
         metric_param::NamedTuple;
@@ -2311,6 +2322,9 @@ Riemannian Hamiltonian Variational Autoencoder (RHVAE).
   dimension must be of size 1.
 - `zₒ::AbstractVector{T}`: The initial latent variable. 
 - `Gₒ⁻¹::AbstractArray{T}`: The initial inverse of the Riemannian metric tensor.
+- `logdetGₒ::Union{T,AbstractVector{T}}`: The log determinant of the initial
+  Riemannian metric tensor. If vector, each element represents the log
+  determinant of the metric tensor at the corresponding column of `zₒ`.
 - `decoder::AbstractVariationalDecoder`: The decoder of the RHVAE model.
 - `decoder_output::NamedTuple`: The output of the decoder.
 - `metric_param::NamedTuple`: The parameters of the metric tensor.
@@ -2339,10 +2353,14 @@ Riemannian Hamiltonian Variational Autoencoder (RHVAE).
     - `z_init`: The initial latent variable. 
     - `ρ_init`: The initial momentum variable. 
     - `Ginv_init`: The initial inverse of the Riemannian metric tensor. 
+    - `logdetG_init`: The initial log determinant of the Riemannian metric
+      tensor.
     - `z_final`: The final latent variable after `K` leapfrog steps. 
     - `ρ_final`: The final momentum variable after `K` leapfrog steps. 
     - `Ginv_final`: The final inverse of the Riemannian metric tensor after `K`
       leapfrog steps.
+    - `logdetG_final`: The final log determinant of the Riemannian metric tensor
+      after `K` leapfrog steps.
 - The decoder output at the final latent variable is also returned. Note: This
   is not in the same named tuple as the other outputs, but as a separate output.
 
@@ -2361,6 +2379,7 @@ function general_leapfrog_tempering_step(
     x::AbstractArray{T},
     zₒ::AbstractVecOrMat{T},
     Gₒ⁻¹::AbstractArray{T},
+    logdetGₒ::Union{T,AbstractVector{T}},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple,
     metric_param::NamedTuple;
@@ -2387,13 +2406,14 @@ function general_leapfrog_tempering_step(
     zₖ₋₁ = deepcopy(zₒ)
     ρₖ₋₁ = deepcopy(ρₒ)
     Gₖ₋₁⁻¹ = deepcopy(Gₒ⁻¹)
+    logdetGₖ₋₁ = deepcopy(logdetGₒ)
     decoderₖ₋₁ = deepcopy(decoder_output)
 
     # Loop over K steps
     for k = 1:K
         # 1) Leapfrog step
-        zₖ, ρₖ, Gₖ⁻¹, decoderₖ = general_leapfrog_step(
-            x, zₖ₋₁, ρₖ₋₁, Gₖ₋₁⁻¹, decoder, decoderₖ₋₁, metric_param;
+        zₖ, ρₖ, Gₖ⁻¹, logdetGₖ, decoderₖ = general_leapfrog_step(
+            x, zₖ₋₁, ρₖ₋₁, Gₖ₋₁⁻¹, logdetGₖ₋₁, decoder, decoderₖ₋₁, metric_param;
             ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs, G_inv=G_inv
         )
 
@@ -2411,6 +2431,8 @@ function general_leapfrog_tempering_step(
         ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
         # Update Gₖ₋₁⁻¹ for next iteration
         Gₖ₋₁⁻¹ = Gₖ⁻¹
+        # Update logdetGₖ₋₁ for next iteration
+        logdetGₖ₋₁ = logdetGₖ
         # Update decoderₖ₋₁ for next iteration
         decoderₖ₋₁ = decoderₖ
     end # for
@@ -2422,6 +2444,8 @@ function general_leapfrog_tempering_step(
         ρ_final=ρₖ₋₁,
         Ginv_init=Gₒ⁻¹,
         Ginv_final=Gₖ₋₁⁻¹,
+        logdetG_init=logdetGₒ,
+        logdetG_final=logdetGₖ₋₁,
     ), decoderₖ₋₁
 end # function
 
@@ -2517,6 +2541,8 @@ function general_leapfrog_tempering_step(
     metric_param = update_metric(rhvae)
     # Compute inverse metric for initial point
     Gₒ⁻¹ = G_inv(zₒ, rhvae)
+    # Compute log determinant of the metric tensor for initial point
+    logdetGₒ = -slogdet(Gₒ⁻¹)
 
     # Sample γₒ ~ N(0, Gₒ⁻¹).
     γₒ = sample_MvNormalCanon(Gₒ⁻¹)
@@ -2528,13 +2554,15 @@ function general_leapfrog_tempering_step(
     zₖ₋₁ = deepcopy(zₒ)
     ρₖ₋₁ = deepcopy(ρₒ)
     Gₖ₋₁⁻¹ = deepcopy(Gₒ⁻¹)
+    logdetGₖ₋₁ = deepcopy(logdetGₒ)
     decoderₖ₋₁ = rhvae.vae.decoder(zₒ)
 
     # Loop over K steps
     for k = 1:K
         # 1) Leapfrog step
-        zₖ, ρₖ, Gₖ⁻¹, decoderₖ = general_leapfrog_step(
-            x, zₖ₋₁, ρₖ₋₁, Gₖ₋₁⁻¹, rhvae.vae.decoder, decoderₖ₋₁, metric_param;
+        zₖ, ρₖ, Gₖ⁻¹, logdetGₖ, decoderₖ = general_leapfrog_step(
+            x, zₖ₋₁, ρₖ₋₁, Gₖ₋₁⁻¹, logdetGₖ₋₁,
+            rhvae.vae.decoder, decoderₖ₋₁, metric_param;
             ϵ=ϵ, steps=steps, ∇H=∇H, ∇H_kwargs=∇H_kwargs, G_inv=G_inv
         )
 
@@ -2552,6 +2580,8 @@ function general_leapfrog_tempering_step(
         ρₖ₋₁ = ρₖ .* √(βₖ₋₁ / βₖ)
         # Update Gₖ₋₁⁻¹ for next iteration
         Gₖ₋₁⁻¹ = Gₖ⁻¹
+        # Update logdetGₖ₋₁ for next iteration
+        logdetGₖ₋₁ = logdetGₖ
         # Update decoderₖ₋₁ for next iteration
         decoderₖ₋₁ = decoderₖ
     end # for
@@ -2563,6 +2593,8 @@ function general_leapfrog_tempering_step(
         ρ_final=ρₖ₋₁,
         Ginv_init=Gₒ⁻¹,
         Ginv_final=Gₖ₋₁⁻¹,
+        logdetG_init=logdetGₒ,
+        logdetG_final=logdetGₖ₋₁,
     ), decoderₖ₋₁
 end # function
 
@@ -2674,9 +2706,12 @@ function (rhvae::RHVAE{VAE{E,D}})(
     # Initial inverse metric tensor
     Gₒ⁻¹ = G_inv(zₒ, metric_param)
 
+    # Initial log determinant of the metric tensor
+    logdetGₒ = -slogdet(Gₒ⁻¹)
+
     # Run leapfrog and tempering steps
     phase_space, decoder_update = general_leapfrog_tempering_step(
-        x, zₒ, Gₒ⁻¹, rhvae.vae.decoder, decoder_output, metric_param;
+        x, zₒ, Gₒ⁻¹, logdetGₒ, rhvae.vae.decoder, decoder_output, metric_param;
         K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
         ∇H=∇H, ∇H_kwargs=∇H_kwargs,
         tempering_schedule=tempering_schedule
@@ -2798,9 +2833,13 @@ function (rhvae::RHVAE{VAE{E,D}})(
     # Initial inverse metric tensor
     Gₒ⁻¹ = G_inv(zₒ, metric_param)
 
+    # Initial log determinant of the metric tensor
+    logdetGₒ = -slogdet(Gₒ⁻¹)
+
     # Run leapfrog and tempering steps
     phase_space, decoder_update = general_leapfrog_tempering_step(
-        x, zₒ, Gₒ⁻¹, rhvae.vae.decoder, decoder_output, metric_param;
+        x, zₒ, Gₒ⁻¹, logdetGₒ,
+        rhvae.vae.decoder, decoder_output, metric_param;
         K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
         ∇H=∇H, ∇H_kwargs=∇H_kwargs,
         tempering_schedule=tempering_schedule
@@ -2826,7 +2865,6 @@ end # function
     _log_p̄(
         x::AbstractArray{T},
         rhvae::RHVAE{VAE{E,D}},
-        metric_param::NamedTuple,
         rhvae_outputs::NamedTuple;
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
@@ -2846,7 +2884,6 @@ variables.
   `Array`, the last dimension must contain each of the data points.
 - `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}}`:
   The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
-- `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
 - `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
   latent variables `zₖ` and the final momentum variables `ρₖ`.
 
@@ -2860,8 +2897,8 @@ variables.
   momentum variables. Default is `riemannian_logprior`.
 
 # Returns
-- `log_p̄::T`: The first term of the log of the unbiased estimator of the
-  marginal likelihood.
+- `log_p̄::AbstractVector{T}`: The first term of the log of the unbiased
+  estimator of the marginal likelihood for each data point.
 
 # Note
 This is an internal function and should not be called directly. It is used as
@@ -2870,13 +2907,12 @@ part of the `riemannian_hamiltonian_elbo` function.
 function _log_p̄(
     x::AbstractArray{T},
     rhvae::RHVAE,
-    metric_param::NamedTuple,
     rhvae_outputs::NamedTuple;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
 ) where {T<:Float32}
-    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ | zₖ)
 
     # Compute log p(x | zₖ)
     log_p_given_zₖ = reconstruction_loglikelihood(
@@ -2889,13 +2925,14 @@ function _log_p̄(
     # Compute log p(zₖ)
     log_p_zₖ = position_logprior(rhvae_outputs.phase_space.z_final)
 
-    # Compute log p(ρₖ(zₖ))
+    # Compute log p(ρₖ | zₖ)
     log_p_ρₖ_given_zₖ = momentum_logprior(
         rhvae_outputs.phase_space.ρ_final,
         rhvae_outputs.phase_space.Ginv_final,
+        rhvae_outputs.phase_space.logdetG_final,
     )
 
-    return sum(log_p_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ)
+    return log_p_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ
 end # function
 
 # ------------------------------------------------------------------------------
@@ -2904,7 +2941,6 @@ end # function
     _log_q̄(
         x::AbstractArray{T},
         rhvae::RHVAE,
-        metric_param::NamedTuple,
         rhvae_outputs::NamedTuple,
         βₒ::T
     ) where {T<:Float32}
@@ -2918,27 +2954,23 @@ on the dimensionality of the latent space and the initial temperature.
         log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
 
 # Arguments
-- `x::AbstractArray{T}`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points.
 - `rhvae::RHVAE`: The Riemannian Hamiltonian Variational Autoencoder (RHVAE)
   model.
-- `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
 - `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the initial
   latent variables `zₒ` and the initial momentum variables `ρₒ`.
-- `βₒ::T`: The initial temperature, where `T` is a subtype of `Float32`.
+- `βₒ::T`: The initial temperature for the tempering steps, where `T` is a
+  subtype of `Float32`.
 
 # Returns
-- `log_q̄::T`: The second term of the log of the unbiased estimator of the
-    marginal likelihood.
+- `log_q̄::Vector{T}`: The second term of the log of the unbiased estimator of
+    the marginal likelihood for each data point.
 
 # Note
 This is an internal function and should not be called directly. It is used as
 part of the `riemannian_hamiltonian_elbo` function.
 """
 function _log_q̄(
-    x::AbstractArray{T},
     rhvae::RHVAE,
-    metric_param::NamedTuple,
     rhvae_outputs::NamedTuple,
     βₒ::T
 ) where {T<:Float32}
@@ -2967,7 +2999,8 @@ function _log_q̄(
         rhvae_outputs.encoder
     )
 
-    return sum(log_q_zₒ_given_x)
+    return log_q_zₒ_given_x .-
+           0.5f0 * size(rhvae_outputs.phase_space.z_init, 1) * log(βₒ)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -3060,28 +3093,20 @@ function riemannian_hamiltonian_elbo(
         G_inv=G_inv,
         latent=true
     )
-
-    # Extract number of samples
-    if ndims(x) == 1
-        n_samples = 1
-    else
-        n_samples = last(size(x))
-    end # if
-
     # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x, rhvae, metric_param, rhvae_outputs)
+    log_p = _log_p̄(x, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(x, rhvae, metric_param, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
-        return (log_p - log_q) / n_samples, rhvae_outputs
+        return StatsBase.mean(log_p - log_q), rhvae_outputs
     else
         # Return ELBO normalized by number of samples
-        return (log_p - log_q) / n_samples
+        return StatsBase.mean(log_p - log_q)
     end # if
 end # function
 
@@ -3174,27 +3199,20 @@ function riemannian_hamiltonian_elbo(
         latent=true
     )
 
-    # Extract number of samples
-    if ndims(x) == 1
-        n_samples = 1
-    else
-        n_samples = last(size(x))
-    end # if
-
     # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x, rhvae, metric_param, rhvae_outputs)
+    log_p = _log_p̄(x, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(x, rhvae, metric_param, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
-        return (log_p - log_q) / n_samples, rhvae_outputs
+        return StatsBase.mean(log_p - log_q), rhvae_outputs
     else
         # Return ELBO normalized by number of samples
-        return (log_p - log_q) / n_samples
+        return StatsBase.mean(log_p - log_q)
     end # if
 end # function
 
@@ -3215,8 +3233,8 @@ end # function
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
-            G_inv=G_inv,
         ),
+        G_inv::Function=G_inv,
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
