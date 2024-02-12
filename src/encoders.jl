@@ -664,10 +664,6 @@ end # function
 # Functions to compute log-probabilities
 # ==============================================================================
 
-# ==============================================================================
-# Function to compute log prior
-# ==============================================================================
-
 @doc raw"""
     spherical_logprior(
         z::AbstractVector{T},
@@ -753,4 +749,118 @@ function spherical_logprior(
     ] |> Flux.gpu
 
     return log_prior
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    encoder_logposterior(
+        z::AbstractVector{T},
+        encoder::AbstractGaussianLogEncoder,
+        encoder_output::NamedTuple
+    ) where {T<:AbstractFloat}
+
+Computes the log-posterior of the latent variable `z` given the encoder output
+under a Gaussian distribution with mean and standard deviation given by the
+encoder.
+
+# Arguments
+- `z::AbstractVector{T}`: The latent variable for which the log-posterior is to
+  be computed.
+- `encoder::AbstractGaussianLogEncoder`: The encoder of the VAE, which is not
+  used in the computation of the log-posterior. This argument is only used to
+  know which method to call.
+- `encoder_output::NamedTuple`: The output of the encoder, which includes the
+  mean and log standard deviation of the Gaussian distribution.
+
+# Returns
+- `logposterior::T`: The computed log-posterior of the latent variable `z` given
+  the encoder output.
+
+# Description
+The function computes the log-posterior of the latent variable `z` given the
+encoder output under a Gaussian distribution. The mean and log standard
+deviation of the Gaussian distribution are extracted from the `encoder_output`.
+The standard deviation is then computed by exponentiating the log standard
+deviation. The log-posterior is computed using the formula for the log-posterior
+of a Gaussian distribution.
+
+# Note
+Ensure the dimensions of `z` match the expected input dimensionality of the
+`encoder`.
+"""
+function encoder_logposterior(
+    z::AbstractVector{T},
+    encoder::AbstractGaussianLogEncoder,
+    encoder_output::NamedTuple;
+) where {T<:AbstractFloat}
+    # Extract mean and log standard deviation from encoder output
+    µ, logσ = encoder_output.µ, encoder_output.logσ
+    # Exponentiate log standard deviation to obtain standard deviation
+    σ = exp.(logσ)
+
+    # Compute variational log-posterior
+    logposterior = -0.5f0 * sum(((z - μ) ./ σ) .^ 2) -
+                   sum(logσ) - 0.5f0 * length(z) * log(2.0f0π)
+
+    return logposterior
+end # function
+
+# ------------------------------------------------------------------------------
+@doc raw"""
+    encoder_logposterior(
+        z::AbstractMatrix{T},
+        encoder::AbstractGaussianLogEncoder,
+        encoder_output::NamedTuple
+    ) where {T<:AbstractFloat}
+
+Computes the log-posterior of the latent variable `z` given the encoder output
+under a Gaussian distribution with mean and standard deviation given by the
+encoder.
+
+# Arguments
+- `z::AbstractMatrix{T}`: The latent variable for which the log-posterior is to
+  be computed. Each column of `z` represents a different data point.
+- `encoder::AbstractGaussianLogEncoder`: The encoder of the VAE, which is not
+  used in the computation of the log-posterior. This argument is only used to
+  know which method to call.
+- `encoder_output::NamedTuple`: The output of the encoder, which includes the
+  mean and log standard deviation of the Gaussian distribution.
+
+# Returns
+- `logposterior::Vector{T}`: The computed log-posterior of the latent variable
+  `z` given the encoder output. Each element of the vector corresponds to a
+  different data point.
+
+# Description
+The function computes the log-posterior of the latent variable `z` given the
+encoder output under a Gaussian distribution. The mean and log standard
+deviation of the Gaussian distribution are extracted from the `encoder_output`.
+The standard deviation is then computed by exponentiating the log standard
+deviation. The log-posterior is computed using the formula for the log-posterior
+of a Gaussian distribution.
+
+# Note
+Ensure the dimensions of `z` match the expected input dimensionality of the
+`encoder`.
+"""
+function encoder_logposterior(
+    z::AbstractMatrix{T},
+    encoder::AbstractGaussianLogEncoder,
+    encoder_output::NamedTuple;
+) where {T<:AbstractFloat}
+    # Extract mean and log standard deviation from encoder output
+    µ, logσ = encoder_output.µ, encoder_output.logσ
+    # Exponentiate log standard deviation to obtain standard deviation
+    σ = exp.(logσ)
+
+    # Compute variational log-posterior
+    logposterior = [
+        begin
+            -0.5f0 * sum(abs2, (z[:, i] - µ[:, i]) ./ σ[:, i]) -
+            sum(logσ[:, i]) - 0.5f0 * size(z, 1) * log(2.0f0π)
+        end for i = 1:size(z, 2)
+    ] |> Flux.gpu
+
+    return logposterior
 end # function
