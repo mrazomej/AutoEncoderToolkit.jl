@@ -728,7 +728,7 @@ means that Zygote will ignore any call to this function when computing
 gradients.
 """
 function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
-    return [j == i ? one(T) : zero(T) for j in 1:length(x)]
+    return [j == i ? one(T) : zero(T) for j in 1:length(x)] |> Flux.gpu
 end # function
 
 @doc raw"""
@@ -759,7 +759,7 @@ means that Zygote will ignore any call to this function when computing
 gradients.
 """
 function unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
-    return [j == i ? one(T) : zero(T) for j in 1:size(x, 1)]
+    return [j == i ? one(T) : zero(T) for j in 1:size(x, 1)] |> Flux.gpu
 end # function
 
 # Set Zygote to ignore the function when computing gradients
