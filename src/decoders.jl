@@ -1679,7 +1679,7 @@ function decoder_loglikelihood(
         begin
             -Flux.Losses.logitbinarycrossentropy(x[.., i], p[.., i]; agg=sum)
         end
-        for i in 1:size(z, 2)
+        for i in axes(z, 2)
     ] |> Flux.gpu
 
     return loglikelihood
@@ -1743,7 +1743,7 @@ function decoder_loglikelihood(
     μ = decoder_output.µ
 
     # Compute log-likelihood
-    loglikelihood = -0.5f0 * sum(abs2, (x - μ) / σ) -
+    loglikelihood = -0.5f0 * sum((x - μ) .^ 2 / σ^2) -
                     0.5f0 * length(x) * (2.0f0 * log(σ) + log(2.0f0π))
     return loglikelihood
 end # function
@@ -1806,9 +1806,9 @@ function decoder_loglikelihood(
     # Compute log-likelihood
     loglikelihood = [
         begin
-            -0.5f0 * sum(abs2, (x[.., i] - μ[.., i]) / σ) -
+            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 / σ^2) -
             0.5f0 * length(x[.., i]) * (2.0f0 * log(σ) + log(2.0f0π))
-        end for i in 1:size(z, 2)
+        end for i in axes(z, 2)
     ] |> Flux.gpu
     return loglikelihood
 end # function
@@ -1865,11 +1865,11 @@ function decoder_loglikelihood(
     # Extract the mean and log standard deviation of the Gaussian distribution
     μ, logσ = decoder_output.µ, decoder_output.logσ
 
-    # Compute standard deviation
-    σ = exp.(logσ)
+    # Compute variance
+    σ² = exp.(T(2) * logσ)
 
     # Compute log-likelihood
-    loglikelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+    loglikelihood = -0.5f0 * sum((x - μ) .^ 2 ./ σ²) -
                     sum(logσ) -
                     0.5f0 * length(x) * log(2.0f0π)
 
@@ -1925,16 +1925,16 @@ function decoder_loglikelihood(
     # Extract the mean and log standard deviation of the Gaussian distribution
     μ, logσ = decoder_output.µ, decoder_output.logσ
 
-    # Compute standard deviation
-    σ = exp.(logσ)
+    # Compute variance
+    σ² = exp.(T(2) * logσ)
 
     # Compute log-likelihood
     loglikelihood = [
         begin
-            -0.5f0 * sum(abs2, (x[.., i] - μ[.., i]) ./ σ[.., i]) -
+            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 ./ σ²[.., i]) -
             sum(logσ[.., i]) -
             0.5f0 * length(x[.., i]) * log(2.0f0π)
-        end for i in 1:size(z, 2)
+        end for i in axes(z, 2)
     ] |> Flux.gpu
 
     return loglikelihood
@@ -1992,7 +1992,7 @@ function decoder_loglikelihood(
     μ, σ = decoder_output.µ, decoder_output.σ
 
     # Compute log-likelihood
-    loglikelihood = -0.5f0 * sum(abs2, (x - μ) ./ σ) -
+    loglikelihood = -0.5f0 * sum((x - μ) .^ 2 ./ σ .^ 2) -
                     sum(log, σ) -
                     0.5f0 * length(x) * log(2.0f0π)
 
@@ -2053,10 +2053,10 @@ function decoder_loglikelihood(
     # Compute log-likelihood
     loglikelihood = [
         begin
-            -0.5f0 * sum(abs2, (x[.., i] - μ[.., i]) ./ σ[.., i]) -
+            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 ./ σ[.., i] .^ 2) -
             sum(log, σ[.., i]) -
             0.5f0 * length(x[.., i]) * log(2.0f0π)
-        end for i in 1:size(z, 2)
+        end for i in axes(z, 2)
     ] |> Flux.gpu
 
     return loglikelihood

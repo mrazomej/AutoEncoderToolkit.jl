@@ -698,7 +698,7 @@ function spherical_logprior(
     # Convert to type T
     σ = convert(T, σ)
     # Compute log-prior
-    log_prior = -0.5f0 * sum(abs2, z / σ) -
+    log_prior = -0.5f0 * sum((z / σ) .^ 2) -
                 0.5f0 * length(z) * (2.0f0 * log(σ) + log(2.0f0π))
 
     return log_prior
@@ -743,9 +743,9 @@ function spherical_logprior(
     # Compute log-prior
     log_prior = [
         begin
-            -0.5f0 * sum(abs2, z[:, i] / σ) -
+            -0.5f0 * sum(z[:, i] .^ 2 / σ^2) -
             0.5f0 * length(z[:, i]) * (2.0f0 * log(σ) + log(2.0f0π))
-        end for i = 1:size(z, 2)
+        end for i in axes(z, 2)
     ] |> Flux.gpu
 
     return log_prior
@@ -851,15 +851,15 @@ function encoder_logposterior(
 ) where {T<:AbstractFloat}
     # Extract mean and log standard deviation from encoder output
     µ, logσ = encoder_output.µ, encoder_output.logσ
-    # Exponentiate log standard deviation to obtain standard deviation
-    σ = exp.(logσ)
+    # Compute variance
+    σ² = exp.(T(2) .* logσ)
 
     # Compute variational log-posterior
     logposterior = [
         begin
-            -0.5f0 * sum(abs2, (z[:, i] - µ[:, i]) ./ σ[:, i]) -
+            -0.5f0 * sum((z[:, i] - µ[:, i]) .^ 2 ./ σ²[:, i]) -
             sum(logσ[:, i]) - 0.5f0 * size(z, 1) * log(2.0f0π)
-        end for i = 1:size(z, 2)
+        end for i in axes(z, 2)
     ] |> Flux.gpu
 
     return logposterior

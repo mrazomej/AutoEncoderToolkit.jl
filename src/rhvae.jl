@@ -1713,7 +1713,7 @@ function _leapfrog_second_step(
 ) where {T<:Float32}
     # Compute Hamiltonian gradient for initial point not to repeat it at each
     # iteration 
-    ∇H_ = ∇H(x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, :ρ; ∇H_kwargs...)
+    ∇Hₒ = ∇H(x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, :ρ; ∇H_kwargs...)
 
     # Copy z to iterate over it
     z̄ = deepcopy(z)
@@ -1722,7 +1722,7 @@ function _leapfrog_second_step(
     for _ in 1:steps
         # Update position variable into a new temporary variable
         z̄_ = z̄ + (0.5f0 * ϵ) .*
-                   (∇H_ +
+                   (∇Hₒ +
                     ∇H(
             x, z̄, ρ, G⁻¹, logdetG, decoder, decoder_output, :ρ;
             ∇H_kwargs...
@@ -3105,7 +3105,6 @@ function riemannian_hamiltonian_elbo(
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
     else
-        # Return ELBO normalized by number of samples
         return StatsBase.mean(log_p - log_q)
     end # if
 end # function
