@@ -681,7 +681,7 @@ Zygote.@nograd sample_MvNormalCanon
 # Define finite difference gradient function
 ## =============================================================================
 
-"""
+@doc raw"""
     unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
 
 Create a unit vector of the same length as `x` with the `i`-th element set to 1.
@@ -711,46 +711,36 @@ function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
     return [j == i ? one(T) : zero(T) for j in 1:length(x)]
 end # function
 
-function unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
-    return [j == i ? one(T) : zero(T) for j in 1:size(x, 1)]
-end # function
+@doc raw"""
+    unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
 
-
-# ------------------------------------------------------------------------------
-
-"""
-    unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
-
-Create a unit vector of the same length as `x` with the `i`-th element set to 1,
-specifically for a vector stored on the GPU.
+Create a unit vector of the same length as the number of rows in `x` with the
+`i`-th element set to 1.
 
 # Arguments
-- `x::CUDA.CuVector`: The GPU vector whose length is used to determine the
+- `x::AbstractMatrix`: The matrix whose number of rows is used to determine the
   dimension of the unit vector.
 - `i::Int`: The index of the element to be set to 1.
 - `T::Type=Float32`: The type of the elements in the vector. Defaults to
   `Float32`.
 
 # Returns
-- A unit vector of type `T` and length equal to `x` with the `i`-th element set
-  to 1, returned as a GPU array.
+- A unit vector of type `T` and length equal to the number of rows in `x` with
+  the `i`-th element set to 1.
 
 # Description
-This function creates a unit vector of the same length as `x` with the `i`-th
-element set to 1. All other elements are set to 0. The type of the elements in
-the vector is `T`, which defaults to `Float32`. The vector is created on the GPU
-using the CUDA.jl package.
+This function creates a unit vector of the same length as the number of rows in
+`x` with the `i`-th element set to 1. All other elements are set to 0. The type
+of the elements in the vector is `T`, which defaults to `Float32`.
 
 # Note
 This function is marked with the `@nograd` macro from the Zygote package, which
 means that Zygote will ignore any call to this function when computing
 gradients.
 """
-function unit_vector(x::CUDA.CuVector, i::Int, T::Type=Float32)
-    # Create a unit vector with a list comprehension
-    return CUDA.cu([j == i ? CUDA.one(T) : CUDA.zero(T) for j in 1:length(x)])
+function unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
+    return [j == i ? one(T) : zero(T) for j in 1:size(x, 1)]
 end # function
-
 
 # Set Zygote to ignore the function when computing gradients
 Zygote.@nograd unit_vector
@@ -847,7 +837,9 @@ where eᵢ is the `i`-th unit vector.
 ```julia
 f(x) = sum(x.^2, dims=1)
 x = [1.0 2.0 3.0; 4.0 5.0 6.0]
-finite_difference_gradient(f, x)  # Returns a matrix where each column is the gradient at the corresponding column of `x`
+# Returns a matrix where each column is the gradient at the corresponding column
+# of `x`
+finite_difference_gradient(f, x)  
 ```
 """
 function finite_difference_gradient(
@@ -855,7 +847,8 @@ function finite_difference_gradient(
     x::AbstractMatrix{T};
     ε::T=sqrt(eps(Float32))
 ) where {T<:AbstractFloat}
-    # Compute the finite difference gradient for each element of x
+    # Compute the finite difference gradient for each element of x. Note: We sue
+    # the permutedims to return the output in the same shape as the input
     grad = permutedims(
         reduce(
             hcat,

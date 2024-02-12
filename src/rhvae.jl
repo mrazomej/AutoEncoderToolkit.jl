@@ -1435,6 +1435,7 @@ function ∇hamiltonian_finite(
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
         momentum_logprior=momentum_logprior,
+        ε=ε
     )
 end # function
 
