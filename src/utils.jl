@@ -10,6 +10,10 @@ import Zygote
 # Import library to find nearest neighbors
 import NearestNeighbors
 import Clustering
+import Distances
+
+# Import library to use Ellipsis Notation
+using EllipsisNotation
 
 # Import lobary to conditionally load functions when GPUs are available
 import Requires
@@ -506,6 +510,118 @@ function centroids_kmeans(
             # Return centers
             return Clustering.kmeans(x_flat, n_centroids).centers
         end # if
+    end # if
+end # function
+
+## =============================================================================
+# Define centroids via k-medoids
+## =============================================================================
+
+@doc raw"""
+        centroids_kmedoids(
+            x::AbstractMatrix{<:Number}, n_centroids::Int; assign::Bool=false
+        )
+
+Perform k-medoids clustering on the input and return the centers. This function
+can be used to down-sample the number of points used when computing the metric
+tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+# Arguments
+- `x::AbstractMatrix{<:Number}`: The input data. Rows represent individual
+  samples.
+- `n_centroids::Int`: The number of centroids to compute.
+- `dist::Distances.PreMetric=Distances.Euclidean()`: The distance metric to use
+  when computing the pairwise distance matrix.
+
+# Optional Keyword Arguments
+- `assign::Bool=false`: If true, also return the assignments of each point to a
+  centroid.
+
+# Returns
+- If `assign` is false, returns a matrix where each column is a centroid.
+- If `assign` is true, returns a tuple where the first element is the matrix of
+  centroids and the second element is a vector of assignments.
+
+# Examples
+```julia
+data = rand(100, 10)
+centroids = centroids_kmedoids(data, 5)
+```
+"""
+function centroids_kmedoids(
+    x::AbstractMatrix{<:Number},
+    n_centroids::Int,
+    dist::Distances.PreMetric=Distances.Euclidean();
+    assign::Bool=false
+)
+    # Compute pairwise distance matrix
+    dist_matrix = Distances.pairwise(dist, x, dims=2)
+    # Perform k-means clustering on the input and return the centers
+    if assign
+        # Compute clustering
+        clustering = Clustering.kmedoids(dist_matrix, n_centroids)
+        # Return centers and assignments
+        return (x[:, clustering.medoids], clustering.assignments)
+    else
+        # Return centers
+        return x[:, Clustering.kmedoids(dist_matrix, n_centroids).medoids]
+    end # if
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    centroids_kmedoids(
+        x::AbstractArray{<:Number},
+        n_centroids::Int,
+        dist::Distances.PreMetric=Distances.Euclidean();
+        assign::Bool=false
+    )
+
+Perform k-medoids clustering on the input and return the centers. This function
+can be used to down-sample the number of points used when computing the metric
+tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+# Arguments
+- `x::AbstractArray{<:Number}`: The input data. The last dimension of `x` should
+  contain each of the samples that should be clustered.
+- `n_centroids::Int`: The number of centroids to compute.
+- `dist::Distances.PreMetric=Distances.Euclidean()`: The distance metric to use
+  for the clustering. Defaults to Euclidean distance.
+
+# Optional Keyword Arguments
+- `assign::Bool=false`: If true, also return the assignments of each point to a
+  centroid.
+
+# Returns
+- If `assign` is false, returns an array where each column is a centroid.
+- If `assign` is true, returns a tuple where the first element is the array of
+  centroids and the second element is a vector of assignments.
+
+# Examples
+```julia
+data = rand(10, 100)
+centroids = centroids_kmedoids(data, 5)
+```
+"""
+function centroids_kmedoids(
+    x::AbstractArray{<:Number},
+    n_centroids::Int,
+    dist::Distances.PreMetric=Distances.Euclidean();
+    assign::Bool=false
+)
+    # Compute pairwise distance matrix by collecting slices with respect to the
+    # last dimension
+    dist_matrix = Distances.pairwise(dist, collect(eachslice(x, dims=ndims(x))))
+    # Perform k-means clustering on the input and return the centers
+    if assign
+        # Compute clustering
+        clustering = Clustering.kmedoids(dist_matrix, n_centroids)
+        # Return centers and assignments
+        return (x[.., clustering.medoids], clustering.assignments)
+    else
+        # Return centers
+        return x[.., Clustering.kmedoids(dist_matrix, n_centroids).medoids]
     end # if
 end # function
 
