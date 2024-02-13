@@ -6,7 +6,6 @@ import Zygote
 using CUDA
 
 # Import basic math
-import Distances
 import LinearAlgebra
 import Random
 import StatsBase
@@ -2973,25 +2972,9 @@ function _log_q̄(
     rhvae_outputs::NamedTuple,
     βₒ::T
 ) where {T<:Float32}
-    # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
+    # log q̄ = log q(zₒ | x) + log p(ρₒ | zₒ) - d/2 log(βₒ)
 
-    # Compute log q(zₒ|x)
-    # log_q_zₒ_given_x = -0.5f0 *
-    #                    sum(((zₒ[:, i] - µ[:, i]) ./ exp.(logσ[:, i])) .^ 2) -
-    #                    sum(logσ[:, i]) - 0.5f0 * size(zₒ, 1) * log(2.0f0π)
-
-    # Compute log p(ρₒ|zₒ)
-    # log_p_ρₒ_given_zₒ = riemannian_logprior(
-    #     zₒ[:, i], ρₒ[:, i], metric_param
-    # )
-
-    # Compute log q̄ = log q(zₒ|x) + log p(ρₒ|zₒ) - 0.5d log(βₒ)
-    # log_q = log_q_zₒ_given_x + log_p_ρₒ_given_zₒ -
-    #         0.5f0 * size(zₒ, 1) * log(βₒ)
-
-    # Compute log q(zₒ | x). NOTE: The code above is what I think the math
-    # derived in the original paper implied. But, looking at the original
-    # implementation, they take this to be a much simpler form.
+    # Compute log q(zₒ | x).
     log_q_zₒ_given_x = encoder_logposterior(
         rhvae_outputs.phase_space.z_init,
         rhvae.vae.encoder,
