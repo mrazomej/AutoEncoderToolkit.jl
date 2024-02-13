@@ -796,11 +796,11 @@ function encoder_logposterior(
 ) where {T<:AbstractFloat}
     # Extract mean and log standard deviation from encoder output
     µ, logσ = encoder_output.µ, encoder_output.logσ
-    # Exponentiate log standard deviation to obtain standard deviation
-    σ = exp.(logσ)
+    # Compute variance
+    σ² = exp.(T(2) * logσ)
 
     # Compute variational log-posterior
-    logposterior = -0.5f0 * sum(((z - μ) ./ σ) .^ 2) -
+    logposterior = -0.5f0 * sum((z - μ) .^ 2 ./ σ²) -
                    sum(logσ) - 0.5f0 * length(z) * log(2.0f0π)
 
     return logposterior
