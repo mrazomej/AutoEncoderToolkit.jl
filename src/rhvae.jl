@@ -2714,7 +2714,7 @@ function (rhvae::RHVAE{VAE{E,D}})(
         x, zₒ, Gₒ⁻¹, logdetGₒ, rhvae.vae.decoder, decoder_output, metric_param;
         K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
         ∇H=∇H, ∇H_kwargs=∇H_kwargs,
-        tempering_schedule=tempering_schedule
+        G_inv=G_inv, tempering_schedule=tempering_schedule
     )
 
     # Check if latent variables should be returned
@@ -2842,7 +2842,7 @@ function (rhvae::RHVAE{VAE{E,D}})(
         rhvae.vae.decoder, decoder_output, metric_param;
         K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
         ∇H=∇H, ∇H_kwargs=∇H_kwargs,
-        tempering_schedule=tempering_schedule
+        G_inv=G_inv, tempering_schedule=tempering_schedule
     )
 
     # Check if latent variables should be returned
@@ -2915,7 +2915,7 @@ function _log_p̄(
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ | zₖ)
 
     # Compute log p(x | zₖ)
-    log_p_given_zₖ = reconstruction_loglikelihood(
+    log_p_x_given_zₖ = reconstruction_loglikelihood(
         x,
         rhvae_outputs.phase_space.z_final,
         rhvae.vae.decoder,
@@ -2932,14 +2932,13 @@ function _log_p̄(
         rhvae_outputs.phase_space.logdetG_final,
     )
 
-    return log_p_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ
+    return log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ
 end # function
 
 # ------------------------------------------------------------------------------
 
 @doc raw"""
     _log_q̄(
-        x::AbstractArray{T},
         rhvae::RHVAE,
         rhvae_outputs::NamedTuple,
         βₒ::T
@@ -2999,8 +2998,18 @@ function _log_q̄(
         rhvae_outputs.encoder
     )
 
-    return log_q_zₒ_given_x .-
-           0.5f0 * size(rhvae_outputs.phase_space.z_init, 1) * log(βₒ)
+    # Compute log p(ρₒ|zₒ)
+    log_p_ρₒ_given_zₒ = riemannian_logprior(
+        rhvae_outputs.phase_space.ρ_init,
+        rhvae_outputs.phase_space.Ginv_init,
+        rhvae_outputs.phase_space.logdetG_init,
+    )
+
+    # Compute tempering Jacobian term
+    tempering_jacobian = 0.5f0 *
+                         size(rhvae_outputs.phase_space.z_init, 1) * log(βₒ)
+
+    return log_q_zₒ_given_x + log_p_ρₒ_given_zₒ .- tempering_jacobian
 end # function
 
 # ------------------------------------------------------------------------------
