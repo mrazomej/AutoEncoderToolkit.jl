@@ -1177,7 +1177,7 @@ end # function
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
-        ε::T=sqrt(eps(Float32))
+        ε::T=∛(eps(Float32))
     ) where {T<:Float32}
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
@@ -1257,7 +1257,7 @@ function ∇hamiltonian_finite(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
-    ε::T=sqrt(eps(Float32))
+    ε::T=(∛(eps(Float32)))
 ) where {T<:Float32}
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
@@ -1301,7 +1301,7 @@ end # function
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
         G_inv::Function=G_inv,
-        ε::T=sqrt(eps(Float32))
+        ε::T=∛(eps(Float32))
     ) where {T<:Float32}
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
@@ -1379,7 +1379,7 @@ function ∇hamiltonian_finite(
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
-    ε::T=sqrt(eps(Float32))
+    ε::T=(∛(eps(Float32)))
 ) where {T<:Float32}
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)

@@ -895,7 +895,7 @@ Compute the finite difference gradient of a function `f` at a point `x`.
 - `x::AbstractVector{T}`: The point at which the gradient is to be computed.
 
 # Optional Keyword Arguments
-- `ε::T=sqrt(eps(Float32))`: The step size for the finite difference
+- `ε::T=∛(eps(Float32))`: The step size for the finite difference
   calculation. Defaults to the square root of the machine epsilon for type
   `Float32`.
 
@@ -923,7 +923,7 @@ finite_difference_gradient(f, x)  # Returns the vector [2.0, 4.0, 6.0]
 function finite_difference_gradient(
     f::Function,
     x::AbstractVector{T};
-    ε::T=sqrt(eps(Float32))
+    ε::T=(∛(eps(Float32)))
 ) where {T<:AbstractFloat}
     # Compute the finite difference gradient for each element of x
     grad = [
@@ -981,7 +981,7 @@ finite_difference_gradient(f, x)
 function finite_difference_gradient(
     f::Function,
     x::AbstractMatrix{T};
-    ε::T=sqrt(eps(Float32))
+    ε::T=(∛(eps(Float32)))
 ) where {T<:AbstractFloat}
     # Compute the finite difference gradient for each element of x. Note: We sue
     # the permutedims to return the output in the same shape as the input
