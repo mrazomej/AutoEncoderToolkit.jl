@@ -74,15 +74,23 @@ abstract type AbstractGaussianEncoder <: AbstractVariationalEncoder end
 @doc raw"""
     AbstractGaussianLinearEncoder <: AbstractGaussianEncoder
 
-An abstract type representing a Gaussian linear encoder in a variational autoencoder.
+An abstract type representing a Gaussian linear encoder in a variational
+autoencoder.
 
 # Description
-A Gaussian linear encoder is a type of encoder that maps inputs to a Gaussian distribution in the latent space. Unlike a standard Gaussian encoder, which typically returns the log of the standard deviation of the Gaussian distribution, a Gaussian linear encoder returns the standard deviation directly.
+A Gaussian linear encoder is a type of encoder that maps inputs to a Gaussian
+distribution in the latent space. Unlike a standard Gaussian encoder, which
+typically returns the log of the standard deviation of the Gaussian
+distribution, a Gaussian linear encoder returns the standard deviation directly.
 
-This abstract type is used as a base for all Gaussian linear encoders. Specific implementations of Gaussian linear encoders should subtype this abstract type and implement the necessary methods.
+This abstract type is used as a base for all Gaussian linear encoders. Specific
+implementations of Gaussian linear encoders should subtype this abstract type
+and implement the necessary methods.
 
 # Note
-When implementing a subtype, ensure that the encoder returns the standard deviation of the Gaussian distribution directly, not the log of the standard deviation.
+When implementing a subtype, ensure that the encoder returns the standard
+deviation of the Gaussian distribution directly, not the log of the standard
+deviation.
 """
 abstract type AbstractGaussianLinearEncoder <: AbstractGaussianEncoder end
 
@@ -227,7 +235,7 @@ Forward propagate the input `x` through the `Encoder` to obtain the encoded
 representation in the latent space.
 
 # Arguments
-- `x::Array{Float32}`: Input data to be encoded.
+- `x::Array`: Input data to be encoded.
 
 # Returns
 - `z`: Encoded representation of the input data in the latent space.
@@ -247,7 +255,7 @@ z = enc(some_input)
 Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
-function (encoder::Encoder)(x::AbstractVecOrMat{Float32})
+function (encoder::Encoder)(x::AbstractVecOrMat)
     # Run input through the encoder network to obtain the encoded representation
     return encoder.encoder(x)
 end # function
@@ -612,13 +620,13 @@ function JointEncoder(
 end # function
 
 @doc raw"""
-        (encoder::JointEncoder)(x)
+        (encoder::JointEncoder)(x::AbstractArray{T}) where {T<:Number}
 
 Forward propagate the input `x` through the `JointEncoder` to obtain the mean
 (`µ`) and standard deviation (`σ`) of the latent space.
 
 # Arguments
-- `x::AbstractVecOrMat{Float32}`: Input data to be encoded.
+- `x::AbstractArray{T}`: Input data to be encoded.
 
 # Returns
 - A NamedTuple `(µ=µ, σ=σ,)` where:
@@ -665,10 +673,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    spherical_logprior(
-        z::AbstractVector{T},
-        σ::T=1.0f0,
-    ) where {T<:AbstractFloat}
+    spherical_logprior(z::AbstractVector{T}, σ::Real=1.0f0) where {T<:Number}
 
 Computes the log-prior of the latent variable `z` under a spherical Gaussian
 distribution with zero mean and standard deviation `σ`.
@@ -680,7 +685,7 @@ distribution with zero mean and standard deviation `σ`.
   Defaults to `1.0f0`.
 
 # Returns
-- `log_prior::Float32`: The computed log-prior of the latent variable `z`.
+- `log_prior::T`: The computed log-prior of the latent variable `z`.
 
 # Description
 The function computes the log-prior of the latent variable `z` under a spherical
@@ -693,7 +698,7 @@ space.
 """
 function spherical_logprior(
     z::AbstractVector{T},
-    σ::AbstractFloat=1.0f0,
+    σ::Real=1.0f0,
 ) where {T<:AbstractFloat}
     # Convert to type T
     σ = convert(T, σ)
@@ -707,10 +712,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    spherical_logprior(
-        z::AbstractMatrix{T},
-        σ::T=1.0f0,
-    ) where {T<:AbstractFloat}
+    spherical_logprior(z::AbstractMatrix{T}, σ::Real=1.0f0) where {T<:Number}
 
 Computes the log-prior of the latent variable `z` under a spherical Gaussian
 distribution with zero mean and standard deviation `σ`.
@@ -718,11 +720,11 @@ distribution with zero mean and standard deviation `σ`.
 # Arguments
 - `z::AbstractMatrix{T}`: The latent variable for which the log-prior is to be
   computed. Each column of `z` represents a different latent variable.
-- `σ::T=1.0f0`: The standard deviation of the spherical Gaussian distribution.
+- `σ::Real=1.0f0`: The standard deviation of the spherical Gaussian distribution.
   Defaults to `1.0f0`.
 
 # Returns
-- `log_prior::Float32`: The computed log-prior(s) of the latent variable `z`.
+- `log_prior::T`: The computed log-prior(s) of the latent variable `z`.
 
 # Description
 The function computes the log-prior of the latent variable `z` under a spherical
@@ -735,8 +737,8 @@ space.
 """
 function spherical_logprior(
     z::AbstractMatrix{T},
-    σ::AbstractFloat=1.0f0,
-) where {T<:AbstractFloat}
+    σ::Real=1.0f0,
+) where {T<:Number}
     # Convert to type T
     σ = convert(T, σ)
 
@@ -758,7 +760,7 @@ end # function
         z::AbstractVector{T},
         encoder::AbstractGaussianLogEncoder,
         encoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-posterior of the latent variable `z` given the encoder output
 under a Gaussian distribution with mean and standard deviation given by the
@@ -793,7 +795,7 @@ function encoder_logposterior(
     z::AbstractVector{T},
     encoder::AbstractGaussianLogEncoder,
     encoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract mean and log standard deviation from encoder output
     µ, logσ = encoder_output.µ, encoder_output.logσ
     # Compute variance
@@ -812,7 +814,7 @@ end # function
         z::AbstractMatrix{T},
         encoder::AbstractGaussianLogEncoder,
         encoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-posterior of the latent variable `z` given the encoder output
 under a Gaussian distribution with mean and standard deviation given by the
@@ -848,11 +850,11 @@ function encoder_logposterior(
     z::AbstractMatrix{T},
     encoder::AbstractGaussianLogEncoder,
     encoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract mean and log standard deviation from encoder output
     µ, logσ = encoder_output.µ, encoder_output.logσ
     # Compute variance
-    σ² = exp.(T(2) .* logσ)
+    σ² = exp.(2logσ)
 
     # Compute variational log-posterior
     logposterior = [
