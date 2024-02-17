@@ -13,18 +13,20 @@ using ..AutoEncode: AbstractVariationalAutoEncoder,
     AbstractGaussianLogEncoder,
     AbstractVariationalDecoder, AbstractGaussianDecoder,
     AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder,
-    Float32Array
 
-# Import Concrete Encoder Types
-using ..AutoEncode: JointLogEncoder
+    # Import Concrete Encoder Types
+    using..AutoEncode:JointLogEncoder
 
 # Import Concrete Decoder Types
 using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
     JointLogDecoder, SplitLogDecoder,
     JointDecoder, SplitDecoder
 
+# Import functions
+using ..AutoEncode: encoder_kl, encoder_logposterior, decoder_loglikelihood
+
 # Export functions to use elsewhere
-export reparameterize, reconstruction_decoder, kl_encoder
+export reparameterize
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
@@ -86,7 +88,7 @@ function reparameterize(
     µ::AbstractVecOrMat{T},
     σ::AbstractVecOrMat{T};
     log::Bool=true
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Sample random Gaussian number
     r = Zygote.ignore() do
         randn(T, size(µ)...)
@@ -156,7 +158,7 @@ function reparameterize(
     µ::CUDA.CuVecOrMat{T},
     σ::CUDA.CuVecOrMat{T};
     log::Bool=true
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Sample random Gaussian number
     r = Zygote.ignore() do
         CUDA.randn(T, size(µ)...)
@@ -179,7 +181,7 @@ end # function
         reparameterize(
                 encoder::AbstractGaussianLogEncoder,
                 encoder_outputs::NamedTuple
-        ) where {T<:AbstractVecOrMat{Float32}}
+        )
 
 Reparameterize the latent space using the outputs of a Gaussian log encoder.
 This function helps in sampling from the latent space in variational
@@ -250,7 +252,7 @@ end # struct
 Flux.@functor VAE
 
 @doc raw"""
-        (vae::VAE)(x::AbstractArray{Float32}; latent::Bool=false)
+        (vae::VAE)(x::AbstractArray{<:Number}; latent::Bool=false)
 
 Perform the forward pass of a Variational Autoencoder (VAE).
 
@@ -262,10 +264,8 @@ the decoder to obtain the output.
 
 # Arguments
 - `vae::VAE`: The VAE used to encode the input data and decode the latent space.
-- `x::AbstractArray{Float32}`: The input data, where `Float32` is a subtype of
-  `AbstractFloat`. If a matrix is provided, each column should represent a
-  single data point. If a tensor is provided, the last dimension should
-  represent each data point.
+- `x::AbstractArray{<:Number}`: The input data. If array, the last dimension
+  contains each of the samples in a batch.
 
 # Optional Keyword Arguments
 - `latent::Bool`: Whether to return the latent variables along with the decoder
@@ -295,10 +295,7 @@ x = rand(Float32, 784)
 outputs = vae(x, latent=true)
 ```
 """
-function (vae::VAE)(
-    x::AbstractArray{T};
-    latent::Bool=false,
-) where {T<:AbstractFloat}
+function (vae::VAE)(x::AbstractArray{T}; latent::Bool=false) where {T<:Number}
     # Run input through encoder to obtain mean and log std
     encoder_outputs = vae.encoder(x)
 
@@ -320,376 +317,20 @@ function (vae::VAE)(
 end # function
 
 # ==============================================================================
-## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # VAE loss functions
-## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# ==============================================================================
-
-# ==============================================================================
-# Bernoulli decoder reconstruction loss
 # ==============================================================================
 
 @doc raw"""
-        reconstruction_decoder(decoder, x, vae_outputs)
-
-Calculate the reconstruction loss for a Bernoulli decoder in a variational
-autoencoder.
-
-This function computes the negative log-likelihood of the input data `x` given
-the Bernoulli distribution parameters `p` provided by the decoder. It assumes
-that the actual mapping from the latent space to the parameters `p` is done by
-the specified `decoder`.
-
-# Arguments
-- `decoder::BernoulliDecoder`: Decoder network of type `BernoulliDecoder`, which
-  is assumed to have already mapped the latent variables to the parameters of
-  the Bernoulli distribution.
-- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. The last dimension
-  is taken as having each of the samples in a batch.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
-
-# Returns
-- `Float32`: The average reconstruction loss computed across all provided
-  samples and data points.
-
-# Note
-- It is assumed that the mapping from latent space to decoder parameters (`p`)
-  has been performed prior to calling this function. The `decoder` argument is
-  provided to indicate the type of decoder network used, but it is not used
-  within the function itself.
-"""
-function reconstruction_decoder(
-    decoder::BernoulliDecoder,
-    x::AbstractArray{Float32},
-    vae_outputs::NamedTuple
-)
-    # Unpack needed outputs
-    p = vae_outputs.decoder.p
-
-    # Validate input dimensions
-    if any(size(x) .≠ size(p))
-        throw(
-            DimensionMismatch(
-                "Input data and decoder outputs must have the same dimensions"
-            )
-        )
-    end
-    # Check if input is vector
-    if ndims(x) == 1
-        # Define batch size as 1
-        batch_size = 1
-    else
-        # Define batch size as the last dimension
-        batch_size = last(size(x))
-    end # if
-
-    # Compute average reconstruction loss as the log-likelihood of a Bernoulli
-    # decoder.
-    log_likelihood = sum(Flux.Losses.logitbinarycrossentropy.(x, p))
-
-    # Average over the number of samples and batch size
-    return -log_likelihood / batch_size
-end # function
-
-# ==============================================================================
-# Gaussian decoder reconstruction loss
-# ==============================================================================
-
-@doc raw"""
-    reconstruction_decoder(decoder, x, vae_outputs)
-
-Calculate the reconstruction loss for a Gaussian decoder in a variational
-autoencoder.
-
-This function computes the negative log-likelihood of the input data `x` given
-the Gaussian distribution parameters `decoder_µ` (mean) and `decoder_σ`
-(standard deviation) provided by the decoder. It assumes that the actual mapping
-from the latent space to the parameters (`decoder_µ`, `decoder_σ`) is done by
-the specified `decoder`.
-
-# Arguments
-- `decoder::T`: Decoder network of type `SimpleDecoder`, which is assumed to
-  have already mapped the latent variables to the parameters of the Gaussian
-  distribution.
-- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. The last dimension
-  is taken as having each of the samples in a batch.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing the all the VAE outputs.
-
-# Returns
-- `Float32`: The average reconstruction loss computed across all provided
-  samples and data points.
-
-# Note
-- It is assumed that the mapping from latent space to decoder parameters
-  (`decoder_µ`) has been performed prior to calling this function. The `decoder`
-  argument is provided to indicate the type of decoder network used, but it is
-  not used within the function itself.
-- The reconstruction assumes a constant variance for the decoder of σ=1.
-"""
-function reconstruction_decoder(
-    decoder::SimpleDecoder,
-    x::AbstractArray{Float32},
-    vae_outputs::NamedTuple
-)
-    # Unpack needed outputs
-    decoder_µ = vae_outputs.decoder.µ
-
-    # Validate input dimensions
-    if any(size(x) .≠ size(decoder_µ))
-        throw(
-            DimensionMismatch(
-                "Input data and decoder outputs must have the same dimensions"
-            )
-        )
-    end # if
-
-    # Check if input is vector
-    if ndims(x) == 1
-        # Define batch size as 1
-        batch_size = 1
-    else
-        # Define batch size as the last dimension
-        batch_size = last(size(x))
-    end # if
-
-    # Compute average reconstruction loss as the log-likelihood of a Gaussian
-    # decoder.
-    log_likelihood = -0.5f0 * (
-        log(2.0f0π) * length(decoder_µ) +
-        sum(abs2, x - decoder_µ)
-    )
-
-    # Average over the number of samples and batch size
-    return log_likelihood / batch_size
-end # function
-
-# -----------------------------------------------------------------------------
-
-@doc raw"""
-        reconstruction_decoder(
-                decoder::T,
-                x::AbstractArray{Float32},
-                vae_outputs::NamedTuple
-        ) where {T<:AbstractGaussianLinearDecoder}
-
-Calculate the reconstruction loss for a Gaussian decoder in a variational
-autoencoder.
-
-This function computes the negative log-likelihood of the input data `x` given
-the Gaussian distribution parameters `decoder_µ` (mean) and `decoder_σ`
-(standard deviation) provided by the decoder. It assumes that the actual mapping
-from the latent space to the parameters (`decoder_µ`, `decoder_σ`) is done by
-the specified `decoder`.
-
-# Arguments
-- `decoder::T`: Decoder network of type `AbstractGaussianLinearDecoder`, which
-  is assumed to have already mapped the latent variables to the parameters of
-  the Gaussian distribution.
-- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. The last dimension
-  is taken as having each of the samples in a batch.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
-
-# Returns
-- `Float32`: The average reconstruction loss computed across all provided
-  samples and data points.
-
-# Note
-- It is assumed that the mapping from latent space to decoder parameters
-  (`decoder_µ` and `decoder_σ`) has been performed prior to calling this
-  function. The `decoder` argument is provided to indicate the type of decoder
-  network used, but it is not used within the function itself.
-"""
-function reconstruction_decoder(
-    decoder::T,
-    x::AbstractArray{Float32},
-    vae_outputs::NamedTuple
-) where {T<:AbstractGaussianLinearDecoder}
-    # Unpack needed ouput
-    decoder_µ = vae_outputs.decoder.µ
-    decoder_σ = vae_outputs.decoder.σ
-
-    # Validate input dimensions
-    if any(size(x) .≠ size(decoder_µ)) || any(size(x) .≠ size(decoder_σ))
-        throw(
-            DimensionMismatch(
-                "Input data and decoder outputs must have the same dimensions"
-            )
-        )
-    end # if
-
-    # Check if input is vector
-    if ndims(x) == 1
-        # Define batch size as 1
-        batch_size = 1
-    else
-        # Define batch size as the last dimension
-        batch_size = last(size(x))
-    end # if
-
-    # Compute average reconstruction loss as the log-likelihood of a Gaussian
-    # decoder.
-    log_likelihood = -0.5f0 * (
-        log(2.0f0π) * length(decoder_µ) +
-        2.0f0 * sum(log, decoder_σ) +
-        sum(abs2, (x - decoder_µ) ./ decoder_σ)
-    )
-
-    # Average over the number of samples and batch size
-    return log_likelihood / batch_size
-end # function
-
-# -----------------------------------------------------------------------------
-
-@doc raw"""
-    reconstruction_decoder(
-        decoder::T,
-        x::AbstractArray{Float32},
-        vae_outputs::NamedTuple
-    ) where {T<:AbstractGaussianLogDecoder}
-
-Calculate the reconstruction loss for a Gaussian decoder in a variational
-autoencoder, where the decoder outputs log standard deviations instead of
-standard deviations.
-
-# Arguments
-- `decoder::T`: Decoder network of type `AbstractGaussianLogDecoder`, which
-  outputs the log of the standard deviation of the Gaussian distribution.
-- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. The last dimension
-  is taken as having each of the samples in a batch.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
-
-# Returns
-- `Float32`: The average reconstruction loss computed across all provided
-  samples and data points.
-
-# Note
-- It is assumed that the mapping from latent space to decoder parameters
-  (`decoder_µ` and `decoder_logσ`) has been performed prior to calling this
-  function. The `decoder` argument is provided to indicate the type of decoder
-  network used, but it is not used within the function itself.
-"""
-function reconstruction_decoder(
-    decoder::T,
-    x::AbstractArray{Float32},
-    vae_outputs::NamedTuple;
-) where {T<:AbstractGaussianLogDecoder}
-    # Unpack needed ouput
-    decoder_µ = vae_outputs.decoder.µ
-    decoder_logσ = vae_outputs.decoder.logσ
-
-    # Validate input dimensions
-    if any(size(x) .≠ size(decoder_µ)) || any(size(x) .≠ size(decoder_logσ))
-        throw(
-            DimensionMismatch(
-                "Input data and decoder outputs must have the same dimensions"
-            )
-        )
-    end # if   
-
-    # Convert log standard deviation to standard deviation
-    decoder_σ = exp.(decoder_logσ)
-
-    # Check if input is vector
-    if ndims(x) == 1
-        # Define batch size as 1
-        batch_size = 1
-    else
-        # Define batch size as the last dimension
-        batch_size = last(size(x))
-    end # if
-
-    # Compute average reconstruction loss as the log-likelihood of a Gaussian
-    # decoder.
-    log_likelihood = -0.5f0 * (
-        log(2.0f0π) * length(decoder_µ) +
-        2.0f0 * sum(decoder_logσ) +
-        sum(abs2, (x - decoder_µ) ./ decoder_σ)
-    )
-
-    # Average over the number of samples and batch size
-    return log_likelihood / batch_size
-end # function
-
-# ==============================================================================
-# Gaussian encoder KL loss
-# ==============================================================================
-
-@doc raw"""
-        kl_encoder(
-                encoder::JointLogEncoder,
-                x::AbstractArray{Float32},
-                vae_outputs::NamedTuple
-        )
-
-Calculate the Kullback-Leibler (KL) divergence between the approximate posterior
-distribution and the prior distribution in a variational autoencoder with a
-Gaussian encoder.
-
-The KL divergence for a Gaussian encoder with mean `encoder_µ` and log standard
-deviation `encoder_logσ` is computed against a standard Gaussian prior.
-
-# Arguments
-- `encoder::JointLogEncoder`: Encoder network.
-- `x::AbstractArray{Float32}`: The original input data to the encoder, to be
-  compared with the reconstruction produced by the decoder. Each column
-  represents a separate data sample.
-- `vae_outputs::NamedTuple`: `NamedTuple` containing all the VAE outputs.
-
-# Returns
-- `Float32`: The KL divergence for the entire batch of data points.
-
-# Note
-- It is assumed that the mapping from data space to latent parameters
-  (`encoder_µ` and `encoder_logσ`) has been performed prior to calling this
-  function. The `encoder` argument is provided to indicate the type of decoder
-  network used, but it is not used within the function itself.
-"""
-function kl_encoder(
-    encoder::AbstractGaussianLogEncoder,
-    x::AbstractArray{Float32},
-    vae_outputs::NamedTuple
-)
-    # Unpack needed ouput
-    encoder_μ = vae_outputs.encoder.μ
-    encoder_logσ = vae_outputs.encoder.logσ
-
-    # Check if input is vector
-    if ndims(x) == 1
-        # Define batch size as 1
-        batch_size = 1
-    else
-        # Define batch size as the last dimension
-        batch_size = last(size(x))
-    end # if
-
-    # Validate that each sample has a mean and log standard deviation
-    if size(encoder_µ, 2) != batch_size || size(encoder_logσ, 2) != batch_size
-        throw(
-            DimensionMismatch(
-                "Encoder outputs must have the same number of columns as the input data"
-            )
-        )
-    end # if
-
-    # Compute KL divergence
-    return 0.5f0 * sum(
-        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
-           2.0f0 * encoder_logσ
-    ) / batch_size
-end # function
-
-
-# ==============================================================================
-# Loss VAE
-# ==============================================================================
-
-@doc raw"""
-        `loss(vae, x; β=1.0f0, reg_function=nothing, reg_kwargs=Dict(), 
-                reg_strength=1.0f0)`
+    loss(
+        vae::VAE,
+        x::AbstractArray{T};
+        β::T=1.0f0,
+        reconstruction_loglikelihood::Function=decoder_loglikelihood,
+        kl_divergence::Function=encoder_kl,
+        reg_function::Union{Function,Nothing}=nothing,
+        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_strength::T=1.0f0
+    ) where {T<:Number}
 
 Computes the loss for the variational autoencoder (VAE).
 
@@ -700,51 +341,60 @@ loss = -⟨logπ(x|z)⟩ + β × Dₖₗ[qᵩ(z|x) || π(z)] + reg_strength × r
 
 Where:
 - π(x|z) is a probabilistic decoder: π(x|z) = N(f(z), σ² I̲̲)) - f(z) is the
-function defining the mean of the decoder π(x|z) - qᵩ(z|x) is the approximated
-encoder: qᵩ(z|x) = N(g(x), h(x))
+  function defining the mean of the decoder π(x|z) - qᵩ(z|x) is the approximated
+  encoder: qᵩ(z|x) = N(g(x), h(x))
 - g(x) and h(x) define the mean and covariance of the encoder respectively.
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x::AbstractArray{Float32}`: Input data. The last dimension is taken as
-  having each of the samples in a batch.
+- `x::AbstractArray{T}`: Input data. The last dimension is taken as having each
+  of the samples in a batch.
 
 # Optional Keyword Arguments
-- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
-  annealing.
+- `β::T=1.0f0`: Weighting factor for the KL-divergence term, used for annealing.
+- `reconstruction_loglikelihood::Function=decoder_loglikelihood`: A function
+  that computes the reconstruction log likelihood.
+- `kl_divergence::Function=encoder_kl`: A function that computes the
+  Kullback-Leibler divergence between the encoder output and a standard normal.
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. Should return a Float32. This
   function must take as input the VAE outputs and the keyword arguments provided
   in `reg_kwargs`.
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
-  regularization function.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+    regularization function.
+- `reg_strength::T=1.0f0`: The strength of the regularization term.
 
 # Returns
-- `Float32`: The computed average loss value for the input `x` and its
-  reconstructed counterparts, including possible regularization terms.
+- `T`: The computed average loss value for the input `x` and its reconstructed
+  counterparts, including possible regularization terms.
 
 # Note
 - Ensure that the input data `x` matches the expected input dimensionality for
-    the encoder in the VAE.
+  the encoder in the VAE.
 """
 function loss(
     vae::VAE,
-    x::AbstractArray{Float32};
-    β::Float32=1.0f0,
+    x::AbstractArray{T};
+    β::T=1.0f0,
+    reconstruction_loglikelihood::Function=decoder_loglikelihood,
+    kl_divergence::Function=encoder_kl,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-    reg_strength::Float32=1.0f0
-)
+    reg_strength::T=1.0f0
+) where {T<:Number}
     # Forward Pass (run input through reconstruct function)
-    vae_outputs = vae(x; latent=true)
+    vae_output = vae(x; latent=true)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    log_likelihood = reconstruction_decoder(vae.decoder, x, vae_outputs)
+    log_likelihood = StatsBase.mean(
+        reconstruction_loglikelihood(vae.decoder, x, vae_output.decoder)
+    )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_div = kl_encoder(vae.encoder, x, vae_outputs)
+    kl_div = StatsBase.mean(
+        kl_divergence(vae.encoder, vae_output.encoder)
+    )
 
     # Compute regularization term if regularization function is provided
     reg_term = (reg_function !== nothing) ?
@@ -757,8 +407,17 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    `loss(vae, x_in, x_out; σ=1.0f0, β=1.0f0
-            regularization=nothing, reg_strength=1.0f0)`
+    loss(
+        vae::VAE,
+        x_in::AbstractArray{T},
+        x_out::AbstractArray{T};
+        β::T=1.0f0,
+        reconstruction_loglikelihood::Function=decoder_loglikelihood,
+        kl_divergence::Function=encoder_kl,
+        reg_function::Union{Function,Nothing}=nothing,
+        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_strength::T=1.0f0
+    ) where {T<:Number}
 
 Computes the loss for the variational autoencoder (VAE).
 
@@ -776,26 +435,28 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x_in::AbstractArray{Float32}`: Input data to the VAE encoder. The last
-  dimension is taken as having each of the samples in a batch.
-- `x_out::AbstractArray{Float32}`: Target data to compute the reconstruction
-  error. The last dimension is taken as having each of the samples in a batch.
+- `x_in::AbstractArray{T}`: Input data to the VAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
+- `x_out::AbstractArray{T}`: Target data to compute the reconstruction error.
+  The last dimension is taken as having each of the samples in a batch.
 
 # Optional Keyword Arguments
-- `β::Float32=1.0f0`: Weighting factor for the KL-divergence term, used for
-  annealing.
+- `β::T=1.0f0`: Weighting factor for the KL-divergence term, used for annealing.
+- `reconstruction_loglikelihood::Function=decoder_loglikelihood`: A function
+  that computes the reconstruction log likelihood.
+- `kl_divergence::Function=encoder_kl`: A function that computes the
+  Kullback-Leibler divergence.
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. Should return a Float32. This
   function must take as input the VAE outputs and the keyword arguments provided
   in `reg_kwargs`.
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
   regularization function.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+- `reg_strength::T=1.0f0`: The strength of the regularization term.
 
 # Returns
-- `Float32`: The computed loss value between the input `x_out` and its
-  reconstructed counterpart from `x_in`, including possible regularization
-  terms.
+- `T`: The computed average loss value for the input `x_in` and its
+  reconstructed counterparts `x_out`, including possible regularization terms.
 
 # Note
 - Ensure that the input data `x_in` and `x_out` match the expected input
@@ -803,56 +464,62 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 """
 function loss(
     vae::VAE,
-    x_in::AbstractArray{Float32},
-    x_out::AbstractArray{Float32};
-    β::Float32=1.0f0,
+    x_in::AbstractArray{T};
+    x_out::AbstractArray{T};
+    β::T=1.0f0,
+    reconstruction_loglikelihood::Function=decoder_loglikelihood,
+    kl_divergence::Function=encoder_kl,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-    reg_strength::Float32=1.0f0
-)
+    reg_strength::T=1.0f0
+) where {T<:Number}
     # Forward Pass (run input through reconstruct function)
-    vae_outputs = vae(x_in; latent=true)
+    vae_output = vae(x_in; latent=true)
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
-    log_likelihood = reconstruction_decoder(vae.decoder, x_out, vae_outputs)
+    log_likelihood = StatsBase.mean(
+        reconstruction_loglikelihood(vae.decoder, x_out, vae_output.decoder)
+    )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
     # and latent prior distribution π(z)
-    kl_div = kl_encoder(vae.encoder, x_in, vae_outputs)
+    kl_div = StatsBase.mean(
+        kl_divergence(vae.encoder, vae_output.encoder)
+    )
 
     # Compute regularization term if regularization function is provided
     reg_term = (reg_function !== nothing) ?
                reg_function(vae_outputs; reg_kwargs...) : 0.0f0
 
-    # Compute loss function
+    # Compute average loss function
     return -log_likelihood + β * kl_div + reg_strength * reg_term
 end # function
 
 # ==============================================================================
-## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # VAE training functions
-## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # ==============================================================================
 
 @doc raw"""
-    `train!(vae, x, opt; loss_function, loss_kwargs)`
+    train!(vae, x, opt; loss_function, loss_kwargs, verbose)
 
 Customized training function to update parameters of a variational autoencoder
 given a specified loss function.
 
 # Arguments
 - `vae::VAE`: A struct containing the elements of a variational autoencoder.
-- `x::AbstractArray{Float32}`: Data on which to evaluate the loss function. The
+- `x::AbstractArray{<:Number}`: Data on which to evaluate the loss function. The
   last dimension is taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
   initialized using `Flux.Train.setup`.
 
 # Optional Keyword Arguments
-- `loss_function::Function=VAEs.loss`: The loss function used for training. It
-  should accept the VAE model, data `x`, and keyword arguments in that order.
+- `loss_function::Function=loss`: The loss function used for training. It should
+  accept the VAE model, data `x`, and keyword arguments in that order.
 - `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
   function. These might include parameters like `σ`, or `β`, depending on the
   specific loss function in use.
+- `verbose::Bool=false`: If true, the loss value will be printed during
+  training.
 
 # Description
 Trains the VAE by:
@@ -863,48 +530,55 @@ Trains the VAE by:
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
 for x in dataloader
-    train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0,))
+        train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0,), verbose=true)
 end
 ```
 """
 function train!(
     vae::VAE,
-    x::AbstractArray{Float32},
+    x::AbstractArray{<:Number},
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict()
+    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    verbose::Bool=false,
 )
     # Compute VAE gradient
-    ∇loss_ = Flux.gradient(vae) do vae_model
+    L, ∇L = Flux.withgradient(vae) do vae_model
         loss_function(vae_model, x; loss_kwargs...)
     end # do block
+
     # Update parameters
-    Flux.Optimisers.update!(opt, vae, ∇loss_[1])
+    Flux.Optimisers.update!(opt, vae, ∇L[1])
+
+    # Check if loss should be printed
+    if verbose
+        println("Loss: ", L)
+    end # if
 end # function
 
-# ==============================================================================
+# ------------------------------------------------------------------------------
 
 @doc raw"""
-    `train!(vae, x_in, x_out, opt; loss_function, loss_kwargs...)`
+        `train!(vae, x_in, x_out, opt; loss_function, loss_kwargs...)`
 
 Customized training function to update parameters of a variational autoencoder
 given a loss function.
 
 # Arguments
-- `vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}`: A
-  struct containing the elements of a variational autoencoder.
-- `x_in::AbstractArray{Float32}`: Input data for the loss function. Represents
-  an individual sample. The last dimension is taken as having each of the
-  samples in a batch.
-- `x_out::AbstractArray{Float32}`: Target output data for the loss function.
+- `vae::VAE`: A struct containing the elements of a variational autoencoder.
+- `x_in::AbstractArray{T}`: Input data for the loss function. Represents an
+  individual sample. The last dimension is taken as having each of the samples
+  in a batch.
+- `x_out::AbstractArray{T}`: Target output data for the loss function.
   Represents the corresponding output for the `x_in` sample. The last dimension
   is taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
-  initialized using `Flux.Train.setup`.
+    initialized using `Flux.Optimisers.update!`.
 
 # Optional Keyword Arguments
-- `loss_function::Function=VAEs.loss`: The loss function used for training. It
-  should accept the VAE model, data `x`, and keyword arguments in that order.
+- `loss_function::Function=loss`: The loss function used for training. It should
+  accept the VAE model, data `x_in`, `x_out`, and keyword arguments in that
+  order.  
 - `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
   function. These might include parameters like `σ`, or `β`, depending on the
   specific loss function in use.
@@ -920,19 +594,19 @@ Trains the VAE by:
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
 for (x_in, x_out) in dataloader
-    train!(vae, x_in, x_out, opt) 
+        train!(vae, x_in, x_out, opt) 
 end
 ```
 """
 function train!(
-    vae::VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder},
-    x_in::AbstractArray{Float32},
-    x_out::AbstractArray{Float32},
+    vae::VAE,
+    x_in::AbstractArray{T},
+    x_out::AbstractArray{T},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     verbose::Bool=false
-)
+) where {T<:Number}
     # Compute VAE gradient
     L, ∇L = Flux.withgradient(vae) do vae_model
         loss_function(vae_model, x_in, x_out; loss_kwargs...)
