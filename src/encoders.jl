@@ -1,5 +1,7 @@
 # Import ML libraries
 import Flux
+# Import library to use Ellipsis Notation
+using EllipsisNotation
 
 # ==============================================================================
 # Encoder abstract types
@@ -865,4 +867,72 @@ function encoder_logposterior(
     ] |> Flux.gpu
 
     return logposterior
+end # function
+
+# =============================================================================
+# Function to compute KL divergence
+# =============================================================================
+
+@doc raw"""
+        encoder_kl(
+                encoder::AbstractGaussianLogEncoder,
+                encoder_output::NamedTuple
+        ) where {T<:Number}
+
+Calculate the Kullback-Leibler (KL) divergence between the approximate posterior
+distribution and the prior distribution in a variational autoencoder with a
+Gaussian encoder.
+
+The KL divergence for a Gaussian encoder with mean `encoder_µ` and log standard
+deviation `encoder_logσ` is computed against a standard Gaussian prior.
+
+# Arguments
+- `encoder::AbstractGaussianLogEncoder`: Encoder network. This argument is not
+  used in the computation of the KL divergence, but is included to allow for
+  multiple encoder types to be used with the same function.
+- `encoder_output::NamedTuple`: `NamedTuple` containing all the encoder outputs.
+  It should have fields `μ` and `logσ` representing the mean and log standard
+  deviation of the encoder's output.
+
+# Returns
+- `kl_div::Union{T, Vector{T}}`: The KL divergence for the entire batch of data
+  points. If `encoder_µ` is a vector, `kl_div` is a scalar. If `encoder_µ` is a
+  matrix, `kl_div` is a vector where each element corresponds to the KL
+  divergence for a batch of data points.
+
+# Note
+- It is assumed that the mapping from data space to latent parameters
+  (`encoder_µ` and `encoder_logσ`) has been performed prior to calling this
+  function. The `encoder` argument is provided to indicate the type of decoder
+  network used, but it is not used within the function itself.
+"""
+function encoder_kl(
+    encoder::AbstractGaussianLogEncoder,
+    encoder_output::NamedTuple
+) where {T<:Number}
+    # Unpack needed ouput
+    encoder_μ = encoder_output.μ
+    encoder_logσ = encoder_output.logσ
+
+    # Check encoder_µ type
+    if typeof(encoder_µ) <: Vector
+        # Compute KL divergence
+        kl_div = 0.5f0 * sum(
+            @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
+               2.0f0 * encoder_logσ
+        )
+    else
+        kl_div = [
+            begin
+                0.5f0 * sum(
+                    @. (
+                        exp(2.0f0 * encoder_logσ[:, i]) +
+                        encoder_μ[:, i]^2 - 1.0f0
+                    ) - 2.0f0 * encoder_logσ[:, i]
+                )
+            end for i in axes(encoder_μ, 2)
+        ] |> Flux.gpu
+    end # if
+
+    return kl_div
 end # function
