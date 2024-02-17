@@ -226,13 +226,13 @@ function Decoder(
 end # function
 
 @doc raw"""
-    (decoder::Decoder)(z)
+    (decoder::Decoder)(z::AbstractVecOrMat{<:Number})
 
 Forward propagate the encoded representation `z` through the `Decoder` to obtain
 the reconstructed input data.
 
 # Arguments
-- `z::Array{Float32}`: Encoded representation in the latent space.
+- `z::AbstractArray{<:Number}`: Encoded representation in the latent space.
 
 # Returns
 - `x_reconstructed`: Reconstructed version of the original input data after
@@ -253,7 +253,7 @@ x_reconstructed = dec(encoded_representation)
 Ensure that the input z matches the expected dimensionality of the decoder's
 input layer.
 """
-function (decoder::Decoder)(z::AbstractVecOrMat{Float32})
+function (decoder::Decoder)(z::AbstractArray{<:Number})
     # Run encoded representation through the decoder network to obtain the
     # reconstructed data
     return decoder.decoder(z)
@@ -386,13 +386,14 @@ function SimpleDecoder(
 end # function
 
 @doc raw"""
-    (decoder::SimpleDecoder)(z::AbstractVecOrMat{Float32})
+    (decoder::SimpleDecoder)(z::AbstractVecOrMat{<:Number})
+    
 
 Maps the given latent representation `z` through the `SimpleDecoder` network to
 reconstruct the original input.
 
 # Arguments
-- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
+- `z::AbstractArray{<:Number}`: The latent space representation to be decoded.
   This can be a vector or a matrix, where each column represents a separate
   sample from the latent space of a VAE.
 
@@ -417,9 +418,7 @@ output = decoder(z)
 Ensure that the latent space representation z matches the expected input
 dimensionality for the SimpleDecoder.
 """
-function (decoder::SimpleDecoder)(
-    z::Float32Array
-)
+function (decoder::SimpleDecoder)(z::AbstractArray{<:Number})
     # Run input to decoder network
     return (µ=decoder.decoder(z),)
 end # function
@@ -658,21 +657,21 @@ function JointLogDecoder(
 end
 
 @doc raw"""
-        (decoder::JointLogDecoder)(z::AbstractVecOrMat{Float32})
+        (decoder::JointLogDecoder)(z::AbstractArray{<:Number})
 
 Maps the given latent representation `z` through the `JointLogDecoder` network
 to produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Arguments
-- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
-  This can be a vector or a matrix, where each column represents a separate
-  sample from the latent space of a VAE.
-
+- `z::AbstractArray{<:Number}`: The latent space representation to be decoded.
+  If array, the last dimension contains each of the latent space
+  representations.
+  
 # Returns
 - A NamedTuple `(µ=µ, logσ=logσ,)` where:
-    - `µ::Array{Float32}`: The mean representation obtained from the decoder.
-    - `logσ::Array{Float32}`: The log standard deviation representation obtained
-      from the decoder.
+    - `µ::Array{<:Number}`: The mean representation obtained from the decoder.
+    - `logσ::Array{<:Number}`: The log standard deviation representation
+      obtained from the decoder.
 
 # Description
 This function processes the latent space representation `z` using the primary
@@ -691,9 +690,7 @@ output = decoder(z)
 Ensure that the latent space representation z matches the expected input
 dimensionality for the JointLogDecoder.
 """
-function (decoder::JointLogDecoder)(
-    z::Float32Array
-)
+function (decoder::JointLogDecoder)(z::AbstractArray{<:Number})
     # Run input through the primary decoder network
     h = decoder.decoder(z)
     # Map to mean
@@ -935,21 +932,22 @@ function JointDecoder(
 end
 
 @doc raw"""
-        (decoder::JointDecoder)(z::Float32Array)
+        (decoder::JointDecoder)(z::AbstractArray{<:Number})
 
 Maps the given latent representation `z` through the `JointDecoder` network to
 produce both the mean (`µ`) and standard deviation (`σ`).
 
 # Arguments
-- `z::Float32Array`: The latent space representation to be decoded. This can be
-  a vector, a matrix, or a 3D tensor, where each column (or slice, in the case
-  of 3D tensor) represents a separate sample from the latent space of a VAE.
+- `z::AbstractArray{<:Number}`: The latent space representation to be decoded.
+  If array, the last dimension contains each of the latent space representations
+  to be decoded.
 
 # Returns
 - A NamedTuple `(µ=µ, σ=σ,)` where:
-    - `µ::Array{Float32}`: The mean representation obtained from the decoder.
-    - `σ::Array{Float32}`: The standard deviation representation obtained from
-      the decoder.
+    - `µ::AbstractArray{<:Number}`: The mean representation obtained from the
+      decoder.
+    - `σ::AbstractArray{<:Number}`: The standard deviation representation
+      obtained from the decoder.
 
 # Description
 This function processes the latent space representation `z` using the primary
@@ -968,9 +966,7 @@ output = decoder(z)
 Ensure that the latent space representation z matches the expected input
 dimensionality for the JointDecoder.
 """
-function (decoder::JointDecoder)(
-    z::Float32Array
-)
+function (decoder::JointDecoder)(z::AbstractArray{<:Number})
     # Run input through the primary decoder network
     h = decoder.decoder(z)
     # Map to mean
@@ -1137,23 +1133,23 @@ function SplitLogDecoder(
 end # function
 
 @doc raw"""
-        (decoder::SplitLogDecoder)(z::Float32Array)
+        (decoder::SplitLogDecoder)(z::AbstractArray{<:Number})
 
 Maps the given latent representation `z` through the separate networks of the
 `SplitLogDecoder` to produce both the mean (`µ`) and log standard deviation
 (`logσ`).
 
 # Arguments
-- `z::Float32Array`: The latent space representation to be decoded. This can be
-  a vector, a matrix, or a 3D tensor, where each column (or slice, in the case
-  of 3D tensor) represents a separate sample from the latent space of a VAE.
-
+- `z::AbstractArray{<:Number}`: The latent space representation to be decoded.
+  If array, the last dimension contains each of the latent space representations
+  to be decoded.
+  
 # Returns
 - A NamedTuple `(µ=µ, logσ=logσ,)` where:
-    - `µ::Array{Float32}`: The mean representation obtained using the dedicated
-      `decoder_µ` network.
-    - `logσ::Array{Float32}`: The log standard deviation representation obtained
-      using the dedicated `decoder_logσ` network.
+    - `µ::AbstractArray{<:Number}`: The mean representation obtained using the
+      dedicated `decoder_µ` network.
+    - `logσ::AbstractArray{<:Number}`: The log standard deviation representation
+      obtained using the dedicated `decoder_logσ` network.
 
 # Description
 This function processes the latent space representation `z` through two distinct
@@ -1172,9 +1168,7 @@ output = decoder(z))
 Ensure that the latent space representation z matches the expected input
 dimensionality for both networks in the SplitLogDecoder.
 """
-function (decoder::SplitLogDecoder)(
-    z::Float32Array
-)
+function (decoder::SplitLogDecoder)(z::AbstractArray{<:Number})
     # Map through the decoder dedicated to the mean
     µ = decoder.µ(z)
     # Map through the decoder dedicated to the log standard deviation
@@ -1343,22 +1337,22 @@ function SplitDecoder(
 end # function
 
 @doc raw"""
-        (decoder::SplitDecoder)(z::Float32Array)
+        (decoder::SplitDecoder)(z::AbstractArray{<:Number})
 
 Maps the given latent representation `z` through the separate networks of the
 `SplitDecoder` to produce both the mean (`µ`) and standard deviation (`σ`).
 
 # Arguments
-- `z::Float32Array`: The latent space representation to be decoded. This can be
-  a vector, a matrix, or a 3D tensor, where each column (or slice, in the case
-  of 3D tensor) represents a separate sample from the latent space of a VAE.
+- `z::AbstractArray{<:Number}`: The latent space representation to be decoded.
+  If array, the last dimension contains each of the latent space representations
+  to be decoded.
 
 # Returns
 - A NamedTuple `(µ=µ, σ=σ,)` where:
-    - `µ::Array{Float32}`: The mean representation obtained using the dedicated
-      `decoder_µ` network.
-    - `σ::Array{Float32}`: The standard deviation representation obtained using
-      the dedicated `decoder_σ` network.
+    - `µ::AbstractArray{<:Number}`: The mean representation obtained using the
+      dedicated `decoder_µ` network.
+    - `σ::AbstractArray{<:Number}`: The standard deviation representation
+      obtained using the dedicated `decoder_σ` network.
 
 # Description
 This function processes the latent space representation `z` through two distinct
@@ -1377,9 +1371,7 @@ output = decoder(z)
 Ensure that the latent space representation z matches the expected input
 dimensionality for both networks in the SplitDecoder.
 """
-function (decoder::SplitDecoder)(
-    z::Float32Array
-)
+function (decoder::SplitDecoder)(z::AbstractArray{<:Number})
     # Map through the decoder dedicated to the mean
     µ = decoder.µ(z)
     # Map through the decoder dedicated to the standard deviation
@@ -1535,13 +1527,13 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        (decoder::BernoulliDecoder)(z::AbstractVecOrMat{Float32})
+        (decoder::BernoulliDecoder)(z::AbstractArray{<:Number})
 
 Maps the given latent representation `z` through the `BernoulliDecoder` network
 to reconstruct the original input.
 
 # Arguments
-- `z::AbstractVecOrMat{Float32}`: The latent space representation to be decoded.
+- `z::AbstractArray{<:Number}`: The latent space representation to be decoded.
     This can be a vector or a matrix, where each column represents a separate
     sample from the latent space of a VAE.
 
@@ -1559,9 +1551,7 @@ reconstruct the original input from this representation.
 Ensure that the latent space representation z matches the expected input
 dimensionality for the BernoulliDecoder.
 """
-function (decoder::BernoulliDecoder)(
-    z::AbstractVecOrMat{Float32}
-)
+function (decoder::BernoulliDecoder)(z::AbstractArray{<:Number})
     # Run input to decoder network
     return (p=decoder.decoder(z),)
 end # function
@@ -1576,7 +1566,7 @@ end # function
         z::AbstractVector{T},
         decoder::BernoulliDecoder,
         decoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Bernoulli distribution with probability given by the decoder.
@@ -1613,7 +1603,7 @@ function decoder_loglikelihood(
     z::AbstractVector{T},
     decoder::BernoulliDecoder,
     decoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the probability of the Bernoulli distribution from the decoder
     p = decoder_output.p
 
@@ -1631,7 +1621,7 @@ end
         z::AbstractMatrix{T},
         decoder::BernoulliDecoder,
         decoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Bernoulli distribution with probability given by the decoder.
@@ -1668,7 +1658,7 @@ function decoder_loglikelihood(
     z::AbstractMatrix{T},
     decoder::BernoulliDecoder,
     decoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the probability of the Bernoulli distribution from the decoder
     p = decoder_output.p
 
@@ -1694,7 +1684,7 @@ end
         decoder::SimpleDecoder,
         decoder_output::NamedTuple;
         σ::T=1.0f0,
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean given by the decoder and a specified
@@ -1738,7 +1728,7 @@ function decoder_loglikelihood(
     decoder::SimpleDecoder,
     decoder_output::NamedTuple;
     σ::T=1.0f0,
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the mean of the Gaussian distribution from the decoder output
     μ = decoder_output.µ
 
@@ -1755,7 +1745,7 @@ end # function
         decoder::SimpleDecoder,
         decoder_output::NamedTuple;
         σ::T=1.0f0,
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean given by the decoder and a specified
@@ -1799,7 +1789,7 @@ function decoder_loglikelihood(
     decoder::SimpleDecoder,
     decoder_output::NamedTuple;
     σ::T=1.0f0,
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the mean of the Gaussian distribution from the decoder output
     μ = decoder_output.µ
 
@@ -1821,7 +1811,7 @@ end # function
         z::AbstractVector{T},
         decoder::AbstractGaussianLogDecoder,
         decoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
@@ -1861,12 +1851,12 @@ function decoder_loglikelihood(
     z::AbstractVector{T},
     decoder::AbstractGaussianLogDecoder,
     decoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the mean and log standard deviation of the Gaussian distribution
     μ, logσ = decoder_output.µ, decoder_output.logσ
 
     # Compute variance
-    σ² = exp.(T(2) * logσ)
+    σ² = exp.(2logσ)
 
     # Compute log-likelihood
     loglikelihood = -0.5f0 * sum((x - μ) .^ 2 ./ σ²) -
@@ -1882,7 +1872,7 @@ end # function
         z::AbstractMatrix{T},
         decoder::AbstractGaussianLogDecoder,
         decoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
@@ -1921,12 +1911,12 @@ function decoder_loglikelihood(
     z::AbstractMatrix{T},
     decoder::AbstractGaussianLogDecoder,
     decoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the mean and log standard deviation of the Gaussian distribution
     μ, logσ = decoder_output.µ, decoder_output.logσ
 
     # Compute variance
-    σ² = exp.(T(2) * logσ)
+    σ² = exp.(2logσ)
 
     # Compute log-likelihood
     loglikelihood = [
@@ -1948,7 +1938,7 @@ end # function
         z::AbstractVector{T},
         decoder::AbstractGaussianLinearDecoder,
         decoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
@@ -1987,7 +1977,7 @@ function decoder_loglikelihood(
     z::AbstractVector{T},
     decoder::AbstractGaussianLinearDecoder,
     decoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the mean and standard deviation of the Gaussian distribution
     μ, σ = decoder_output.µ, decoder_output.σ
 
@@ -2007,7 +1997,7 @@ end # function
         z::AbstractMatrix{T},
         decoder::AbstractGaussianLinearDecoder,
         decoder_output::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
@@ -2046,7 +2036,7 @@ function decoder_loglikelihood(
     z::AbstractMatrix{T},
     decoder::AbstractGaussianLinearDecoder,
     decoder_output::NamedTuple;
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract the mean and standard deviation of the Gaussian distribution
     μ, σ = decoder_output.µ, decoder_output.σ
 
@@ -2069,7 +2059,7 @@ end # function
         z::AbstractVecOrMat{T},
         decoder::AbstractVariationalDecoder;
         kwargs::NamedTuple
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Computes the log-likelihood of the observed data `x` given the latent variable
 `z` under a distribution specified by the decoder.
@@ -2106,7 +2096,7 @@ function decoder_loglikelihood(
     z::AbstractVecOrMat{T},
     decoder::AbstractVariationalDecoder;
     kwargs::NamedTuple=NamedTuple()
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Run z through the decoder
     decoder_output = decoder(z)
 
