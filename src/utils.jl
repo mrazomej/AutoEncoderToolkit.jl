@@ -74,7 +74,15 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    `cycle_anneal(epoch, n_epoch, n_cycles; frac=0.5, βmax=1, βmin=0)`
+    cycle_anneal(
+        epoch::Int, 
+        n_epoch::Int, 
+        n_cycles::Int; 
+        frac::AbstractFloat=0.5f0, 
+        βmax::Number=1.0f0, 
+        βmin::Number=0.0f0, 
+        T::Type=Float32
+    )
 
 Function that computes the value of the annealing parameter β for a variational
 autoencoder as a function of the epoch number according to the cyclical
@@ -87,15 +95,15 @@ annealing strategy.
   epochs.
 
 ## Optional Arguments
-- `frac::AbstractFloat= 0.5`: Fraction of the cycle in which the annealing
+- `frac::AbstractFloat= 0.5f0`: Fraction of the cycle in which the annealing
   parameter β will increase from the minimum to the maximum value.
-- `βmax::AbstractFloat=1.0`: Maximum value that the annealing parameter can
-  reach.
-- `βmin::AbstractFloat=0.0`: Minimum value that the annealing parameter can
-  reach.
+- `βmax::Number=1.0f0`: Maximum value that the annealing parameter can reach.
+- `βmin::Number=0.0f0`: Minimum value that the annealing parameter can reach.
+- `T::Type=Float32`: The type of the output. The function will convert the
+  output to this type.
 
 # Returns
-- `β::Float32`: Value of the annealing parameter.
+- `β::T`: Value of the annealing parameter.
 
 # Citation
 > Fu, H. et al. Cyclical Annealing Schedule: A Simple Approach to Mitigating KL
@@ -106,8 +114,9 @@ function cycle_anneal(
     n_epoch::Int,
     n_cycles::Int;
     frac::AbstractFloat=0.5f0,
-    βmax::AbstractFloat=1.0f0,
-    βmin::AbstractFloat=0.0f0
+    βmax::Number=1.0f0,
+    βmin::Number=0.0f0,
+    T::Type=Float32
 )
     # Validate frac
     if !(0 ≤ frac ≤ 1)
@@ -119,9 +128,9 @@ function cycle_anneal(
 
     # Compute and return the value of β
     if τ ≤ frac
-        return convert(Float32, (βmax - βmin) * τ / frac + βmin)
+        return convert(T, (βmax - βmin) * τ / frac + βmin)
     else
-        return convert(Float32, βmax)
+        return convert(T, βmax)
     end # if
 end # function
 
@@ -383,15 +392,19 @@ end # function
 ## =============================================================================
 
 @doc raw"""
-    centroids_kmeans(x::AbstractMatrix{<:AbstractFloat}, n_centroids::Int; assign::Bool=false)
+    centroids_kmeans(
+        x::AbstractMatrix{<:Number}, 
+        n_centroids::Int; 
+        assign::Bool=false
+    )
 
 Perform k-means clustering on the input and return the centers. This function
 can be used to down-sample the number of points used when computing the metric
 tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractMatrix{<:AbstractFloat}`: The input data. Rows represent
-  individual samples.
+- `x::AbstractMatrix{<:Number}`: The input data. Rows represent individual
+  samples.
 - `n_centroids::Int`: The number of centroids to compute.
 
 # Optional Keyword Arguments
@@ -430,7 +443,10 @@ end # function
 
 @doc raw"""
     centroids_kmeans(
-        x::AbstractArray{<:AbstractFloat}, n_centroids::Int; reshape_centroids::Bool=true, assign::Bool=false
+        x::AbstractArray{<:Number}, 
+        n_centroids::Int; 
+        reshape_centroids::Bool=true, 
+        assign::Bool=false
     )
 
 Perform k-means clustering on the input and return the centers. This function
@@ -446,9 +462,8 @@ By default, the output centroids are reshaped back to the original input shape.
 This is controlled by the `reshape_centroids` argument.
 
 # Arguments
-- `x::AbstractArray{<:AbstractFloat}`: The input data. It can be a
-  multi-dimensional array where the last dimension represents individual
-  samples.
+- `x::AbstractArray{<:Number}`: The input data. It can be a multi-dimensional
+  array where the last dimension represents individual samples.
 - `n_centroids::Int`: The number of centroids to compute.
 
 # Optional Keyword Arguments
@@ -630,7 +645,7 @@ end # function
 # =============================================================================
 
 """
-    slogdet(A::AbstractMatrix{T}; check::Bool=false) where {T<:AbstractFloat}
+    slogdet(A::AbstractMatrix{T}; check::Bool=false) where {T<:Number}
 
 Compute the log determinant of a positive-definite matrix `A`.
 
@@ -663,7 +678,7 @@ println(slogdet(A))
 """
 function slogdet(
     A::AbstractMatrix{T}; check::Bool=false
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Compute the Cholesky decomposition of A. 
     chol = LinearAlgebra.cholesky(A; check=check)
     # compute the log determinant of A as the sum of the log of the diagonal
@@ -674,7 +689,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 """
-    slogdet(A::AbstractArray{T,3}; check::Bool=false) where {T<:AbstractFloat}
+    slogdet(A::AbstractArray{T,3}; check::Bool=false) where {T<:Number}
 
 Compute the log determinant of each 2D slice along the third dimension of a 3D
 array `A`, where each 2D slice is a positive-definite matrix.
@@ -715,7 +730,7 @@ println(slogdet(A))
 """
 function slogdet(
     A::AbstractArray{T,3}; check::Bool=false
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Compute the Cholesky decomposition of each slice of A. 
     chol = [
         begin
@@ -737,14 +752,13 @@ end # function
 ## =============================================================================
 
 @doc raw"""
-    sample_MvNormalCanon(Σ⁻¹::AbstractMatrix{T}) where {T<:AbstractFloat}
+    sample_MvNormalCanon(Σ⁻¹::AbstractMatrix{T}) where {T<:Number}
 
 Draw a random sample from a multivariate normal distribution in canonical form.
 
 # Arguments
 - `Σ⁻¹::AbstractMatrix{T}`: The precision matrix (inverse of the covariance
-  matrix) of the multivariate normal distribution. `T` is a subtype of
-  `AbstractFloat`.
+  matrix) of the multivariate normal distribution.
 
 # Returns
 - A random sample drawn from the multivariate normal distribution specified by
@@ -752,7 +766,7 @@ Draw a random sample from a multivariate normal distribution in canonical form.
 """
 function sample_MvNormalCanon(
     Σ⁻¹::AbstractMatrix{T}
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Invert the precision matrix
     Σ = LinearAlgebra.inv(Σ⁻¹ |> Flux.cpu)
 
@@ -769,14 +783,14 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    sample_MvNormalCanon(Σ⁻¹::AbstractArray{T,3}) where {T<:AbstractFloat}
+    sample_MvNormalCanon(Σ⁻¹::AbstractArray{T,3}) where {T<:Number}
 
 Draw a random sample from a multivariate normal distribution in canonical form.
 
 # Arguments
 - `Σ⁻¹::AbstractArray{T,3}`: The precision matrix (inverse of the covariance
   matrix) of the multivariate normal distribution. Each slice of the 3D tensor
-  corresponds to one precision matrix. `T` is a subtype of `AbstractFloat`.
+  corresponds to one precision matrix.
 
 # Returns
 - A random sample drawn from the multivariate normal distributions specified by
@@ -784,7 +798,7 @@ Draw a random sample from a multivariate normal distribution in canonical form.
 """
 function sample_MvNormalCanon(
     Σ⁻¹::AbstractArray{T,3}
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Extract dimensions
     dim = size(Σ⁻¹, 1)
     # Extract number of samples
