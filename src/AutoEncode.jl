@@ -64,6 +64,8 @@ include("encoders.jl")
 # Import Decoder types
 include("decoders.jl")
 
+# Import custom layers
+include("layers.jl")
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include Utils module
