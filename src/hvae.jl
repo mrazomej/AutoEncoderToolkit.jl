@@ -12,8 +12,7 @@ using ..AutoEncode: AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractGaussianEncoder,
     AbstractGaussianLogEncoder,
     AbstractVariationalDecoder, AbstractGaussianDecoder,
-    AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder,
-    Float32Array
+    AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder
 
 # Import Concrete Encoder Types
 using ..AutoEncode: JointLogEncoder

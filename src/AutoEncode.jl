@@ -105,12 +105,12 @@ using .VAEs: VAE
 # Add InfoMaxVAEs module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-module InfoMaxVAEs
-include("infomaxvae.jl")
-end # submodule
+# module InfoMaxVAEs
+# include("infomaxvae.jl")
+# end # submodule
 
-# Export AE structure
-using .InfoMaxVAEs: InfoMaxVAE
+# # Export AE structure
+# using .InfoMaxVAEs: InfoMaxVAE
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include module to fit a Radial Basis Function (RBF) network

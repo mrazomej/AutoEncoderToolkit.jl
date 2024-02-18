@@ -12,10 +12,10 @@ using ..AutoEncode: AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractGaussianEncoder,
     AbstractGaussianLogEncoder,
     AbstractVariationalDecoder, AbstractGaussianDecoder,
-    AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder,
+    AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder
 
-    # Import Concrete Encoder Types
-    using..AutoEncode:JointLogEncoder
+# Import Concrete Encoder Types
+using ..AutoEncode: JointLogEncoder
 
 # Import Concrete Decoder Types
 using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
@@ -464,7 +464,7 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 """
 function loss(
     vae::VAE,
-    x_in::AbstractArray{T};
+    x_in::AbstractArray{T},
     x_out::AbstractArray{T};
     β::T=1.0f0,
     reconstruction_loglikelihood::Function=decoder_loglikelihood,

@@ -909,7 +909,7 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
 function encoder_kl(
     encoder::AbstractGaussianLogEncoder,
     encoder_output::NamedTuple
-) where {T<:Number}
+)
     # Unpack needed ouput
     encoder_μ = encoder_output.μ
     encoder_logσ = encoder_output.logσ
