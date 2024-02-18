@@ -492,8 +492,8 @@ Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
 function (encoder::JointLogEncoder)(
-    x::AbstractArray{T}
-) where {T<:Number}
+    x::AbstractArray{<:Number}
+)
     # Run input to encoder network
     h = encoder.encoder(x)
     # Map from last encoder layer to latent space mean
@@ -622,13 +622,13 @@ function JointEncoder(
 end # function
 
 @doc raw"""
-        (encoder::JointEncoder)(x::AbstractArray{T}) where {T<:Number}
+        (encoder::JointEncoder)(x::AbstractArray{<:Number})
 
 Forward propagate the input `x` through the `JointEncoder` to obtain the mean
 (`µ`) and standard deviation (`σ`) of the latent space.
 
 # Arguments
-- `x::AbstractArray{T}`: Input data to be encoded.
+- `x::AbstractArray{<:Number}`: Input data to be encoded.
 
 # Returns
 - A NamedTuple `(µ=µ, σ=σ,)` where:
@@ -653,8 +653,8 @@ Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
 function (encoder::JointEncoder)(
-    x::AbstractArray{T}
-) where {T<:Number}
+    x::AbstractArray{<:Number}
+)
     # Run input to encoder network
     h = encoder.encoder(x)
     # Map from last encoder layer to latent space mean
@@ -675,14 +675,14 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    spherical_logprior(z::AbstractVector{T}, σ::Real=1.0f0) where {T<:Number}
+    spherical_logprior(z::AbstractVector{<:Number}, σ::Real=1.0f0)
 
 Computes the log-prior of the latent variable `z` under a spherical Gaussian
 distribution with zero mean and standard deviation `σ`.
 
 # Arguments
-- `z::AbstractVector{T}`: The latent variable for which the log-prior is to be
-  computed.
+- `z::AbstractVector{<:Number}`: The latent variable for which the log-prior is
+  to be computed.
 - `σ::T=1.0f0`: The standard deviation of the spherical Gaussian distribution.
   Defaults to `1.0f0`.
 
@@ -699,11 +699,12 @@ Ensure the dimension of `z` matches the expected dimensionality of the latent
 space.
 """
 function spherical_logprior(
-    z::AbstractVector{T},
+    z::AbstractVector{<:Number},
     σ::Real=1.0f0,
-) where {T<:AbstractFloat}
+)
     # Convert to type T
-    σ = convert(T, σ)
+    σ = convert(eltype(z), σ)
+
     # Compute log-prior
     log_prior = -0.5f0 * sum((z / σ) .^ 2) -
                 0.5f0 * length(z) * (2.0f0 * log(σ) + log(2.0f0π))
@@ -714,16 +715,16 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    spherical_logprior(z::AbstractMatrix{T}, σ::Real=1.0f0) where {T<:Number}
+    spherical_logprior(z::AbstractMatrix{<:Number}, σ::Real=1.0f0)
 
 Computes the log-prior of the latent variable `z` under a spherical Gaussian
 distribution with zero mean and standard deviation `σ`.
 
 # Arguments
-- `z::AbstractMatrix{T}`: The latent variable for which the log-prior is to be
-  computed. Each column of `z` represents a different latent variable.
-- `σ::Real=1.0f0`: The standard deviation of the spherical Gaussian distribution.
-  Defaults to `1.0f0`.
+- `z::AbstractMatrix{<:Number}`: The latent variable for which the log-prior is
+  to be computed. Each column of `z` represents a different latent variable.
+- `σ::Real=1.0f0`: The standard deviation of the spherical Gaussian
+  distribution. Defaults to `1.0f0`.
 
 # Returns
 - `log_prior::T`: The computed log-prior(s) of the latent variable `z`.
@@ -738,11 +739,11 @@ Ensure the dimension of `z` matches the expected dimensionality of the latent
 space.
 """
 function spherical_logprior(
-    z::AbstractMatrix{T},
+    z::AbstractMatrix{<:Number},
     σ::Real=1.0f0,
-) where {T<:Number}
+)
     # Convert to type T
-    σ = convert(T, σ)
+    σ = convert(eltype(z), σ)
 
     # Compute log-prior
     log_prior = [
@@ -759,18 +760,18 @@ end # function
 
 @doc raw"""
     encoder_logposterior(
-        z::AbstractVector{T},
+        z::AbstractVector{<:Number},
         encoder::AbstractGaussianLogEncoder,
         encoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-posterior of the latent variable `z` given the encoder output
 under a Gaussian distribution with mean and standard deviation given by the
 encoder.
 
 # Arguments
-- `z::AbstractVector{T}`: The latent variable for which the log-posterior is to
-  be computed.
+- `z::AbstractVector{<:Number}`: The latent variable for which the log-posterior
+  is to be computed.
 - `encoder::AbstractGaussianLogEncoder`: The encoder of the VAE, which is not
   used in the computation of the log-posterior. This argument is only used to
   know which method to call.
@@ -794,10 +795,10 @@ Ensure the dimensions of `z` match the expected input dimensionality of the
 `encoder`.
 """
 function encoder_logposterior(
-    z::AbstractVector{T},
+    z::AbstractVector{<:Number},
     encoder::AbstractGaussianLogEncoder,
     encoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract mean and log standard deviation from encoder output
     µ, logσ = encoder_output.µ, encoder_output.logσ
     # Compute variance
@@ -813,18 +814,18 @@ end # function
 # ------------------------------------------------------------------------------
 @doc raw"""
     encoder_logposterior(
-        z::AbstractMatrix{T},
+        z::AbstractMatrix{<:Number},
         encoder::AbstractGaussianLogEncoder,
         encoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-posterior of the latent variable `z` given the encoder output
 under a Gaussian distribution with mean and standard deviation given by the
 encoder.
 
 # Arguments
-- `z::AbstractMatrix{T}`: The latent variable for which the log-posterior is to
-  be computed. Each column of `z` represents a different data point.
+- `z::AbstractMatrix{<:Number}`: The latent variable for which the log-posterior
+  is to be computed. Each column of `z` represents a different data point.
 - `encoder::AbstractGaussianLogEncoder`: The encoder of the VAE, which is not
   used in the computation of the log-posterior. This argument is only used to
   know which method to call.
@@ -832,9 +833,9 @@ encoder.
   mean and log standard deviation of the Gaussian distribution.
 
 # Returns
-- `logposterior::Vector{T}`: The computed log-posterior of the latent variable
-  `z` given the encoder output. Each element of the vector corresponds to a
-  different data point.
+- `logposterior::Vector{<:Number}`: The computed log-posterior of the latent
+  variable `z` given the encoder output. Each element of the vector corresponds
+  to a different data point.
 
 # Description
 The function computes the log-posterior of the latent variable `z` given the
@@ -849,10 +850,10 @@ Ensure the dimensions of `z` match the expected input dimensionality of the
 `encoder`.
 """
 function encoder_logposterior(
-    z::AbstractMatrix{T},
+    z::AbstractMatrix{<:Number},
     encoder::AbstractGaussianLogEncoder,
     encoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract mean and log standard deviation from encoder output
     µ, logσ = encoder_output.µ, encoder_output.logσ
     # Compute variance
@@ -874,10 +875,10 @@ end # function
 # =============================================================================
 
 @doc raw"""
-        encoder_kl(
-                encoder::AbstractGaussianLogEncoder,
-                encoder_output::NamedTuple
-        ) where {T<:Number}
+    encoder_kl(
+        encoder::AbstractGaussianLogEncoder,
+        encoder_output::NamedTuple
+    )
 
 Calculate the Kullback-Leibler (KL) divergence between the approximate posterior
 distribution and the prior distribution in a variational autoencoder with a
@@ -895,10 +896,10 @@ deviation `encoder_logσ` is computed against a standard Gaussian prior.
   deviation of the encoder's output.
 
 # Returns
-- `kl_div::Union{T, Vector{T}}`: The KL divergence for the entire batch of data
-  points. If `encoder_µ` is a vector, `kl_div` is a scalar. If `encoder_µ` is a
-  matrix, `kl_div` is a vector where each element corresponds to the KL
-  divergence for a batch of data points.
+- `kl_div::Union{Number, Vector{<:Number}}`: The KL divergence for the entire
+  batch of data points. If `encoder_µ` is a vector, `kl_div` is a scalar. If
+  `encoder_µ` is a matrix, `kl_div` is a vector where each element corresponds
+  to the KL divergence for a batch of data points.
 
 # Note
 - It is assumed that the mapping from data space to latent parameters

@@ -897,10 +897,12 @@ Zygote.@nograd unit_vector
 
 # ------------------------------------------------------------------------------
 
-"""
+@doc raw"""
     finite_difference_gradient(
-        f::Function, x::AbstractVector{T}; ε::T=sqrt(eps(T))
-    ) where {T<:AbstractFloat}
+        f::Function,
+        x::AbstractVector{<:Number};
+        ε::Number=(∛(eps(Float32)))
+    )where {T<:AbstractFloat}
 
 Compute the finite difference gradient of a function `f` at a point `x`.
 
@@ -936,14 +938,14 @@ finite_difference_gradient(f, x)  # Returns the vector [2.0, 4.0, 6.0]
 """
 function finite_difference_gradient(
     f::Function,
-    x::AbstractVector{T};
-    ε::T=(∛(eps(Float32)))
-) where {T<:AbstractFloat}
+    x::AbstractVector{<:Number};
+    ε::Number=(∛(eps(Float32)))
+)
     # Compute the finite difference gradient for each element of x
     grad = [
         (
-            f(x .+ ε * unit_vector(x, i, T)) -
-            f(x .- ε * unit_vector(x, i, T))
+            f(x .+ ε * unit_vector(x, i, eltype(x))) -
+            f(x .- ε * unit_vector(x, i, eltype(x)))
         ) / 2ε for i in eachindex(x)
     ]
     return grad |> Flux.gpu
@@ -951,10 +953,12 @@ end # function
 
 # ------------------------------------------------------------------------------
 
-"""
+@doc raw"""
     finite_difference_gradient(
-        f::Function, x::AbstractMatrix{T}; ε::T=sqrt(eps(T))
-    ) where {T<:AbstractFloat}
+        f::Function,
+        x::AbstractMatrix{<:Number};
+        ε::Number=(∛(eps(Float32)))
+    )
 
 Compute the finite difference gradient of a function `f` at multiple points
 represented by the columns of `x`.
@@ -994,9 +998,9 @@ finite_difference_gradient(f, x)
 """
 function finite_difference_gradient(
     f::Function,
-    x::AbstractMatrix{T};
-    ε::T=(∛(eps(Float32)))
-) where {T<:AbstractFloat}
+    x::AbstractMatrix{<:Number};
+    ε::Number=(∛(eps(Float32)))
+)
     # Compute the finite difference gradient for each element of x. Note: We sue
     # the permutedims to return the output in the same shape as the input
     grad = permutedims(
@@ -1004,8 +1008,8 @@ function finite_difference_gradient(
             hcat,
             [
                 (
-                    f(x .+ ε * unit_vector(x, i, T)) -
-                    f(x .- ε * unit_vector(x, i, T))
+                    f(x .+ ε * unit_vector(x, i, eltype(x))) -
+                    f(x .- ε * unit_vector(x, i, eltype(x)))
                 ) / 2ε for i in 1:size(x, 1)
             ]
         ),

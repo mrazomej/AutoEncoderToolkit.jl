@@ -1562,23 +1562,23 @@ end # function
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractVector{T},
+        x::AbstractArray{<:Number},
+        z::AbstractVector{<:Number},
         decoder::BernoulliDecoder,
         decoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Bernoulli distribution with probability given by the decoder.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. However, the
-  last dimension must be of size 1.
-- `z::AbstractVector{T}`: The corresponding latent space representation used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension.
+  However, the last dimension must be of size 1.
+- `z::AbstractVector{<:Number}`: The corresponding latent space representation
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::BernoulliDecoder`: The decoder of the VAE, which is used to compute
   the probability of the Bernoulli distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
@@ -1599,11 +1599,11 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractVector{T},
+    x::AbstractArray{<:Number},
+    z::AbstractVector{<:Number},
     decoder::BernoulliDecoder,
     decoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract the probability of the Bernoulli distribution from the decoder
     p = decoder_output.p
 
@@ -1617,31 +1617,31 @@ end
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractMatrix{T},
+        x::AbstractArray{<:Number},
+        z::AbstractMatrix{<:Number},
         decoder::BernoulliDecoder,
         decoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Bernoulli distribution with probability given by the decoder.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. The last
-  dimension is assumed to be the number of samples.
-- `z::AbstractMatrix{T}`: The corresponding latent space representations used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension. The
+  last dimension is assumed to be the number of samples.
+- `z::AbstractMatrix{<:Number}`: The corresponding latent space representations
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::BernoulliDecoder`: The decoder of the VAE, which is used to compute
   the probability of the Bernoulli distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   probability of the Bernoulli distribution.
 
 # Returns
-- `loglikelihood::Vector{T}`: The computed log-likelihoods of the observed data
-  `x` given the decoder output.
+- `loglikelihood::Vector{<:Number}`: The computed log-likelihoods of the
+  observed data `x` given the decoder output.
 
 # Description
 The function computes the log-likelihood of the observed data `x` given the
@@ -1654,11 +1654,11 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractMatrix{T},
+    x::AbstractArray{<:Number},
+    z::AbstractMatrix{<:Number},
     decoder::BernoulliDecoder,
     decoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract the probability of the Bernoulli distribution from the decoder
     p = decoder_output.p
 
@@ -1679,25 +1679,25 @@ end
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractVector{T},
+        x::AbstractArray{<:Number},
+        z::AbstractVector{<:Number},
         decoder::SimpleDecoder,
         decoder_output::NamedTuple;
-        σ::T=1.0f0,
-    ) where {T<:Number}
+        σ::Number=1.0f0,
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean given by the decoder and a specified
 standard deviation.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. However, the
-  last dimension must be of size 1.
-- `z::AbstractVector{T}`: The corresponding latent space representation used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension.
+  However, the last dimension must be of size 1.
+- `z::AbstractVector{<:Number}`: The corresponding latent space representation
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::SimpleDecoder`: The decoder of the VAE, which is used to compute the
   mean of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
@@ -1708,8 +1708,8 @@ standard deviation.
   `1.0f0`.
 
 # Returns
-- `loglikelihood::T`: The computed log-likelihood of the observed data `x`
-  given the decoder output.
+- `loglikelihood::T`: The computed log-likelihood of the observed data `x` given
+  the decoder output.
 
 # Description
 The function computes the log-likelihood of the observed data `x` given the
@@ -1723,12 +1723,12 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractVector{T},
+    x::AbstractArray{<:Number},
+    z::AbstractVector{<:Number},
     decoder::SimpleDecoder,
     decoder_output::NamedTuple;
-    σ::T=1.0f0,
-) where {T<:Number}
+    σ::Number=1.0f0,
+)
     # Extract the mean of the Gaussian distribution from the decoder output
     μ = decoder_output.µ
 
@@ -1740,25 +1740,25 @@ end # function
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractMatrix{T},
+        x::AbstractArray{<:Number},
+        z::AbstractMatrix{<:Number},
         decoder::SimpleDecoder,
         decoder_output::NamedTuple;
-        σ::T=1.0f0,
-    ) where {T<:Number}
+        σ::Number=1.0f0,
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean given by the decoder and a specified
 standard deviation.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. The last
-  dimension is assumed to be the number of samples.
-- `z::AbstractMatrix{T}`: The corresponding latent space representations used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension. The
+  last dimension is assumed to be the number of samples.
+- `z::AbstractMatrix{<:Number}`: The corresponding latent space representations
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::SimpleDecoder`: The decoder of the VAE, which is used to compute the
   mean of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
@@ -1769,8 +1769,8 @@ standard deviation.
   `1.0f0`.
 
 # Returns
-- `loglikelihood::Vector{T}`: The computed log-likelihoods of the observed data
-  `x` given the decoder output.
+- `loglikelihood::Vector{<:Number}`: The computed log-likelihoods of the
+  observed data `x` given the decoder output.
 
 # Description
 The function computes the log-likelihood of the observed data `x` given the
@@ -1784,12 +1784,12 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractMatrix{T},
+    x::AbstractArray{<:Number},
+    z::AbstractMatrix{<:Number},
     decoder::SimpleDecoder,
     decoder_output::NamedTuple;
-    σ::T=1.0f0,
-) where {T<:Number}
+    σ::Number=1.0f0,
+)
     # Extract the mean of the Gaussian distribution from the decoder output
     μ = decoder_output.µ
 
@@ -1807,32 +1807,32 @@ end # function
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractVector{T},
+        x::AbstractArray{<:Number},
+        z::AbstractVector{<:Number},
         decoder::AbstractGaussianLogDecoder,
         decoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
 decoder.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. However, the
-  last dimension must be of size 1.
-- `z::AbstractVector{T}`: The corresponding latent space representation used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension.
+  However, the last dimension must be of size 1.
+- `z::AbstractVector{<:Number}`: The corresponding latent space representation
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::AbstractGaussianLogDecoder`: The decoder of the VAE, which is used
   to compute the mean and log standard deviation of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   mean and log standard deviation of the Gaussian distribution.
 
 # Returns
-- `loglikelihood::T`: The computed log-likelihood of the observed data `x`
-  given the decoder output.
+- `loglikelihood::T`: The computed log-likelihood of the observed data `x` given
+  the decoder output.
 
 # Description
 The function computes the log-likelihood of the observed data `x` given the
@@ -1847,11 +1847,11 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractVector{T},
+    x::AbstractArray{<:Number},
+    z::AbstractVector{<:Number},
     decoder::AbstractGaussianLogDecoder,
     decoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract the mean and log standard deviation of the Gaussian distribution
     μ, logσ = decoder_output.µ, decoder_output.logσ
 
@@ -1868,31 +1868,32 @@ end # function
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractMatrix{T},
+        x::AbstractArray{<:Number},
+        z::AbstractMatrix{<:Number},
         decoder::AbstractGaussianLogDecoder,
         decoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
 decoder.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. The last
-  dimension is assumed to be the number of samples.
-- `z::AbstractMatrix{T}`: The corresponding latent space representations used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension. The
+  last dimension is assumed to be the number of samples.
+- `z::AbstractMatrix{<:Number}`: The corresponding latent space representations
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::AbstractGaussianLogDecoder`: The decoder of the VAE, which is used
   to compute the mean and log standard deviation of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   mean and log standard deviation of the Gaussian distribution.
 
 # Returns
-- `loglikelihood::Vector{T}`: The computed log-likelihoods of the observed data.
+- `loglikelihood::Vector{<:Number}`: The computed log-likelihoods of the
+  observed data.
 
 # Description
 The function computes the log-likelihood of the observed data `x` given the
@@ -1907,11 +1908,11 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractMatrix{T},
+    x::AbstractArray{<:Number},
+    z::AbstractMatrix{<:Number},
     decoder::AbstractGaussianLogDecoder,
     decoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract the mean and log standard deviation of the Gaussian distribution
     μ, logσ = decoder_output.µ, decoder_output.logσ
 
@@ -1934,24 +1935,24 @@ end # function
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractVector{T},
+        x::AbstractArray{<:Number},
+        z::AbstractVector{<:Number},
         decoder::AbstractGaussianLinearDecoder,
         decoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
 decoder.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. However, the
-  last dimension must be of size 1.
-- `z::AbstractVector{T}`: The corresponding latent space representation used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension.
+  However, the last dimension must be of size 1.
+- `z::AbstractVector{<:Number}`: The corresponding latent space representation
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::AbstractGaussianLinearDecoder`: The decoder of the VAE, which is
   used to compute the mean and standard deviation of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
@@ -1973,11 +1974,11 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractVector{T},
+    x::AbstractArray{<:Number},
+    z::AbstractVector{<:Number},
     decoder::AbstractGaussianLinearDecoder,
     decoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract the mean and standard deviation of the Gaussian distribution
     μ, σ = decoder_output.µ, decoder_output.σ
 
@@ -1993,32 +1994,32 @@ end # function
 
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractMatrix{T},
+        x::AbstractArray{<:Number},
+        z::AbstractMatrix{<:Number},
         decoder::AbstractGaussianLinearDecoder,
         decoder_output::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-likelihood of the observed data `x` given the decoder output
 under a Gaussian distribution with mean and standard deviation given by the
 decoder.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. The last
-  dimension is assumed to be the number of samples.
-- `z::AbstractMatrix{T}`: The corresponding latent space representations used to
-  generate the decoder output. This argument is not used in the computation of
-  the log-likelihood since the decoder output is already provided. This is only
-  used to know which method to call.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension. The
+  last dimension is assumed to be the number of samples.
+- `z::AbstractMatrix{<:Number}`: The corresponding latent space representations
+  used to generate the decoder output. This argument is not used in the
+  computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
 - `decoder::AbstractGaussianLinearDecoder`: The decoder of the VAE, which is
   used to compute the mean and standard deviation of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   mean and standard deviation of the Gaussian distribution.
 
 # Returns
-- `loglikelihood::Vector{T}`: The computed log-likelihoods of the observed data
-  `x` given the decoder output.
+- `loglikelihood::Vector{<:Number}`: The computed log-likelihoods of the
+  observed data `x` given the decoder output.
 
 # Description
 The function computes the log-likelihood of the observed data `x` given the
@@ -2032,11 +2033,11 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractMatrix{T},
+    x::AbstractArray{<:Number},
+    z::AbstractMatrix{<:Number},
     decoder::AbstractGaussianLinearDecoder,
     decoder_output::NamedTuple;
-) where {T<:Number}
+)
     # Extract the mean and standard deviation of the Gaussian distribution
     μ, σ = decoder_output.µ, decoder_output.σ
 
@@ -2055,21 +2056,21 @@ end # function
 # ------------------------------------------------------------------------------
 @doc raw"""
     decoder_loglikelihood(
-        x::AbstractArray{T},
-        z::AbstractVecOrMat{T},
+        x::AbstractArray{<:Number},
+        z::AbstractVecOrMat{<:Number},
         decoder::AbstractVariationalDecoder;
         kwargs::NamedTuple
-    ) where {T<:Number}
+    )
 
 Computes the log-likelihood of the observed data `x` given the latent variable
 `z` under a distribution specified by the decoder.
 
 # Arguments
-- `x::AbstractArray{T}`: The observed data for which the log-likelihood is to be
-  computed. The input data `x` can be an array of any dimension. The last
-  dimension is assumed to be the number of samples.
-- `z::AbstractVecOrMat{T}`: The latent variable(s) used to generate the decoder
-  output.
+- `x::AbstractArray{<:Number}`: The observed data for which the log-likelihood
+  is to be computed. The input data `x` can be an array of any dimension. The
+  last dimension is assumed to be the number of samples.
+- `z::AbstractVecOrMat{<:Number}`: The latent variable(s) used to generate the
+  decoder output.
 - `decoder::AbstractVariationalDecoder`: The decoder of the VAE, which is used
   to compute the parameters of the specified distribution.
 
@@ -2092,11 +2093,11 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 `decoder`.
 """
 function decoder_loglikelihood(
-    x::AbstractArray{T},
-    z::AbstractVecOrMat{T},
+    x::AbstractArray{<:Number},
+    z::AbstractVecOrMat{<:Number},
     decoder::AbstractVariationalDecoder;
     kwargs::NamedTuple=NamedTuple()
-) where {T<:Number}
+)
     # Run z through the decoder
     decoder_output = decoder(z)
 
