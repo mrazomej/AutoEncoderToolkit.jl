@@ -4,7 +4,6 @@ import Flux
 # Import AutoDiff backends
 import Zygote
 import ForwardDiff
-import ReverseDiff
 
 # Import GPU libraries
 using CUDA
@@ -529,7 +528,7 @@ identity matrix. The result is a matrix of the same size as the latent space.
 function G_inv(
     z::AbstractVector,
     centroids_latent::AbstractMatrix,
-    M::AbstractArray{<:Number,3},
+    M::AbstractArray,
     T::Number,
     λ::Number,
 )
@@ -674,9 +673,9 @@ to the identity matrix. The result is a 3D array where each slice along the
 third dimension is a matrix of the same size as the latent space.
 """
 function G_inv(
-    z::AbstractMatrix{<:Number},
-    centroids_latent::AbstractMatrix{<:Number},
-    M::AbstractArray{<:Number,3},
+    z::AbstractMatrix,
+    centroids_latent::AbstractMatrix,
+    M::AbstractArray,
     T::Number,
     λ::Number,
 )
@@ -844,7 +843,7 @@ proportional to the identity matrix. The result is a matrix of the same size as
 the latent space.
 """
 function G_inv(
-    z::AbstractVecOrMat{<:Number},
+    z::AbstractVecOrMat,
     metric_param::Union{RHVAE,NamedTuple},
 )
     return G_inv(
@@ -1669,6 +1668,114 @@ function ∇hamiltonian_ForwardDiff(
     return grad
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    ∇hamiltonian_ForwardDiff(
+        x::AbstractArray{<:Number},
+        z::AbstractVecOrMat{<:Number},
+        ρ::AbstractVecOrMat{<:Number},
+        rhvae::RHVAE,
+        var::Symbol;
+        reconstruction_loglikelihood::Function=decoder_loglikelihood,
+        position_logprior::Function=spherical_logprior,
+        momentum_logprior::Function=riemannian_logprior,
+        G_inv::Function=G_inv,
+    )
+
+Compute the gradient of the Hamiltonian with respect to a given variable using
+the ForwardDiff.jl automatic differentiation library.
+
+This function takes a point `x` in the data space, a point `z` in the latent
+space, a momentum `ρ`, an instance of `RHVAE`, and a variable `var` (:z or :ρ),
+and computes the gradient of the Hamiltonian with respect to `var` using
+ForwardDiff.jl.
+
+The Hamiltonian is computed as follows:
+
+Hₓ(z, ρ) = Uₓ(z) + κ(ρ),
+
+where Uₓ(z) is the potential energy, and κ(ρ) is the kinetic energy. The
+potential energy is defined as follows:
+
+Uₓ(z) = -log p(x|z) - log p(z),
+
+where p(x|z) is the log-likelihood of the decoder and p(z) is the log-prior in
+latent space. The kinetic energy is defined as follows:
+
+κ(ρ) = 0.5 * log((2π)ᴰ det G(z)) + 0.5 * ρᵀ G⁻¹ ρ
+
+where D is the dimension of the latent space, and G(z) is the metric tensor at
+the point `z`.
+
+# Arguments
+- `x::AbstractArray{<:Number}`: The point in the data space. This does not
+  necessarily need to be a vector. Array inputs are supported. The last
+  dimension is assumed to have each of the data points.
+- `z::AbstractVecOrMat{<:Number}`: The point in the latent space. If matrix,
+  each column represents a point in the latent space.
+- `ρ::AbstractVecOrMat{<:Number}`: The momentum. If matrix, each column
+  represents a momentum vector.
+- `rhvae::RHVAE`: An instance of the RHVAE model.
+- `var::Symbol`: The variable with respect to which the gradient is computed.
+  Must be :z or :ρ.
+
+# Optional Keyword Arguments
+- `reconstruction_loglikelihood::Function`: The function to compute the
+  log-likelihood of the decoder reconstruction. Default is
+  `decoder_loglikelihood`. This function must take as input the decoder, the
+  point `x` in the data space, and the `decoder_output`.
+- `position_logprior::Function`: The function to compute the log-prior of the
+  latent space position. Default is `spherical_logprior`. This function must
+  take as input the point `z` in the latent space.
+- `momentum_logprior::Function`: The function to compute the log-prior of the
+  momentum. Default is `riemannian_logprior`. This function must take as input
+  the momentum `ρ` and the inverse of the Riemannian metric tensor `G⁻¹`.
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor. Default is `G_inv`. This function must take as input the point
+  `z` in the latent space and the `rhvae` instance.
+
+# Returns
+A matrix representing the gradient of the Hamiltonian at the point `(z, ρ)` with
+respect to variable `var`.
+
+# Note
+`ForwardDiff.jl` is not composable with `Zygote.jl.` Thus, for backpropagation
+using this function one should use `ReverseDiff.jl.`
+"""
+function ∇hamiltonian_ForwardDiff(
+    x::AbstractArray{<:Number},
+    z::AbstractVecOrMat{<:Number},
+    ρ::AbstractVecOrMat{<:Number},
+    rhvae::RHVAE,
+    var::Symbol;
+    reconstruction_loglikelihood::Function=decoder_loglikelihood,
+    position_logprior::Function=spherical_logprior,
+    momentum_logprior::Function=riemannian_logprior,
+    G_inv::Function=G_inv,
+)
+    # Check that var is a valid variable
+    if var ∉ (:z, :ρ)
+        error("var must be :z or :ρ")
+    end # if
+
+    # Compute inverse of the metric tensor
+    G⁻¹ = G_inv(z, rhvae)
+
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
+    # Compute output of the decoder
+    decoder_output = rhvae.vae.decoder(z)
+
+    return ∇hamiltonian_ForwardDiff(
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output, var;
+        reconstruction_loglikelihood=reconstruction_loglikelihood,
+        position_logprior=position_logprior,
+        momentum_logprior=momentum_logprior,
+    )
+end # function
+
 # ==============================================================================
 # Generalized Leapfrog Integrator
 # ==============================================================================
@@ -1686,9 +1793,9 @@ end # function
         steps::Int=3,
         ∇H::Function=∇hamiltonian_finite,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
-                reconstruction_loglikelihood=decoder_loglikelihood,
-                position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior,
+            reconstruction_loglikelihood=decoder_loglikelihood,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
         ),
     )
 
@@ -1792,9 +1899,9 @@ end # function
         steps::Int=3,
         ∇H::Function=∇hamiltonian_finite,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
-                reconstruction_loglikelihood=decoder_loglikelihood,
-                position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior,
+            reconstruction_loglikelihood=decoder_loglikelihood,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
     )
@@ -3617,7 +3724,7 @@ Trains the RHVAE by:
 """
 function train!(
     rhvae::RHVAE,
-    x::AbstractArray{Float32},
+    x::AbstractArray{<:Number},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict(),
@@ -3685,7 +3792,7 @@ train!(rhvae, x, opt; verbose=true)
 """
 function train!(
     rhvae::RHVAE,
-    x::CUDA.CuArray{Float32},
+    x::CUDA.CuArray{<:Number},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict(),
