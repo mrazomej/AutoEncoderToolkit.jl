@@ -264,48 +264,6 @@ end # @testset "VAE Forward Pass"
     # Define VAE with any decoder
     vae = joint_log_encoder * joint_log_decoder
 
-    @testset "kl_encoder function" begin
-        # Test with vector input
-        @testset "vector input" begin
-            vae_outputs = vae(x_vector; latent=true)
-            result = VAEs.kl_encoder(vae.encoder, x_vector, vae_outputs)
-            @test isa(result, Float32)
-        end # vector input
-
-        # Test with matrix input
-        @testset "matrix input" begin
-            vae_outputs = vae(x_matrix; latent=true)
-            result = VAEs.kl_encoder(vae.encoder, x_matrix, vae_outputs)
-            @test isa(result, Float32)
-        end # matrix input
-    end # kl_encoder function
-
-    # Loop through decoders
-    for decoder in decoders
-        # Define VAE
-        vae = joint_log_encoder * decoder
-
-        @testset "reconstruction_decoder function" begin
-            # Test with vector input
-            @testset "vector input" begin
-                vae_outputs = vae(x_vector; latent=true)
-                result = VAEs.reconstruction_decoder(
-                    decoder, x_vector, vae_outputs
-                )
-                @test isa(result, Float32)
-            end # vector input
-
-            # Test with matrix input
-            @testset "matrix input" begin
-                vae_outputs = vae(x_matrix; latent=true)
-                result = VAEs.reconstruction_decoder(
-                    decoder, x_matrix, vae_outputs
-                )
-                @test isa(result, Float32)
-            end # matrix input
-        end # reconstruction_decoder function
-    end # for decoder in decoders
-
     # Loop through decoders
     for decoder in decoders
         # Define VAE

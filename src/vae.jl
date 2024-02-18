@@ -387,7 +387,9 @@ function loss(
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     log_likelihood = StatsBase.mean(
-        reconstruction_loglikelihood(vae.decoder, x, vae_output.decoder)
+        reconstruction_loglikelihood(
+            x, vae_output.z, vae.decoder, vae_output.decoder
+        )
     )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
@@ -478,7 +480,9 @@ function loss(
 
     # Compute ⟨log π(x|z)⟩ for a Gaussian decoder averaged over all samples
     log_likelihood = StatsBase.mean(
-        reconstruction_loglikelihood(vae.decoder, x_out, vae_output.decoder)
+        reconstruction_loglikelihood(
+            x_out, vae_output.z, vae.decoder, vae_output.decoder
+        )
     )
 
     # Compute Kullback-Leibler divergence between approximated decoder qᵩ(z|x)
