@@ -5,7 +5,7 @@ import CUDA
 import Flux
 
 # Import AutoDiff library
-import Zygote
+import ChainRulesCore
 
 # Import library to find nearest neighbors
 import NearestNeighbors
@@ -264,7 +264,7 @@ function vec_to_ltri(
     n = length(diag)
 
     # Define a function to calculate the index in the 'lower' array
-    lower_index = Zygote.ignore() do
+    lower_index = ChainRulesCore.ignore_derivatives() do
         (i, j) -> (i - 1) * (i - 2) ÷ 2 + j
     end # function
 
@@ -329,7 +329,7 @@ function vec_to_ltri(
 
     # Define a function to calculate the index in the 'lower' array for each
     # column
-    lower_index = Zygote.ignore() do
+    lower_index = ChainRulesCore.ignore_derivatives() do
         (col, i, j) -> (i - 1) * (i - 2) ÷ 2 + j + (col - 1) * (n * (n - 1) ÷ 2)
     end # function
 
@@ -824,8 +824,8 @@ function sample_MvNormalCanon(
     return Flux.batched_vec(chol, r) |> Flux.gpu
 end # function
 
-# Set Zygote to ignore the function when computing gradients
-Zygote.@nograd sample_MvNormalCanon
+# Set ChainRulesCore to ignore the function when computing gradients
+ChainRulesCore.@ignore_derivatives sample_MvNormalCanon
 
 ## =============================================================================
 # Define finite difference gradient function
@@ -853,9 +853,9 @@ element set to 1. All other elements are set to 0. The type of the elements in
 the vector is `T`, which defaults to `Float32`.
 
 # Note
-This function is marked with the `@nograd` macro from the Zygote package, which
-means that Zygote will ignore any call to this function when computing
-gradients.
+This function is marked with the `@ignore_derivatives` macro from the
+`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
+call to this function when computing gradients.
 """
 function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
     return [j == i ? one(T) : zero(T) for j in 1:length(x)] |> Flux.gpu
@@ -884,16 +884,16 @@ This function creates a unit vector of the same length as the number of rows in
 of the elements in the vector is `T`, which defaults to `Float32`.
 
 # Note
-This function is marked with the `@nograd` macro from the Zygote package, which
-means that Zygote will ignore any call to this function when computing
-gradients.
+This function is marked with the `@ignore_derivatives` macro from the
+`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
+call to this function when computing gradients.
 """
 function unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
     return [j == i ? one(T) : zero(T) for j in 1:size(x, 1)] |> Flux.gpu
 end # function
 
-# Set Zygote to ignore the function when computing gradients
-Zygote.@nograd unit_vector
+# Set Chainrulescore to ignore the function when computing gradients
+ChainRulesCore.@ignore_derivatives unit_vector
 
 # ------------------------------------------------------------------------------
 

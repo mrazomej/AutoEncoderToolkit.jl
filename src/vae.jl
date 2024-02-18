@@ -1,6 +1,10 @@
 # Import ML libraries
 import Flux
-import Zygote
+
+# Import ChainRulesCore
+import ChainRulesCore
+
+# Import GPU support
 import CUDA
 
 # Import basic math
@@ -92,7 +96,7 @@ function reparameterize(
     T::Type{<:Number}=Float32
 )
     # Sample random Gaussian number
-    r = Zygote.ignore() do
+    r = ChainRulesCore.ignore_derivatives() do
         randn(T, size(µ)...)
     end
     # Check if logσ is provided
@@ -164,7 +168,7 @@ function reparameterize(
     T::Type{<:Number}=Float32
 )
     # Sample random Gaussian number
-    r = Zygote.ignore() do
+    r = ChainRulesCore.ignore_derivatives() do
         CUDA.randn(T, size(µ)...)
     end
     # Check if logσ is provided

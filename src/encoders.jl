@@ -802,7 +802,7 @@ function encoder_logposterior(
     # Extract mean and log standard deviation from encoder output
     µ, logσ = encoder_output.µ, encoder_output.logσ
     # Compute variance
-    σ² = exp.(T(2) * logσ)
+    σ² = exp.(2logσ)
 
     # Compute variational log-posterior
     logposterior = -0.5f0 * sum((z - μ) .^ 2 ./ σ²) -
