@@ -249,15 +249,15 @@ regularization factor, and each column of `centroids` are the cᵢ.
 - `centroids_data::AbstractArray{<:Number}`: An array where the last dimension
   represents a data point xᵢ from which the centroids cᵢ are computed by passing
   them through the encoder.
-- `centroids_latent::AbstractMatrix{Float32}`: A matrix where each column
+- `centroids_latent::AbstractMatrix{<:Number}`: A matrix where each column
   represents a centroid cᵢ in the inverse metric computation.
-- `L::AbstractArray{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
+- `L::AbstractArray{<:Number, 3}`: A 3D array where each slice represents a L_ψᵢ
   matrix. L_ψᵢ can intuitively be seen as the triangular matrix in the Cholesky
   decomposition of G⁻¹(centroids_latentᵢ) up to a regularization factor.
-- `M::AbstractArray{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
+- `M::AbstractArray{<:Number, 3}`: A 3D array where each slice represents a L_ψᵢ
   L_ψᵢᵀ.
-- `T::Float32`: The temperature parameter in the inverse metric computation.  
-- `λ::Float32`: The regularization factor in the inverse metric computation.
+- `T::Number`: The temperature parameter in the inverse metric computation.  
+- `λ::Number`: The regularization factor in the inverse metric computation.
 """
 struct RHVAE{
     V<:VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}
@@ -265,15 +265,15 @@ struct RHVAE{
     vae::V
     metric_chain::MetricChain
     centroids_data::AbstractArray{<:Number}
-    centroids_latent::AbstractMatrix{Float32}
-    L::AbstractArray{Float32,3}
-    M::AbstractArray{Float32,3}
-    T::AbstractFloat
-    λ::AbstractFloat
+    centroids_latent::AbstractMatrix{<:Number}
+    L::AbstractArray{<:Number,3}
+    M::AbstractArray{<:Number,3}
+    T::Number
+    λ::Number
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor RHVAE
+Flux.@functor RHVAE (vae, metric_chain)
 
 # ------------------------------------------------------------------------------
 
@@ -281,10 +281,10 @@ Flux.@functor RHVAE
     RHVAE(
         vae::VAE, 
         metric_chain::MetricChain, 
-        centroids_data::AbstractMatrix, 
-        T::Int, 
-        λ::Float32
-    )
+        centroids_data::AbstractArray{N}, 
+        T::N, 
+        λ::N
+    ) where {N<:Number}
 
 Construct a Riemannian Hamiltonian Variational Autoencoder (RHVAE) from a
 standard VAE and a metric chain.
@@ -293,10 +293,12 @@ standard VAE and a metric chain.
 - `vae::VAE`: A standard Variational Autoencoder (VAE) model.
 - `metric_chain::MetricChain`: A chain of metrics to be used for the Riemannian
   Hamiltonian Monte Carlo (RHMC) sampler.
-- `centroids_data::AbstractMatrix`: Matrix of data centroids. Each column
-  represents a centroid.
-- `T::Int`: The number of leapfrog steps to be used in the RHMC sampler.
-- `λ::Float32`: The step size to be used in the RHMC sampler.
+- `centroids_data::AbstractArray{N}`: An array of data centroids. Each column
+  represents a centroid. `N` is a subtype of `Number`.
+- `T::N`: The temperature parameter for the inverse metric tensor. `N` is a
+  subtype of `Number`.
+- `λ::N`: The regularization parameter for the inverse metric tensor. `N` is a
+  subtype of `Number`.
 
 # Returns
 - A new `RHVAE` object.
@@ -307,7 +309,13 @@ their default values. The latent centroids are initialized to a zero matrix of
 the same size as `centroids_data`, and `M` is initialized to a 3D array of
 identity matrices, one for each centroid.
 """
-function RHVAE(vae, metric_chain, centroids_data, T, λ)
+function RHVAE(
+    vae::VAE,
+    metric_chain::MetricChain,
+    centroids_data::AbstractArray{N},
+    T::N,
+    λ::N
+) where {N<:Number}
     # Extract dimensionality of latent space
     ldim = size(vae.encoder.µ.weight, 1)
 
@@ -327,7 +335,7 @@ function RHVAE(vae, metric_chain, centroids_data, T, λ)
     L = reduce(
         (x, y) -> cat(x, y, dims=3),
         [
-            Matrix{Float32}(LinearAlgebra.I(ldim))
+            Matrix{N}(LinearAlgebra.I(ldim))
             for _ in 1:n_centroids
         ]
     )
@@ -360,11 +368,10 @@ through the RHVAE during training.
 
 # Returns
 - NamedTuple with the following fields:
-  - `centroids_latent::Matrix{Float32}`: A matrix where each column represents a
+  - `centroids_latent::Matrix{T}`: A matrix where each column represents a
     centroid cᵢ in the inverse metric computation.
-  - `L::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ
-    matrix.
-  - `M::Array{Float32, 3}`: A 3D array where each slice represents a L_ψᵢ L_ψᵢᵀ.
+  - `L::Array{T, 3}`: A 3D array where each slice represents a L_ψᵢ matrix.
+  - `M::Array{T, 3}`: A 3D array where each slice represents a L_ψᵢ L_ψᵢᵀ.
 """
 function update_metric(
     rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}
@@ -478,12 +485,12 @@ end # function
 
 @doc raw"""
     G_inv(
-        z::AbstractVector{Float32},
-        centroids_latent::AbstractMatrix{Float32},
-        M::AbstractArray{Float32,3},
-        T::Float32,
-        λ::Float32,
-    )
+        z::AbstractVector{N},
+        centroids_latent::AbstractMatrix{N},
+        M::AbstractArray{N,3},
+        T::N,
+        λ::N,
+    ) where {N<:Number}
 
 Compute the inverse of the metric tensor G for a given point in the latent
 space.
@@ -500,12 +507,11 @@ G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λI�
 where each column of `centroids_latent` are the cᵢ.
 
 # Arguments
-- `z::AbstractVector{Float32}`: The point in the latent space.
-- `centroids_latent::AbstractMatrix{Float32}`: The centroids in the latent
-  space.
-- `M::AbstractArray{Float32,3}`: The 3D array representing the metric tensor.
-- `T::Float32`: The temperature.
-- `λ::Float32`: The regularization factor.
+- `z::AbstractVector{N}`: The point in the latent space.
+- `centroids_latent::AbstractMatrix{N}`: The centroids in the latent space.
+- `M::AbstractArray{N,3}`: The 3D array representing the metric tensor.
+- `T::N`: The temperature.
+- `λ::N`: The regularization factor.
 
 # Returns
 A matrix representing the inverse of the metric tensor G at the point `z`.
@@ -522,7 +528,7 @@ function G_inv(
     M::AbstractArray{N,3},
     T::N,
     λ::N,
-) where {N<:AbstractFloat}
+) where {N<:Number}
     # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
     # - We use the reshape function to broadcast the operation over the third
     # dimension of M.
@@ -547,13 +553,13 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        G_inv(
-                z::CuArray{Float32,1},
-                centroids_latent::CuArray{Float32,2},
-                M::CuArray{Float32,3},
-                T::Float32,
-                λ::Float32,
-        )
+    G_inv(
+        z::CuArray{N,1},
+        centroids_latent::CuArray{N,2},
+        M::CuArray{N,3},
+        T::N,
+        λ::N,
+    ) where {N<:Number}
 
 Compute the inverse of the metric tensor G for a given point in the latent space
 using CUDA arrays.
@@ -570,11 +576,11 @@ G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λI�
 where each column of `centroids_latent` are the cᵢ.
 
 # Arguments
-- `z::CuArray{Float32,1}`: The point in the latent space.
+- `z::CuArray{N,1}`: The point in the latent space.
 - `centroids_latent::CuArray{Float32,2}`: The centroids in the latent space.
-- `M::CuArray{Float32,3}`: The 3D array representing the metric tensor.
-- `T::Float32`: The temperature.
-- `λ::Float32`: The regularization factor.
+- `M::CuArray{N,3}`: The 3D array representing the metric tensor.
+- `T::N`: The temperature.
+- `λ::N`: The regularization factor.
 
 # Returns
 A matrix representing the inverse of the metric tensor G at the point `z`.
@@ -589,11 +595,11 @@ This function is designed to work with CUDA arrays for GPU-accelerated
 computations.
 """
 function G_inv(
-    z::CuArray{Float32,1},
-    centroids_latent::CuArray{Float32,2},
-    M::CuArray{Float32,3},
-    T::Float32,
-    λ::Float32,
+    z::CuArray{N,1},
+    centroids_latent::CuArray{N,2},
+    M::CuArray{N,3},
+    T::N,
+    λ::N,
 )
     # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
     # - We use the reshape function to broadcast the operation over the third
@@ -621,12 +627,12 @@ end # function
 
 @doc raw"""
     G_inv(
-        z::AbstractMatrix,
-        centroids_latent::AbstractMatrix,
+        z::AbstractMatrix{N},
+        centroids_latent::AbstractMatrix{N},
         M::AbstractArray{N,3},
         T::N,
         λ::N,
-    ) where {N<:AbstractFloat}
+    ) where {N<:Number}
 
 Compute the inverse of the metric tensor G for each column in the matrix `z`.
 
@@ -645,9 +651,9 @@ All operations in this function are broadcasted over the appropriate dimensions
 to avoid the need for explicit loops.
 
 # Arguments
-- `z::AbstractMatrix`: The matrix where each column is a point in the latent
+- `z::AbstractMatrix{N}`: The matrix where each column is a point in the latent
   space.
-- `centroids_latent::AbstractMatrix`: The centroids in the latent space.
+- `centroids_latent::AbstractMatrix{N}`: The centroids in the latent space.
 - `M::AbstractArray{N,3}`: The 3D array representing the metric tensor.
 - `T::N`: The temperature.
 - `λ::N`: The regularization factor.
@@ -664,12 +670,12 @@ to the identity matrix. The result is a 3D array where each slice along the
 third dimension is a matrix of the same size as the latent space.
 """
 function G_inv(
-    z::AbstractMatrix,
-    centroids_latent::AbstractMatrix,
+    z::AbstractMatrix{N},
+    centroids_latent::AbstractMatrix{N},
     M::AbstractArray{N,3},
     T::N,
     λ::N,
-) where {N<:AbstractFloat}
+) where {N<:Number}
     # Find number of centroids
     n_centroid = size(centroids_latent, 2)
     # Find number of samples
@@ -710,12 +716,12 @@ end # function
 
 @doc raw"""
     G_inv(
-        z::CuMatrix,
-        centroids_latent::CuMatrix,
+        z::CuMatrix{N},
+        centroids_latent::CuMatrix{N},
         M::CuArray{N,3},
         T::N,
         λ::N,
-    ) where {N<:AbstractFloat}
+    ) where {N<:Number}
 
 Compute the inverse of the metric tensor G for each column in the matrix `z`.
 
@@ -734,9 +740,9 @@ All operations in this function are broadcasted over the appropriate dimensions
 to avoid the need for explicit loops.
 
 # Arguments
-- `z::CuMatrix`: The matrix where each column is a point in the latent
+- `z::CuMatrix{N}`: The matrix where each column is a point in the latent
   space.
-- `centroids_latent::CuMatrix`: The centroids in the latent space.
+- `centroids_latent::CuMatrix{N}`: The centroids in the latent space.
 - `M::CuArray{N,3}`: The 3D array representing the metric tensor.
 - `T::N`: The temperature.
 - `λ::N`: The regularization factor.
@@ -753,12 +759,12 @@ to the identity matrix. The result is a 3D array where each slice along the
 third dimension is a matrix of the same size as the latent space.
 """
 function G_inv(
-    z::CuMatrix,
-    centroids_latent::CuMatrix,
+    z::CuMatrix{N},
+    centroids_latent::CuMatrix{N},
     M::CuArray{N,3},
     T::N,
     λ::N,
-) where {N<:AbstractFloat}
+) where {N<:Number}
     # Find number of centroids
     n_centroid = size(centroids_latent, 2)
     # Find number of samples
@@ -799,7 +805,7 @@ end # function
 
 @doc raw"""
     G_inv( 
-        z::AbstractVecOrMat{Float32},
+        z::AbstractVecOrMat{<:Number},
         metric_param::Union{RHVAE,NamedTuple},
     )
 
@@ -817,7 +823,7 @@ where L_ψᵢ is computed by the `MetricChain`, T is the temperature, λ is a
 regularization factor, and each column of `centroids_latent` are the cᵢ.
 
 # Arguments
-- `z::AbstractVecOrMat{Float32}`: The point in the latent space. If a matrix,
+- `z::AbstractVecOrMat{<:Number}`: The point in the latent space. If a matrix,
   each column represents a point in the latent space.
 - `metric_param::Union{RHVAE,NamedTuple}`: Either an `RHVAE` instance or a named
   tuple containing the fields `centroids_latent`, `M`, `T`, and `λ`.
@@ -834,7 +840,7 @@ proportional to the identity matrix. The result is a matrix of the same size as
 the latent space.
 """
 function G_inv(
-    z::AbstractVecOrMat,
+    z::AbstractVecOrMat{<:Number},
     metric_param::Union{RHVAE,NamedTuple},
 )
     return G_inv(
@@ -860,7 +866,7 @@ end # function
         G⁻¹::AbstractMatrix{T},
         logdetG::T;
         σ::T=1.0f0,
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
 by the Riemannian metric.
@@ -889,7 +895,7 @@ function riemannian_logprior(
     G⁻¹::AbstractMatrix{T},
     logdetG::T;
     σ::T=1.0f0,
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹
 
@@ -906,7 +912,7 @@ end # function
         G⁻¹::AbstractArray{T,3},
         logdetG::AbstractVector{T};
         σ::T=1.0f0,
-    ) where {T<:AbstractFloat}
+    ) where {T<:Number}
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
 by the Riemannian metric.
@@ -939,7 +945,7 @@ function riemannian_logprior(
     G⁻¹::AbstractArray{T,3},
     logdetG::AbstractVector{T};
     σ::T=1.0f0,
-) where {T<:AbstractFloat}
+) where {T<:Number}
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹
 
@@ -966,7 +972,7 @@ end # function
         decoder_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Compute the Hamiltonian for a given point in the latent space and a given
 momentum.
@@ -1041,7 +1047,7 @@ function hamiltonian(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
-) where {T<:Float32}
+) where {T<:Number}
     # 1. Potential energy U(z|x) = -log p(x|z) - log p(z)
 
     # Compute log-likelihood
@@ -1074,7 +1080,7 @@ end # function
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
         G_inv::Function=G_inv,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Compute the Hamiltonian for a given point in the latent space and a given
 momentum.
@@ -1142,7 +1148,7 @@ function hamiltonian(
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
-) where {T<:Float32}
+) where {T<:Number}
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
@@ -1177,7 +1183,7 @@ end # function
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
         ε::T=∛(eps(Float32))
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
 naive finite difference method.
@@ -1257,7 +1263,7 @@ function ∇hamiltonian_finite(
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
     ε::T=(∛(eps(Float32)))
-) where {T<:Float32}
+) where {T<:Number}
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
         error("var must be :z or :ρ")
@@ -1301,7 +1307,7 @@ end # function
         momentum_logprior::Function=riemannian_logprior,
         G_inv::Function=G_inv,
         ε::T=∛(eps(Float32))
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
 naive finite difference method.
@@ -1379,7 +1385,7 @@ function ∇hamiltonian_finite(
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
     ε::T=(∛(eps(Float32)))
-) where {T<:Float32}
+) where {T<:Number}
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
         error("var must be :z or :ρ")
@@ -1424,7 +1430,7 @@ end # function
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
         ),
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform the first step of the generalized leapfrog integrator for Hamiltonian
 dynamics, defined as
@@ -1497,7 +1503,7 @@ function _leapfrog_first_step(
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
     ),
-) where {T<:Float32}
+) where {T<:Number}
     # Copy ρ to iterate over it
     ρ̃ = deepcopy(ρ)
 
@@ -1531,7 +1537,7 @@ end # function
                 momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform the first step of the generalized leapfrog integrator for Hamiltonian
 dynamics, defined as
@@ -1596,7 +1602,7 @@ function _leapfrog_first_step(
         momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
-) where {T<:Float32}
+) where {T<:Number}
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
@@ -1635,7 +1641,7 @@ end # function
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
         ),
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform the second step of the generalized leapfrog integrator for Hamiltonian
 dynamics, defined as
@@ -1708,7 +1714,7 @@ function _leapfrog_second_step(
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
     ),
-) where {T<:Float32}
+) where {T<:Number}
     # Compute Hamiltonian gradient for initial point not to repeat it at each
     # iteration 
     ∇Hₒ = ∇H(x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, :ρ; ∇H_kwargs...)
@@ -1750,7 +1756,7 @@ end # function
                 momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform the second step of the generalized leapfrog integrator for Hamiltonian
 dynamics, defined as
@@ -1817,7 +1823,7 @@ function _leapfrog_second_step(
         momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
-) where {T<:Float32}
+) where {T<:Number}
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
@@ -1855,7 +1861,7 @@ end # function
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
         ),
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform the third step of the generalized leapfrog integrator for Hamiltonian
 dynamics, defined as
@@ -1924,7 +1930,7 @@ function _leapfrog_third_step(
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
     ),
-) where {T<:Float32}
+) where {T<:Number}
     # Update momentum variable with half step. No fixed-point iterations are
     # needed.
     return ρ - (0.5f0 * ϵ) .* ∇H(
@@ -1949,7 +1955,7 @@ end # function
                 momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform the third step of the generalized leapfrog integrator for Hamiltonian
 dynamics, defined as
@@ -2013,7 +2019,7 @@ function _leapfrog_third_step(
         momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
-) where {T<:Float32}
+) where {T<:Number}
     # Compute inverse of the metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
@@ -2053,7 +2059,7 @@ end # function
                 momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform a full step of the generalized leapfrog integrator for Hamiltonian
 dynamics.
@@ -2131,7 +2137,7 @@ function general_leapfrog_step(
         momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
-) where {T<:Float32}
+) where {T<:Number}
     # Update momentum variable with half step. This step peforms fixed-point
     # iterations
     ρ̃ = _leapfrog_first_step(
@@ -2181,7 +2187,7 @@ end # function
                 momentum_logprior=riemannian_logprior,
                 G_inv=G_inv,
         ),
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Perform a full step of the generalized leapfrog integrator for Hamiltonian
 dynamics.
@@ -2243,7 +2249,7 @@ function general_leapfrog_step(
         momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
-) where {T<:Float32}
+) where {T<:Number}
     # Compute the riemannian metric tensor
     G⁻¹ = G_inv(z, rhvae)
 
@@ -2310,7 +2316,7 @@ end # function
                         G_inv=G_inv,
         ),
         tempering_schedule::Function=quadratic_tempering,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -2393,7 +2399,7 @@ function general_leapfrog_tempering_step(
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
-) where {T<:Float32}
+) where {T<:Number}
     # Sample γₒ ~ N(0, Gₒ⁻¹). 
     γₒ = sample_MvNormalCanon(Gₒ⁻¹)
 
@@ -2466,7 +2472,7 @@ end # function
         ),
         G_inv::Function=G_inv,
         tempering_schedule::Function=quadratic_tempering,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -2534,7 +2540,7 @@ function general_leapfrog_tempering_step(
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
-) where {T<:Float32}
+) where {T<:Number}
     # Compute metric param
     metric_param = update_metric(rhvae)
     # Compute inverse metric for initial point
@@ -2867,7 +2873,7 @@ end # function
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 This is an internal function used in `riemannian_hamiltonian_elbo` to compute
 the numerator of the unbiased estimator of the marginal likelihood. The function
@@ -2909,7 +2915,7 @@ function _log_p̄(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
-) where {T<:Float32}
+) where {T<:Number}
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ | zₖ)
 
     # Compute log p(x | zₖ)
@@ -2940,7 +2946,7 @@ end # function
         rhvae::RHVAE,
         rhvae_outputs::NamedTuple,
         βₒ::T
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 This is an internal function used in `riemannian_hamiltonian_elbo` to compute
 the second term of the unbiased estimator of the marginal likelihood. The
@@ -2970,7 +2976,7 @@ function _log_q̄(
     rhvae::RHVAE,
     rhvae_outputs::NamedTuple,
     βₒ::T
-) where {T<:Float32}
+) where {T<:Number}
     # log q̄ = log q(zₒ | x) + log p(ρₒ | zₒ) - d/2 log(βₒ)
 
     # Compute log q(zₒ | x).
@@ -3014,7 +3020,7 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
 lower bound (ELBO) for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -3074,7 +3080,7 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
-) where {T<:Float32}
+) where {T<:Number}
     # Forward Pass (run input through reconstruct function)
     rhvae_outputs = rhvae(
         x, metric_param;
@@ -3119,7 +3125,7 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
 lower bound (ELBO) for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -3176,7 +3182,7 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
-) where {T<:Float32}
+) where {T<:Number}
     # Compute metric_param
     metric_param = update_metric(rhvae)
     # Forward Pass (run input through reconstruct function)
@@ -3229,7 +3235,7 @@ end # function
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
         reg_strength::Float32=1.0f0
-    ) where {T<:Float32}
+    ) where {T<:Number}
 
 Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
@@ -3282,7 +3288,7 @@ function loss(
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Float32=1.0f0
-) where {T<:Float32}
+) where {T<:Number}
     # Update metric so that we can backpropagate through it
     metric_param = update_metric(rhvae)
 
