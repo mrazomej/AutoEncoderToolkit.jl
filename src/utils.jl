@@ -765,13 +765,20 @@ Draw a random sample from a multivariate normal distribution in canonical form.
   the input precision matrix.
 """
 function sample_MvNormalCanon(
-    Σ⁻¹::AbstractMatrix{T}
-) where {T<:Number}
+    Σ⁻¹::AbstractMatrix{<:Number}
+)
     # Invert the precision matrix
     Σ = LinearAlgebra.inv(Σ⁻¹ |> Flux.cpu)
 
     # Cholesky decomposition of the covariance matrix
     chol = LinearAlgebra.cholesky(Σ, check=false)
+
+    # Define sample type
+    if !(eltype(Σ⁻¹) <: AbstractFloat)
+        T = Float32
+    else
+        T = eltype(Σ⁻¹)
+    end # if
 
     # Sample from standard normal distribution
     r = randn(T, size(Σ⁻¹, 1))
@@ -797,8 +804,8 @@ Draw a random sample from a multivariate normal distribution in canonical form.
   the input precision matrices.
 """
 function sample_MvNormalCanon(
-    Σ⁻¹::AbstractArray{T,3}
-) where {T<:Number}
+    Σ⁻¹::AbstractArray{<:Number,3}
+)
     # Extract dimensions
     dim = size(Σ⁻¹, 1)
     # Extract number of samples
@@ -816,6 +823,13 @@ function sample_MvNormalCanon(
             end for slice in Σ
         ]
     )
+
+    # Define sample type
+    if !(eltype(Σ⁻¹) <: AbstractFloat)
+        T = Float32
+    else
+        T = eltype(Σ⁻¹)
+    end # if
 
     # Sample from standard normal distribution
     r = randn(T, dim, n_sample)
