@@ -46,11 +46,11 @@ helps in sampling from the latent space in variational autoencoders (or similar
 models) while keeping the gradient flow intact.
 
 # Arguments
-- `µ::AbstractVecOrMat{Float32}`: The mean of the latent space. If it is a
+- `µ::AbstractVecOrMat{<:Number}`: The mean of the latent space. If it is a
   vector, it represents the mean for a single data point. If it is a matrix,
   each column corresponds to the mean for a specific data point, and each row
   corresponds to a dimension of the latent space.
-- `σ::AbstractVecOrMat{Float32}`: The (log )standard deviation of the latent
+- `σ::AbstractVecOrMat{<:Number}`: The (log )standard deviation of the latent
   space. Like `µ`, if it's a vector, it represents the (log) standard deviation
   for a single data point. If a matrix, each column corresponds to the (log)
   standard deviation for a specific data point.
@@ -58,6 +58,7 @@ models) while keeping the gradient flow intact.
 # Optional Keyword Arguments
 - `log::Bool=true`: Boolean indicating whether the provided standard deviation
   is in log scale or not. If `true` (default), then `σ = exp(logσ)` is computed.
+- `T::Type{<:Number}=Float32`: The type of the output array.
 
 # Returns
 An array containing samples from the reparameterized latent space, obtained by
@@ -85,10 +86,11 @@ Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
-    µ::AbstractVecOrMat{T},
-    σ::AbstractVecOrMat{T};
-    log::Bool=true
-) where {T<:Number}
+    µ::AbstractVecOrMat{<:Number},
+    σ::AbstractVecOrMat{<:Number};
+    log::Bool=true,
+    T::Type{<:Number}=Float32
+)
     # Sample random Gaussian number
     r = Zygote.ignore() do
         randn(T, size(µ)...)
@@ -128,6 +130,7 @@ models) while keeping the gradient flow intact.
 # Optional Keyword Arguments
 - `log::Bool=true`: Boolean indicating whether the provided standard deviation
   is in log scale or not. If `true` (default), then `σ = exp(logσ)` is computed.
+- `T::Type{<:Number}=Float32`: The type of the output array.
 
 # Returns
 An array containing samples from the reparameterized latent space, obtained by
@@ -155,10 +158,11 @@ Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
-    µ::CUDA.CuVecOrMat{T},
-    σ::CUDA.CuVecOrMat{T};
-    log::Bool=true
-) where {T<:Number}
+    µ::CUDA.CuVecOrMat{<:Number},
+    σ::CUDA.CuVecOrMat{<:Number};
+    log::Bool=true,
+    T::Type{<:Number}=Float32
+)
     # Sample random Gaussian number
     r = Zygote.ignore() do
         CUDA.randn(T, size(µ)...)
@@ -295,7 +299,7 @@ x = rand(Float32, 784)
 outputs = vae(x, latent=true)
 ```
 """
-function (vae::VAE)(x::AbstractArray{T}; latent::Bool=false) where {T<:Number}
+function (vae::VAE)(x::AbstractArray{<:Number}; latent::Bool=false)
     # Run input through encoder to obtain mean and log std
     encoder_outputs = vae.encoder(x)
 
@@ -323,14 +327,14 @@ end # function
 @doc raw"""
     loss(
         vae::VAE,
-        x::AbstractArray{T};
-        β::T=1.0f0,
+        x::AbstractArray{<:Number};
+        β::Number=1.0f0,
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         kl_divergence::Function=encoder_kl,
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-        reg_strength::T=1.0f0
-    ) where {T<:Number}
+        reg_strength::Number=1.0f0
+    ) 
 
 Computes the loss for the variational autoencoder (VAE).
 
@@ -347,11 +351,12 @@ Where:
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x::AbstractArray{T}`: Input data. The last dimension is taken as having each
-  of the samples in a batch.
+- `x::AbstractArray{<:Number}`: Input data. The last dimension is taken as
+  having each of the samples in a batch.
 
 # Optional Keyword Arguments
-- `β::T=1.0f0`: Weighting factor for the KL-divergence term, used for annealing.
+- `β::Number=1.0f0`: Weighting factor for the KL-divergence term, used for
+  annealing.
 - `reconstruction_loglikelihood::Function=decoder_loglikelihood`: A function
   that computes the reconstruction log likelihood.
 - `kl_divergence::Function=encoder_kl`: A function that computes the
@@ -362,7 +367,7 @@ Where:
   in `reg_kwargs`.
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
     regularization function.
-- `reg_strength::T=1.0f0`: The strength of the regularization term.
+- `reg_strength::Number=1.0f0`: The strength of the regularization term.
 
 # Returns
 - `T`: The computed average loss value for the input `x` and its reconstructed
@@ -374,14 +379,14 @@ Where:
 """
 function loss(
     vae::VAE,
-    x::AbstractArray{T};
-    β::T=1.0f0,
+    x::AbstractArray{<:Number};
+    β::Number=1.0f0,
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-    reg_strength::T=1.0f0
-) where {T<:Number}
+    reg_strength::Number=1.0f0
+)
     # Forward Pass (run input through reconstruct function)
     vae_output = vae(x; latent=true)
 
@@ -411,15 +416,15 @@ end # function
 @doc raw"""
     loss(
         vae::VAE,
-        x_in::AbstractArray{T},
-        x_out::AbstractArray{T};
-        β::T=1.0f0,
+        x_in::AbstractArray{<:Number},
+        x_out::AbstractArray{<:Number};
+        β::Number=1.0f0,
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         kl_divergence::Function=encoder_kl,
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-        reg_strength::T=1.0f0
-    ) where {T<:Number}
+        reg_strength::Number=1.0f0
+    ) 
 
 Computes the loss for the variational autoencoder (VAE).
 
@@ -437,13 +442,14 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x_in::AbstractArray{T}`: Input data to the VAE encoder. The last dimension is
-  taken as having each of the samples in a batch.
-- `x_out::AbstractArray{T}`: Target data to compute the reconstruction error.
-  The last dimension is taken as having each of the samples in a batch.
+- `x_in::AbstractArray{<:Number}`: Input data to the VAE encoder. The last
+  dimension is taken as having each of the samples in a batch.
+- `x_out::AbstractArray{<:Number}`: Target data to compute the reconstruction
+  error. The last dimension is taken as having each of the samples in a batch.
 
 # Optional Keyword Arguments
-- `β::T=1.0f0`: Weighting factor for the KL-divergence term, used for annealing.
+- `β::Number=1.0f0`: Weighting factor for the KL-divergence term, used for
+  annealing.
 - `reconstruction_loglikelihood::Function=decoder_loglikelihood`: A function
   that computes the reconstruction log likelihood.
 - `kl_divergence::Function=encoder_kl`: A function that computes the
@@ -454,7 +460,7 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   in `reg_kwargs`.
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
   regularization function.
-- `reg_strength::T=1.0f0`: The strength of the regularization term.
+- `reg_strength::Number=1.0f0`: The strength of the regularization term.
 
 # Returns
 - `T`: The computed average loss value for the input `x_in` and its
@@ -466,15 +472,15 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 """
 function loss(
     vae::VAE,
-    x_in::AbstractArray{T},
-    x_out::AbstractArray{T};
-    β::T=1.0f0,
+    x_in::AbstractArray{<:Number},
+    x_out::AbstractArray{<:Number};
+    β::Number=1.0f0,
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-    reg_strength::T=1.0f0
-) where {T<:Number}
+    reg_strength::Number=1.0f0
+)
     # Forward Pass (run input through reconstruct function)
     vae_output = vae(x_in; latent=true)
 
@@ -534,7 +540,7 @@ Trains the VAE by:
 ```julia
 opt = Flux.setup(Optax.adam(1e-3), vae)
 for x in dataloader
-        train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0,), verbose=true)
+    train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0,), verbose=true)
 end
 ```
 """
@@ -570,10 +576,10 @@ given a loss function.
 
 # Arguments
 - `vae::VAE`: A struct containing the elements of a variational autoencoder.
-- `x_in::AbstractArray{T}`: Input data for the loss function. Represents an
-  individual sample. The last dimension is taken as having each of the samples
-  in a batch.
-- `x_out::AbstractArray{T}`: Target output data for the loss function.
+- `x_in::AbstractArray{<:Number}`: Input data for the loss function. Represents
+  an individual sample. The last dimension is taken as having each of the
+  samples in a batch.
+- `x_out::AbstractArray{<:Number}`: Target output data for the loss function.
   Represents the corresponding output for the `x_in` sample. The last dimension
   is taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
@@ -604,13 +610,13 @@ end
 """
 function train!(
     vae::VAE,
-    x_in::AbstractArray{T},
-    x_out::AbstractArray{T},
+    x_in::AbstractArray{<:Number},
+    x_out::AbstractArray{<:Number},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     verbose::Bool=false
-) where {T<:Number}
+)
     # Compute VAE gradient
     L, ∇L = Flux.withgradient(vae) do vae_model
         loss_function(vae_model, x_in, x_out; loss_kwargs...)
