@@ -134,6 +134,62 @@ function (f::Flatten)(x)
     return flatten(x)
 end
 
-# Register Reshape as a Flux layer This allows Flux to recognize Reshape during
+# Register Reshape as a Flux layer This allows Flux to recognize Flatten during
 # the backward pass (gradient computation) and when saving/loading the model
 @functor Flatten
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Define custom activation layer over dimensions
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+@doc raw"""
+    ActivationOverDims(σ::Function, dims::Int)
+
+A custom layer for Flux that applies an activation function over specified
+dimensions.
+
+This layer is useful when you need to apply an activation function over specific
+dimensions of your data within a Flux model. Unlike the built-in activation
+functions in Julia, this custom layer can be saved and loaded using the BSON or
+JLD2 package.
+
+# Arguments
+- `σ::Function`: The activation function to be applied.
+- `dims`: The dimensions over which the activation function should be applied.
+
+# Note
+When saving and loading the model, make sure to include `ActivationOverDims` in
+the list of layers to be processed by BSON or JLD2.
+"""
+struct ActivationOverDims
+    σ::Function
+    dims
+end
+
+@doc raw"""
+    (σ::ActivationOverDims)(x)
+
+Defines the behavior of the ActivationOverDims layer when used in a model. This
+function is called during the forward pass of the model. It applies the
+activation function `σ.σ` over the dimensions `σ.dims` of the input `x`.
+
+# Arguments
+- `σ::ActivationOverDims`: An instance of the ActivationOverDims struct.
+- `x`: The input to which the activation function should be applied.
+
+# Returns
+- The input `x` with the activation function applied over the specified
+  dimensions.
+
+# Note
+This custom layer can be saved and loaded using the BSON package. When saving
+and loading the model, make sure to include `ActivationOverDims` in the list of
+layers to be processed by BSON.
+"""
+function (σ::ActivationOverDims)(x)
+    return σ.σ(x, dims=σ.dims)
+end
+
+# Register Reshape as a Flux layer This allows Flux to recognize Flatten during
+# the backward pass (gradient computation) and when saving/loading the model
+@functor ActivationOverDims
