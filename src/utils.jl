@@ -903,7 +903,7 @@ This function is marked with the `@ignore_derivatives` macro from the
 call to this function when computing gradients.
 """
 function unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
-    return [j == i ? one(T) : zero(T) for j in 1:size(x, 1)] |> Flux.gpu
+    return [j == i ? one(T) : zero(T) for j in axes(x, 1)] |> Flux.gpu
 end # function
 
 # Set Chainrulescore to ignore the function when computing gradients
@@ -915,7 +915,7 @@ ChainRulesCore.@ignore_derivatives unit_vector
     finite_difference_gradient(
         f::Function,
         x::AbstractVector{<:Number};
-        ε::Number=(∛(eps(Float32)))
+        fdtype::Symbol=:central
     )where {T<:AbstractFloat}
 
 Compute the finite difference gradient of a function `f` at a point `x`.
@@ -925,9 +925,8 @@ Compute the finite difference gradient of a function `f` at a point `x`.
 - `x::AbstractVector{T}`: The point at which the gradient is to be computed.
 
 # Optional Keyword Arguments
-- `ε::T=∛(eps(Float32))`: The step size for the finite difference
-  calculation. Defaults to the square root of the machine epsilon for type
-  `Float32`.
+- `fdtype::Symbol=:central`: The finite difference type. It can be either
+  `:forward` or `:central`. Defaults to `:central`.
 
 # Returns
 - A vector representing the gradient of `f` at `x`.
@@ -937,31 +936,53 @@ This function computes the finite difference gradient of a function `f` at a
 point `x`. The gradient is a vector where the `i`-th element is the partial
 derivative of `f` with respect to the `i`-th element of `x`.
 
-The partial derivatives are computed using the central difference formula:
+The partial derivatives are computed using the forward or central difference
+formula, depending on the `fdtype` argument:
 
-∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
+- Forward difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x)] / ε
+- Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
 
-where eᵢ is the `i`-th unit vector.
+where ε is the step size and eᵢ is the `i`-th unit vector.
 
 # Example
 ```julia
 f(x) = sum(x.^2)
 x = [1.0, 2.0, 3.0]
-finite_difference_gradient(f, x)  # Returns the vector [2.0, 4.0, 6.0]
+finite_difference_gradient(f, x, fdtype=:central)  
+# Returns the vector [2.0, 4.0, 6.0]
 ```
 """
 function finite_difference_gradient(
     f::Function,
     x::AbstractVector{<:Number};
-    ε::Number=(∛(eps(Float32)))
+    fdtype::Symbol=:central,
 )
-    # Compute the finite difference gradient for each element of x
-    grad = [
-        (
-            f(x .+ ε * unit_vector(x, i, eltype(x))) -
-            f(x .- ε * unit_vector(x, i, eltype(x)))
-        ) / 2ε for i in eachindex(x)
-    ]
+    # Check that mode is either :forward or :central
+    if !(fdtype in (:forward, :central))
+        error("fdtype must be either :forward or :central")
+    end # if
+
+    # Check fdtype
+    if fdtype == :forward
+        # Define step size
+        ε = √(eps(eltype(x)))
+        # Compute the finite difference gradient for each element of x
+        grad = [
+            (f(x .+ ε * unit_vector(x, i, eltype(x))) - f(x)) / ε
+            for i in eachindex(x)
+        ]
+    else
+        # Define step size
+        ε = ∛(eps(eltype(x)))
+        # Compute the finite difference gradient for each element of x
+        grad = [
+            (
+                f(x .+ ε * unit_vector(x, i, eltype(x))) -
+                f(x .- ε * unit_vector(x, i, eltype(x)))
+            ) / 2ε for i in eachindex(x)
+        ]
+    end # if
+
     return grad |> Flux.gpu
 end # function
 
@@ -971,7 +992,7 @@ end # function
     finite_difference_gradient(
         f::Function,
         x::AbstractMatrix{<:Number};
-        ε::Number=(∛(eps(Float32)))
+        fdtype::Symbol=:central
     )
 
 Compute the finite difference gradient of a function `f` at multiple points
@@ -983,8 +1004,8 @@ represented by the columns of `x`.
   which the gradient is to be computed.
 
 # Optional Keyword Arguments
-- `ε::T=sqrt(eps(T))`: The step size for the finite difference calculation.
-  Defaults to the square root of the machine epsilon for type `T`.
+- `fdtype::Symbol=:central`: The finite difference type. It can be either
+  `:forward` or `:central`. Defaults to `:central`.
 
 # Returns
 - A matrix where each column represents the gradient of `f` at the corresponding
@@ -995,11 +1016,13 @@ This function computes the finite difference gradient of a function `f` at
 multiple points. Each column of `x` represents a point, and the corresponding
 column in the output matrix represents the gradient at that point.
 
-The gradient is computed using the central difference formula:
+The gradient is computed using the forward or central difference formula,
+depending on the `fdtype` argument:
 
-∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
+- Forward difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x)] / ε
+- Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
 
-where eᵢ is the `i`-th unit vector.
+where ε is the step size and eᵢ is the `i`-th unit vector.
 
 # Example
 ```julia
@@ -1007,27 +1030,52 @@ f(x) = sum(x.^2, dims=1)
 x = [1.0 2.0 3.0; 4.0 5.0 6.0]
 # Returns a matrix where each column is the gradient at the corresponding column
 # of `x`
-finite_difference_gradient(f, x)  
+finite_difference_gradient(f, x, fdtype=:central))  
 ```
 """
 function finite_difference_gradient(
     f::Function,
     x::AbstractMatrix{<:Number};
-    ε::Number=(∛(eps(Float32)))
+    fdtype::Symbol=:central
 )
-    # Compute the finite difference gradient for each element of x. Note: We sue
-    # the permutedims to return the output in the same shape as the input
-    grad = permutedims(
-        reduce(
-            hcat,
-            [
-                (
-                    f(x .+ ε * unit_vector(x, i, eltype(x))) -
-                    f(x .- ε * unit_vector(x, i, eltype(x)))
-                ) / 2ε for i in 1:size(x, 1)
-            ]
-        ),
-        [2, 1]
-    )
+    # Check that mode is either :forward or :central
+    if !(fdtype in (:forward, :central))
+        error("fdtype must be either :forward or :central")
+    end
+
+    # Check fdtype
+    if fdtype == :forward
+        # Define step size
+        ε = √(eps(eltype(x)))
+        # Compute the finite difference gradient for each column of x
+        grad = permutedims(
+            reduce(
+                hcat,
+                [
+                    (f(x .+ ε * unit_vector(x, i, eltype(x))) - f(x)) / ε
+                    for i in axes(x, 1)
+                ]
+            ),
+            [2, 1]
+        )
+    else
+        # Define step size
+        ε = ∛(eps(eltype(x)))
+        # Compute the finite difference gradient for each column of x
+        grad = permutedims(
+            reduce(
+                hcat,
+                [
+                    (
+                        f(x .+ ε * unit_vector(x, i, eltype(x))) -
+                        f(x .- ε * unit_vector(x, i, eltype(x)))
+                    ) / 2ε for i in axes(x, 1)
+                ]
+            ),
+            [2, 1]
+        )
+    end # if
+
+    # Return gradient updated to GPU
     return grad |> Flux.gpu
 end # function

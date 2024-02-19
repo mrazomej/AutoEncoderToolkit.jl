@@ -1185,7 +1185,7 @@ end # function
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
-        ε::Number=∛(eps(Float32))
+        fdtype::Symbol=:central,
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
@@ -1246,8 +1246,8 @@ the point `z`.
 - `momentum_logprior::Function`: The function to compute the log-prior of the
   momentum. Default is `riemannian_logprior`. This function must take as input
   the momentum `ρ` and `G⁻¹`.
-- `ε::Number`: The step size for the finite difference method. Default is the
-  square root of the machine epsilon for `Float32`.
+- `fdtype::Symbol=:central`: The type of finite difference method to use. Must
+  be :central or :forward. Default is :central.
 
 # Returns
 A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
@@ -1265,7 +1265,7 @@ function ∇hamiltonian_finite(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
-    ε::Number=(∛(eps(Float32)))
+    fdtype::Symbol=:central,
 )
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
@@ -1281,7 +1281,7 @@ function ∇hamiltonian_finite(
                 position_logprior=position_logprior,
                 momentum_logprior=momentum_logprior,
             ),
-            z; ε=ε
+            z; fdtype=fdtype
         )
     elseif var == :ρ
         return finite_difference_gradient(
@@ -1291,7 +1291,7 @@ function ∇hamiltonian_finite(
                 position_logprior=position_logprior,
                 momentum_logprior=momentum_logprior,
             ),
-            ρ; ε=ε
+            ρ; fdtype=fdtype
         )
     end # if
 end # function
@@ -1309,7 +1309,7 @@ end # function
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
         G_inv::Function=G_inv,
-        ε::Number=∛(eps(Float32))
+        fdtype::Symbol=:central,
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
@@ -1365,8 +1365,8 @@ the point `z`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor. Default is `G_inv`. This function must take as input the point
   `z` in the latent space and the `rhvae` instance.
-- `ε::Number`: The step size for the finite difference method. Default is the
-  square root of the machine epsilon for `Float32`.
+- `fdtype::Symbol=:central`: The type of finite difference method to use. Must
+  be :central or :forward. Default is :central.
 
 # Returns
 A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
@@ -1387,7 +1387,7 @@ function ∇hamiltonian_finite(
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
-    ε::Number=(∛(eps(Float32)))
+    fdtype::Symbol=:central,
 )
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
@@ -1408,7 +1408,7 @@ function ∇hamiltonian_finite(
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
         momentum_logprior=momentum_logprior,
-        ε=ε
+        fdtype=fdtype
     )
 end # function
 
