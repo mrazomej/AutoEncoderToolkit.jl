@@ -50,11 +50,11 @@ helps in sampling from the latent space in variational autoencoders (or similar
 models) while keeping the gradient flow intact.
 
 # Arguments
-- `µ::AbstractVecOrMat{<:Number}`: The mean of the latent space. If it is a
+- `µ::AbstractVecOrMat`: The mean of the latent space. If it is a
   vector, it represents the mean for a single data point. If it is a matrix,
   each column corresponds to the mean for a specific data point, and each row
   corresponds to a dimension of the latent space.
-- `σ::AbstractVecOrMat{<:Number}`: The (log )standard deviation of the latent
+- `σ::AbstractVecOrMat`: The (log )standard deviation of the latent
   space. Like `µ`, if it's a vector, it represents the (log) standard deviation
   for a single data point. If a matrix, each column corresponds to the (log)
   standard deviation for a specific data point.
@@ -62,7 +62,7 @@ models) while keeping the gradient flow intact.
 # Optional Keyword Arguments
 - `log::Bool=true`: Boolean indicating whether the provided standard deviation
   is in log scale or not. If `true` (default), then `σ = exp(logσ)` is computed.
-- `T::Type{<:Number}=Float32`: The type of the output array.
+- `T::Type=Float32`: The type of the output array.
 
 # Returns
 An array containing samples from the reparameterized latent space, obtained by
@@ -90,10 +90,10 @@ Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
-    µ::AbstractVecOrMat{<:Number},
-    σ::AbstractVecOrMat{<:Number};
+    µ::AbstractVecOrMat,
+    σ::AbstractVecOrMat;
     log::Bool=true,
-    T::Type{<:Number}=Float32
+    T::Type=Float32
 )
     # Sample random Gaussian number
     r = ChainRulesCore.ignore_derivatives() do
@@ -134,7 +134,7 @@ models) while keeping the gradient flow intact.
 # Optional Keyword Arguments
 - `log::Bool=true`: Boolean indicating whether the provided standard deviation
   is in log scale or not. If `true` (default), then `σ = exp(logσ)` is computed.
-- `T::Type{<:Number}=Float32`: The type of the output array.
+- `T::Type=Float32`: The type of the output array.
 
 # Returns
 An array containing samples from the reparameterized latent space, obtained by
@@ -162,10 +162,10 @@ Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
 function reparameterize(
-    µ::CUDA.CuVecOrMat{<:Number},
-    σ::CUDA.CuVecOrMat{<:Number};
+    µ::CUDA.CuVecOrMat,
+    σ::CUDA.CuVecOrMat;
     log::Bool=true,
-    T::Type{<:Number}=Float32
+    T::Type=Float32
 )
     # Sample random Gaussian number
     r = ChainRulesCore.ignore_derivatives() do
@@ -260,7 +260,7 @@ end # struct
 Flux.@functor VAE
 
 @doc raw"""
-        (vae::VAE)(x::AbstractArray{<:Number}; latent::Bool=false)
+        (vae::VAE)(x::AbstractArray; latent::Bool=false)
 
 Perform the forward pass of a Variational Autoencoder (VAE).
 
@@ -272,7 +272,7 @@ the decoder to obtain the output.
 
 # Arguments
 - `vae::VAE`: The VAE used to encode the input data and decode the latent space.
-- `x::AbstractArray{<:Number}`: The input data. If array, the last dimension
+- `x::AbstractArray`: The input data. If array, the last dimension
   contains each of the samples in a batch.
 
 # Optional Keyword Arguments
@@ -303,7 +303,7 @@ x = rand(Float32, 784)
 outputs = vae(x, latent=true)
 ```
 """
-function (vae::VAE)(x::AbstractArray{<:Number}; latent::Bool=false)
+function (vae::VAE)(x::AbstractArray; latent::Bool=false)
     # Run input through encoder to obtain mean and log std
     encoder_outputs = vae.encoder(x)
 
@@ -331,7 +331,7 @@ end # function
 @doc raw"""
     loss(
         vae::VAE,
-        x::AbstractArray{<:Number};
+        x::AbstractArray;
         β::Number=1.0f0,
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         kl_divergence::Function=encoder_kl,
@@ -355,7 +355,7 @@ Where:
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x::AbstractArray{<:Number}`: Input data. The last dimension is taken as
+- `x::AbstractArray`: Input data. The last dimension is taken as
   having each of the samples in a batch.
 
 # Optional Keyword Arguments
@@ -383,7 +383,7 @@ Where:
 """
 function loss(
     vae::VAE,
-    x::AbstractArray{<:Number};
+    x::AbstractArray;
     β::Number=1.0f0,
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
@@ -420,8 +420,8 @@ end # function
 @doc raw"""
     loss(
         vae::VAE,
-        x_in::AbstractArray{<:Number},
-        x_out::AbstractArray{<:Number};
+        x_in::AbstractArray,
+        x_out::AbstractArray;
         β::Number=1.0f0,
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         kl_divergence::Function=encoder_kl,
@@ -446,9 +446,9 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 
 # Arguments
 - `vae::VAE`: A VAE model with encoder and decoder networks.
-- `x_in::AbstractArray{<:Number}`: Input data to the VAE encoder. The last
+- `x_in::AbstractArray`: Input data to the VAE encoder. The last
   dimension is taken as having each of the samples in a batch.
-- `x_out::AbstractArray{<:Number}`: Target data to compute the reconstruction
+- `x_out::AbstractArray`: Target data to compute the reconstruction
   error. The last dimension is taken as having each of the samples in a batch.
 
 # Optional Keyword Arguments
@@ -476,8 +476,8 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
 """
 function loss(
     vae::VAE,
-    x_in::AbstractArray{<:Number},
-    x_out::AbstractArray{<:Number};
+    x_in::AbstractArray,
+    x_out::AbstractArray;
     β::Number=1.0f0,
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
@@ -521,7 +521,7 @@ given a specified loss function.
 
 # Arguments
 - `vae::VAE`: A struct containing the elements of a variational autoencoder.
-- `x::AbstractArray{<:Number}`: Data on which to evaluate the loss function. The
+- `x::AbstractArray`: Data on which to evaluate the loss function. The
   last dimension is taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
   initialized using `Flux.Train.setup`.
@@ -550,7 +550,7 @@ end
 """
 function train!(
     vae::VAE,
-    x::AbstractArray{<:Number},
+    x::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
@@ -580,10 +580,10 @@ given a loss function.
 
 # Arguments
 - `vae::VAE`: A struct containing the elements of a variational autoencoder.
-- `x_in::AbstractArray{<:Number}`: Input data for the loss function. Represents
+- `x_in::AbstractArray`: Input data for the loss function. Represents
   an individual sample. The last dimension is taken as having each of the
   samples in a batch.
-- `x_out::AbstractArray{<:Number}`: Target output data for the loss function.
+- `x_out::AbstractArray`: Target output data for the loss function.
   Represents the corresponding output for the `x_in` sample. The last dimension
   is taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
@@ -614,8 +614,8 @@ end
 """
 function train!(
     vae::VAE,
-    x_in::AbstractArray{<:Number},
-    x_out::AbstractArray{<:Number},
+    x_in::AbstractArray,
+    x_out::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
