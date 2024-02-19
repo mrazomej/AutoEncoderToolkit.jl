@@ -946,7 +946,7 @@ Riemannian metric.
 """
 function riemannian_logprior(
     ρ::AbstractMatrix,
-    G⁻¹::AbstractArray{<:Number,3},
+    G⁻¹::AbstractArray,
     logdetG::AbstractVector;
     σ::Number=1.0f0,
 )
@@ -958,6 +958,60 @@ function riemannian_logprior(
 
     return -0.5f0 * (size(ρ, 1) * log(2.0f0π) .+ logdetG) .-
            0.5f0 .* vec(ρᵀ_G⁻¹_ρ)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior(
+        ρ::AbstractMatrix,
+        G⁻¹::AbstractArray,
+        logdetG::AbstractVector,
+        index::Int;
+        σ::Number=1.0f0,
+    )
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric for a single data point specified by `index`.
+
+# Arguments
+- `ρ::AbstractMatrix`: The momentum vectors. Each column of `ρ` represents a
+  different data point.
+- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
+  of `G⁻¹` represents the inverse metric for a different data point.
+- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
+  tensor. Each element of `logdetG` corresponds to a different data point.
+- `index::Int`: The index of the data point for which the log-prior is to be
+  computed.
+
+# Optional Keyword Arguments
+- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
+  is used to scale the inverse metric tensor. Default is `1.0f0`.
+
+# Returns
+The log-prior of the Gaussian distribution with a covariance matrix given by the
+Riemannian metric for the specified data point.
+
+# Notes
+- Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
+  dimensionality of the RHVAE model. Also, ensure that `index` is a valid index
+  for the data points in `ρ` and `G⁻¹`.
+- This function is designed to work with CUDA arrays for GPU-accelerated
+  computations.
+"""
+function riemannian_logprior(
+    ρ::AbstractVector,
+    G⁻¹::AbstractArray,
+    logdetG::AbstractVector,
+    index::Int;
+    σ::Number=1.0f0,
+)
+    # Multiply G⁻¹ by σ²
+    G⁻¹ = σ^2 .* G⁻¹[.., index]
+
+    # Return the log-prior
+    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) -
+           0.5f0 * ρ' * G⁻¹ * ρ
 end # function
 
 # ==============================================================================
@@ -1067,6 +1121,121 @@ function hamiltonian(
 
     # 2. Kinetic energy K(ρ) = -log p(ρ)
     κ = -momentum_logprior(ρ, G⁻¹, logdetG)
+
+    # Return Hamiltonian
+    return U + κ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    hamiltonian(
+        x::AbstractArray,
+        z::AbstractMatrix,
+        ρ::AbstractMatrix,
+        G⁻¹::AbstractArray,
+        logdetG::AbstractVector,
+        decoder::AbstractVariationalDecoder,
+        decoder_output::NamedTuple,
+        index::Int;
+        reconstruction_loglikelihood::Function=decoder_loglikelihood,
+        position_logprior::Function=spherical_logprior,
+        momentum_logprior::Function=riemannian_logprior,
+    )
+
+Compute the Hamiltonian for a single data point specified by `index`.
+
+This function takes a data array `x`, a latent space matrix `z`, a momentum
+matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`, a `decoder` of
+type `AbstractVariationalDecoder`, a `decoder_output` NamedTuple, and an `index`
+specifying the data point, and computes the Hamiltonian. The computation is
+based on the log-likelihood of the decoder, the log-prior of the latent space,
+and the inverse of the metric tensor G at the point `z`.
+
+The Hamiltonian is computed as follows:
+
+Hₓ(z, ρ) = Uₓ(z) + κ(ρ),
+
+where Uₓ(z) is the potential energy, and κ(ρ) is the kinetic energy. The
+potential energy is defined as follows:
+
+Uₓ(z) = -log p(x|z) - log p(z),
+
+where p(x|z) is the log-likelihood of the decoder and p(z) is the log-prior in
+latent space. The kinetic energy is defined as follows:
+
+κ(ρ) = -log p(ρ),
+
+where p(ρ) is the log-prior of the momentum.
+
+# Arguments
+- `x::AbstractArray`: The data array. Each column of `x` represents a different
+  data point.
+- `z::AbstractMatrix`: The latent space matrix. Each column of `z` represents
+  the latent space for a different data point.
+- `ρ::AbstractMatrix`: The momentum matrix. Each column of `ρ` represents the
+  momentum for a different data point.
+- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
+  of `G⁻¹` represents the inverse metric for a different data point.
+- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
+  tensor. Each element of `logdetG` corresponds to a different data point.
+- `decoder::AbstractVariationalDecoder`: The decoder instance.
+- `decoder_output::NamedTuple`: The output of the decoder.
+- `index::Int`: The index of the data point for which the Hamiltonian is to be
+  computed.
+
+# Optional Keyword Arguments
+- `reconstruction_loglikelihood::Function`: The function to compute the
+  log-likelihood of the decoder reconstruction. Default is
+  `decoder_loglikelihood`. This function must take as input the decoder, the
+  data array `x`, the latent space matrix `z`, the `decoder_output`, and the
+  `index`.
+- `position_logprior::Function`: The function to compute the log-prior of the
+  latent space position. Default is `spherical_logprior`. This function must
+  take as input the latent space matrix `z` and the `index`.
+- `momentum_logprior::Function`: The function to compute the log-prior of the
+  momentum. Default is `riemannian_logprior`. This function must take as input
+  the momentum matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`,
+  the log determinants of the Riemannian metric tensor `logdetG`, and the
+  `index`.
+
+# Returns
+A scalar representing the Hamiltonian for the specified data point.
+
+# Note
+The inverse of the Riemannian metric tensor `G⁻¹` and the log determinants of
+the Riemannian metric tensor `logdetG` are assumed to be computed elsewhere. The
+user must ensure that the provided `G⁻¹` and `logdetG` correspond to the given
+`z` value.
+"""
+function hamiltonian(
+    x::AbstractArray,
+    z::AbstractVector,
+    ρ::AbstractVector,
+    G⁻¹::AbstractArray,
+    logdetG::AbstractVector,
+    decoder::AbstractVariationalDecoder,
+    decoder_output::NamedTuple,
+    index::Int;
+    reconstruction_loglikelihood::Function=decoder_loglikelihood,
+    position_logprior::Function=spherical_logprior,
+    momentum_logprior::Function=riemannian_logprior,
+)
+    # 1. Potential energy U(z|x) = -log p(x|z) - log p(z)
+
+    # Compute log-likelihood
+    loglikelihood_x_given_z = reconstruction_loglikelihood(
+        x, z, decoder, decoder_output, index
+    )
+
+    # Compute log-prior
+    logprior_z = position_logprior(z)
+
+    # Define potential energy
+    U = -loglikelihood_x_given_z - logprior_z
+
+    # 2. Kinetic energy K(ρ) = -log p(ρ)
+    κ = -momentum_logprior(ρ, G⁻¹, logdetG, index)
 
     # Return Hamiltonian
     return U + κ
@@ -1779,12 +1948,86 @@ end # function
 
 # ------------------------------------------------------------------------------
 
+@doc raw"""
+    ∇hamiltonian_TaylorDiff(
+        x::AbstractArray,
+        z::AbstractVector,
+        ρ::AbstractVector,
+        G⁻¹::AbstractMatrix,
+        logdetG::Union{<:Number,AbstractVector},
+        decoder::AbstractVariationalDecoder,
+        decoder_output::NamedTuple,
+        var::Symbol;
+        reconstruction_loglikelihood::Function=decoder_loglikelihood,
+        position_logprior::Function=spherical_logprior,
+        momentum_logprior::Function=riemannian_logprior,
+    )
+
+Compute the gradient of the Hamiltonian with respect to a given variable using
+the TaylorDiff.jl automatic differentiation library.
+
+This function takes a point `x` in the data space, a point `z` in the latent
+space, a momentum `ρ`, an instance of `AbstractVariationalDecoder`, and a
+variable `var` (:z or :ρ), and computes the gradient of the Hamiltonian with
+respect to `var` using TaylorDiff.jl.
+
+The Hamiltonian is computed as follows:
+
+Hₓ(z, ρ) = Uₓ(z) + κ(ρ),
+
+where Uₓ(z) is the potential energy, and κ(ρ) is the kinetic energy. The
+potential energy is defined as follows:
+
+Uₓ(z) = -log p(x|z) - log p(z),
+
+where p(x|z) is the log-likelihood of the decoder and p(z) is the log-prior in
+latent space. The kinetic energy is defined as follows:
+
+κ(ρ) = 0.5 * log((2π)ᴰ det G(z)) + 0.5 * ρᵀ G⁻¹ ρ
+
+where D is the dimension of the latent space, and G(z) is the metric tensor at
+the point `z`.
+
+# Arguments
+- `x::AbstractArray`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported. The last dimension is assumed
+  to have each of the data points.
+- `z::AbstractVector`: The point in the latent space.
+- `ρ::AbstractVector`: The momentum.
+- `G⁻¹::AbstractMatrix`: The inverse of the Riemannian metric tensor.
+- `logdetG::Number`: The logarithm of the determinant of the Riemannian metric
+  tensor.
+- `decoder::AbstractVariationalDecoder`: An instance of the decoder model.
+- `decoder_output::NamedTuple`: The output of the decoder model.
+- `var::Symbol`: The variable with respect to which the gradient is computed.
+  Must be :z or :ρ.
+
+# Optional Keyword Arguments
+- `reconstruction_loglikelihood::Function`: The function to compute the
+  log-likelihood of the decoder reconstruction. Default is
+  `decoder_loglikelihood`. This function must take as input the decoder, the
+  point `x` in the data space, and the `decoder_output`.
+- `position_logprior::Function`: The function to compute the log-prior of the
+  latent space position. Default is `spherical_logprior`. This function must
+  take as input the point `z` in the latent space.
+- `momentum_logprior::Function`: The function to compute the log-prior of the
+  momentum. Default is `riemannian_logprior`. This function must take as input
+  the momentum `ρ` and the inverse of the Riemannian metric tensor `G⁻¹`.
+
+# Returns
+A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
+respect to variable `var`.
+
+# Note
+`TaylorDiff.jl` is composable with `Zygote.jl.` Thus, for backpropagation using
+this function one should use `Zygote.jl.`
+"""
 function ∇hamiltonian_TaylorDiff(
     x::AbstractArray,
     z::AbstractVector,
     ρ::AbstractVector,
     G⁻¹::AbstractMatrix,
-    logdetG::Union{<:Number,AbstractVector},
+    logdetG::Number,
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple,
     var::Symbol;
@@ -1819,6 +2062,146 @@ function ∇hamiltonian_TaylorDiff(
             ρ
         )
     end # if
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    ∇hamiltonian_TaylorDiff(
+        x::AbstractArray,
+        z::AbstractMatrix,
+        ρ::AbstractMatrix,
+        G⁻¹::AbstractArray,
+        logdetG::AbstractVector,
+        decoder::AbstractVariationalDecoder,
+        decoder_output::NamedTuple,
+        var::Symbol;
+        reconstruction_loglikelihood::Function=decoder_loglikelihood,
+        position_logprior::Function=spherical_logprior,
+        momentum_logprior::Function=riemannian_logprior,
+    )
+
+Compute the gradient of the Hamiltonian with respect to a given variable using
+the TaylorDiff.jl automatic differentiation library.
+
+This function takes a data array `x`, a latent space matrix `z`, a momentum
+matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`, a `decoder` of
+type `AbstractVariationalDecoder`, a `decoder_output` NamedTuple, and a variable
+`var` (:z or :ρ), and computes the gradient of the Hamiltonian with respect to
+`var` using TaylorDiff.jl.
+
+The Hamiltonian is computed as follows:
+
+Hₓ(z, ρ) = Uₓ(z) + κ(ρ),
+
+where Uₓ(z) is the potential energy, and κ(ρ) is the kinetic energy. The
+potential energy is defined as follows:
+
+Uₓ(z) = -log p(x|z) - log p(z),
+
+where p(x|z) is the log-likelihood of the decoder and p(z) is the log-prior in
+latent space. The kinetic energy is defined as follows:
+
+κ(ρ) = 0.5 * log((2π)ᴰ det G(z)) + 0.5 * ρᵀ G⁻¹ ρ
+
+where D is the dimension of the latent space, and G(z) is the metric tensor at
+the point `z`.
+
+# Arguments
+- `x::AbstractArray`: The data array. Each column of `x` represents a different
+  data point.
+- `z::AbstractMatrix`: The latent space matrix. Each column of `z` represents
+  the latent space for a different data point.
+- `ρ::AbstractMatrix`: The momentum matrix. Each column of `ρ` represents the
+  momentum for a different data point.
+- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
+  of `G⁻¹` represents the inverse metric for a different data point.
+- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
+  tensor. Each element of `logdetG` corresponds to a different data point.
+- `decoder::AbstractVariationalDecoder`: The decoder instance.
+- `decoder_output::NamedTuple`: The output of the decoder.
+- `var::Symbol`: The variable with respect to which the gradient is computed.
+  Must be :z or :ρ.
+
+# Optional Keyword Arguments
+- `reconstruction_loglikelihood::Function`: The function to compute the
+  log-likelihood of the decoder reconstruction. Default is
+  `decoder_loglikelihood`. This function must take as input the decoder, the
+  data array `x`, the latent space matrix `z`, the `decoder_output`, and the
+  `index`.
+- `position_logprior::Function`: The function to compute the log-prior of the
+  latent space position. Default is `spherical_logprior`. This function must
+  take as input the latent space matrix `z` and the `index`.
+- `momentum_logprior::Function`: The function to compute the log-prior of the
+  momentum. Default is `riemannian_logprior`. This function must take as input
+  the momentum matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`,
+  the log determinants of the Riemannian metric tensor `logdetG`, and the
+  `index`.
+
+# Returns
+A matrix representing the gradient of the Hamiltonian at the points `(z, ρ)`
+with respect to variable `var`.
+
+# Note
+`TaylorDiff.jl` is composable with `Zygote.jl.` Thus, for backpropagation using
+this function one should use `Zygote.jl.`
+"""
+function ∇hamiltonian_TaylorDiff(
+    x::AbstractArray,
+    z::AbstractMatrix,
+    ρ::AbstractMatrix,
+    G⁻¹::AbstractArray,
+    logdetG::AbstractVector,
+    decoder::AbstractVariationalDecoder,
+    decoder_output::NamedTuple,
+    var::Symbol;
+    reconstruction_loglikelihood::Function=decoder_loglikelihood,
+    position_logprior::Function=spherical_logprior,
+    momentum_logprior::Function=riemannian_logprior,
+)
+    # Check that var is a valid variable
+    if var ∉ (:z, :ρ)
+        error("var must be :z or :ρ")
+    end # if
+
+    # Compute gradient with respect to var
+    if var == :z
+        # Compute gradient for each column of z
+        grad = [
+            begin
+                taylordiff_gradient(
+                    z_col -> hamiltonian(
+                        x, z_col, ρ_col, G⁻¹, logdetG, decoder, decoder_output,
+                        index;
+                        reconstruction_loglikelihood=reconstruction_loglikelihood,
+                        position_logprior=position_logprior,
+                        momentum_logprior=momentum_logprior,
+                    ),
+                    z_col
+                )
+            end for (index, (z_col, ρ_col)) in
+            enumerate(zip(Vector.(eachcol(z)), Vector.(eachcol(ρ))))
+        ]
+    elseif var == :ρ
+        # Compute gradient for each column of ρ
+        grad = [
+            begin
+                taylordiff_gradient(
+                    ρ_col -> hamiltonian(
+                        x, z_col, ρ_col, G⁻¹, logdetG, decoder, decoder_output,
+                        index;
+                        reconstruction_loglikelihood=reconstruction_loglikelihood,
+                        position_logprior=position_logprior,
+                        momentum_logprior=momentum_logprior,
+                    ),
+                    ρ_col
+                )
+            end for (index, (z_col, ρ_col)) in
+            enumerate(zip(Vector.(eachcol(z)), Vector.(eachcol(ρ))))
+        ]
+    end # if
+
+    return reduce(hcat, grad)
 end # function
 
 # ==============================================================================
