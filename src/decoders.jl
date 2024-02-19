@@ -1615,6 +1615,8 @@ function decoder_loglikelihood(
     return loglikelihood
 end
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     decoder_loglikelihood(
         x::AbstractArray,
@@ -1680,7 +1682,7 @@ end
 @doc raw"""
     decoder_loglikelihood(
         x::AbstractArray,
-        z::AbstractMatrix,
+        z::AbstractVector,
         decoder::BernoulliDecoder,
         decoder_output::NamedTuple,
         index::Int
@@ -1693,7 +1695,7 @@ with probability given by the decoder.
 # Arguments
 - `x::AbstractArray`: The observed data for which the log-likelihood is to be
   computed. Each column of `x` represents a different data point.
-- `z::AbstractMatrix`: The corresponding latent space representation used to
+- `z::AbstractVector`: The corresponding latent space representation used to
   generate the decoder output. This argument is not used in the computation of
   the log-likelihood since the decoder output is already provided. This is only
   used to know which method to call.
@@ -1722,7 +1724,7 @@ and `decoder_output`.
 """
 function decoder_loglikelihood(
     x::AbstractArray,
-    z::AbstractMatrix,
+    z::AbstractVector,
     decoder::BernoulliDecoder,
     decoder_output::NamedTuple,
     index::Int
@@ -1876,7 +1878,7 @@ end # function
 @doc raw"""
     decoder_loglikelihood(
         x::AbstractArray,
-        z::AbstractMatrix,
+        z::AbstractVector,
         decoder::SimpleDecoder,
         decoder_output::NamedTuple,
         index::Int;
@@ -1890,7 +1892,7 @@ mean given by the decoder and a specified standard deviation.
 # Arguments
 - `x::AbstractArray`: The observed data for which the log-likelihood is to be
   computed. Each column of `x` represents a different data point.
-- `z::AbstractMatrix`: The corresponding latent space representation used to
+- `z::AbstractVector`: The corresponding latent space representation used to
   generate the decoder output. This argument is not used in the computation of
   the log-likelihood since the decoder output is already provided. This is only
   used to know which method to call.
@@ -1924,7 +1926,7 @@ and `decoder_output`.
 """
 function decoder_loglikelihood(
     x::AbstractArray,
-    z::AbstractMatrix,
+    z::AbstractVector,
     decoder::SimpleDecoder,
     decoder_output::NamedTuple,
     index::Int;
@@ -2076,7 +2078,7 @@ end # function
 @doc raw"""
     decoder_loglikelihood(
         x::AbstractArray,
-        z::AbstractMatrix,
+        z::AbstractVector,
         decoder::AbstractGaussianLogDecoder,
         decoder_output::NamedTuple,
         index::Int
@@ -2089,7 +2091,7 @@ mean and log standard deviation given by the decoder.
 # Arguments
 - `x::AbstractArray`: The observed data for which the log-likelihood is to be
   computed. Each column of `x` represents a different data point.
-- `z::AbstractMatrix`: The corresponding latent space representation used to
+- `z::AbstractVector`: The corresponding latent space representation used to
   generate the decoder output. This argument is not used in the computation of
   the log-likelihood since the decoder output is already provided. This is only
   used to know which method to call.
@@ -2121,7 +2123,7 @@ and `decoder_output`.
 """
 function decoder_loglikelihood(
     x::AbstractArray,
-    z::AbstractMatrix,
+    z::AbstractVector,
     decoder::AbstractGaussianLogDecoder,
     decoder_output::NamedTuple,
     index::Int
@@ -2268,7 +2270,7 @@ end # function
 @doc raw"""
     decoder_loglikelihood(
         x::AbstractArray,
-        z::AbstractMatrix,
+        z::AbstractVector,
         decoder::AbstractGaussianLinearDecoder,
         decoder_output::NamedTuple,
         index::Int
@@ -2281,7 +2283,7 @@ mean and standard deviation given by the decoder.
 # Arguments
 - `x::AbstractArray`: The observed data for which the log-likelihood is to be
   computed. Each column of `x` represents a different data point.
-- `z::AbstractMatrix`: The corresponding latent space representation used to
+- `z::AbstractVector`: The corresponding latent space representation used to
   generate the decoder output. This argument is not used in the computation of
   the log-likelihood since the decoder output is already provided. This is only
   used to know which method to call.
@@ -2312,7 +2314,7 @@ and `decoder_output`.
 """
 function decoder_loglikelihood(
     x::AbstractArray,
-    z::AbstractMatrix,
+    z::AbstractVector,
     decoder::AbstractGaussianLinearDecoder,
     decoder_output::NamedTuple,
     index::Int
@@ -2387,7 +2389,7 @@ end # function
 @doc raw"""
     decoder_loglikelihood(
         x::AbstractArray,
-        z::AbstractMatrix,
+        z::AbstractVector,
         decoder::AbstractVariationalDecoder,
         index::Int;
         kwargs::NamedTuple=NamedTuple()
@@ -2400,9 +2402,8 @@ specified by the decoder.
 # Arguments
 - `x::AbstractArray`: The observed data for which the log-likelihood is to be
   computed. Each column of `x` represents a different data point.
-- `z::AbstractMatrix`: The latent variable(s) used to generate the decoder
-  output. Each column of `z` represents the latent variable for a different data
-  point.
+- `z::AbstractVector`: The latent variable(s) used to generate the decoder
+  output.
 - `decoder::AbstractVariationalDecoder`: The decoder of the VAE, which is used
   to compute the parameters of the specified distribution.
 - `index::Int`: The index of the data point for which the log-likelihood is to
@@ -2430,16 +2431,16 @@ the `decoder`. Also, ensure that `index` is a valid index for the data points in
 """
 function decoder_loglikelihood(
     x::AbstractArray,
-    z::AbstractMatrix,
+    z::AbstractVector,
     decoder::AbstractVariationalDecoder,
     index::Int;
     kwargs::NamedTuple=NamedTuple()
 )
     # Run z through the decoder
-    decoder_output = decoder(z[:, index])
+    decoder_output = decoder(z)
 
     # Call corresponding loglikelihood function
     return decoder_loglikelihood(
-        x[.., index], z[:, index], decoder, decoder_output; kwargs...
+        x[.., index], z, decoder, decoder_output, index; kwargs...
     )
 end # function

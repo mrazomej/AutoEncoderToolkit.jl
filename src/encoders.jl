@@ -700,14 +700,10 @@ space.
 """
 function spherical_logprior(
     z::AbstractVector,
-    σ::Real=1.0f0,
 )
-    # Convert to type T
-    σ = convert(eltype(z), σ)
-
     # Compute log-prior
-    log_prior = -0.5f0 * sum((z / σ) .^ 2) -
-                0.5f0 * length(z) * (2.0f0 * log(σ) + log(2.0f0π))
+    log_prior = -0.5f0 * sum(z .^ 2) -
+                0.5f0 * length(z) * log(2.0f0π)
 
     return log_prior
 end # function
@@ -740,69 +736,14 @@ space.
 """
 function spherical_logprior(
     z::AbstractMatrix,
-    σ::Real=1.0f0,
 )
-    # Convert to type T
-    σ = convert(eltype(z), σ)
-
     # Compute log-prior
     log_prior = [
         begin
-            -0.5f0 * sum(z[:, i] .^ 2 / σ^2) -
-            0.5f0 * length(z[:, i]) * (2.0f0 * log(σ) + log(2.0f0π))
+            -0.5f0 * sum(z[:, i] .^ 2) -
+            0.5f0 * length(z[:, i]) * log(2.0f0π)
         end for i in axes(z, 2)
     ] |> Flux.gpu
-
-    return log_prior
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    spherical_logprior(
-        z::AbstractMatrix,
-        σ::Real=1.0f0,
-        index::Int
-    )
-
-Computes the log-prior of the latent variable `z` for a single data point
-specified by `index` under a spherical Gaussian distribution with zero mean and
-standard deviation `σ`.
-
-# Arguments
-- `z::AbstractMatrix`: The latent variable for which the log-prior is to be
-  computed. Each column of `z` represents a different data point.
-- `σ::Real=1.0f0`: The standard deviation of the spherical Gaussian
-  distribution.  Defaults to `1.0f0`.
-- `index::Int`: The index of the data point for which the log-prior is to be
-  computed.
-
-# Returns
-- `log_prior::Float32`: The computed log-prior of the latent variable `z` for
-  the specified data point.
-
-# Description
-The function computes the log-prior of the latent variable `z` for a single data
-point specified by `index` under a spherical Gaussian distribution with zero
-mean and standard deviation `σ`. The log-prior is computed using the formula for
-the log-prior of a Gaussian distribution.
-
-# Note
-Ensure the dimensions of `z` match the expected input dimensionality of the
-latent space. Also, ensure that `index` is a valid index for the data points in
-`z`.
-"""
-function spherical_logprior(
-    z::AbstractMatrix,
-    index::Int,
-    σ::Real=1.0f0,
-)
-    # Convert to type T
-    σ = convert(eltype(z), σ)
-
-    # Compute log-prior
-    log_prior = -0.5f0 * sum((z[:, index] / σ) .^ 2) -
-                0.5f0 * length(z[:, index]) * (2.0f0 * log(σ) + log(2.0f0π))
 
     return log_prior
 end # function
@@ -926,7 +867,7 @@ end # function
 
 @doc raw"""
     encoder_logposterior(
-        z::AbstractMatrix,
+        z::AbstractVector,
         encoder::AbstractGaussianLogEncoder,
         encoder_output::NamedTuple,
         index::Int
@@ -937,8 +878,8 @@ specified by `index` given the encoder output under a Gaussian distribution with
 mean and standard deviation given by the encoder.
 
 # Arguments
-- `z::AbstractMatrix`: The latent variable for which the log-posterior is to be
-  computed. Each column of `z` represents a different data point.
+- `z::AbstractVector`: The latent variable for which the log-posterior is to be
+  computed. 
 - `encoder::AbstractGaussianLogEncoder`: The encoder of the VAE, which is not
   used in the computation of the log-posterior. This argument is only used to
   know which method to call.
@@ -967,7 +908,7 @@ Ensure the dimensions of `z` match the expected input dimensionality of the
 `encoder_output`.
 """
 function encoder_logposterior(
-    z::AbstractMatrix,
+    z::AbstractVector,
     encoder::AbstractGaussianLogEncoder,
     encoder_output::NamedTuple,
     index::Int
@@ -978,8 +919,8 @@ function encoder_logposterior(
     σ² = exp.(2logσ)
 
     # Compute variational log-posterior
-    logposterior = -0.5f0 * sum((z[:, index] - μ) .^ 2 ./ σ²) -
-                   sum(logσ) - 0.5f0 * length(z[:, index]) * log(2.0f0π)
+    logposterior = -0.5f0 * sum((z - μ) .^ 2 ./ σ²) -
+                   sum(logσ) - 0.5f0 * length(z) * log(2.0f0π)
 
     return logposterior
 end # function
