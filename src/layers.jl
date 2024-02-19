@@ -117,25 +117,6 @@ layers to be processed by BSON.
 struct Flatten end
 
 @doc raw""" 
-    Flatten()
-
-Constructor for the Flatten struct.
-
-This function allows us to create a Flatten instance.
-
-# Returns
-A Flatten instance.
-
-# Examples
-```julia
-julia> f = Flatten()
-```
-"""
-function Flatten()
-    return Flatten()
-end
-
-@doc raw""" 
     (f::Flatten)(x)
 
 Defines the behavior of the Flatten layer when used in a model. This function is
