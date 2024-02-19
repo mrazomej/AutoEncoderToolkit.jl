@@ -794,8 +794,8 @@ latent space. Also, ensure that `index` is a valid index for the data points in
 """
 function spherical_logprior(
     z::AbstractMatrix,
+    index::Int,
     σ::Real=1.0f0,
-    index::Int
 )
     # Convert to type T
     σ = convert(eltype(z), σ)
