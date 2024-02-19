@@ -394,7 +394,7 @@ end # function
 
 @doc raw"""
     centroids_kmeans(
-        x::AbstractMatrix{<:Number}, 
+        x::AbstractMatrix, 
         n_centroids::Int; 
         assign::Bool=false
     )
@@ -404,7 +404,7 @@ can be used to down-sample the number of points used when computing the metric
 tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractMatrix{<:Number}`: The input data. Rows represent individual
+- `x::AbstractMatrix`: The input data. Rows represent individual
   samples.
 - `n_centroids::Int`: The number of centroids to compute.
 
@@ -424,7 +424,7 @@ centroids = centroids_kmeans(data, 5)
 ```
 """
 function centroids_kmeans(
-    x::AbstractMatrix{<:Number},
+    x::AbstractMatrix,
     n_centroids::Int;
     assign::Bool=false
 )
@@ -444,7 +444,7 @@ end # function
 
 @doc raw"""
     centroids_kmeans(
-        x::AbstractArray{<:Number}, 
+        x::AbstractArray, 
         n_centroids::Int; 
         reshape_centroids::Bool=true, 
         assign::Bool=false
@@ -463,7 +463,7 @@ By default, the output centroids are reshaped back to the original input shape.
 This is controlled by the `reshape_centroids` argument.
 
 # Arguments
-- `x::AbstractArray{<:Number}`: The input data. It can be a multi-dimensional
+- `x::AbstractArray`: The input data. It can be a multi-dimensional
   array where the last dimension represents individual samples.
 - `n_centroids::Int`: The number of centroids to compute.
 
@@ -485,7 +485,7 @@ centroids = centroids_kmeans(data, 5)
 ```
 """
 function centroids_kmeans(
-    x::AbstractArray{<:Number},
+    x::AbstractArray,
     n_centroids::Int;
     reshape_centroids::Bool=true,
     assign::Bool=false
@@ -535,7 +535,7 @@ end # function
 
 @doc raw"""
         centroids_kmedoids(
-            x::AbstractMatrix{<:Number}, n_centroids::Int; assign::Bool=false
+            x::AbstractMatrix, n_centroids::Int; assign::Bool=false
         )
 
 Perform k-medoids clustering on the input and return the centers. This function
@@ -543,7 +543,7 @@ can be used to down-sample the number of points used when computing the metric
 tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractMatrix{<:Number}`: The input data. Rows represent individual
+- `x::AbstractMatrix`: The input data. Rows represent individual
   samples.
 - `n_centroids::Int`: The number of centroids to compute.
 - `dist::Distances.PreMetric=Distances.Euclidean()`: The distance metric to use
@@ -565,7 +565,7 @@ centroids = centroids_kmedoids(data, 5)
 ```
 """
 function centroids_kmedoids(
-    x::AbstractMatrix{<:Number},
+    x::AbstractMatrix,
     n_centroids::Int,
     dist::Distances.PreMetric=Distances.Euclidean();
     assign::Bool=false
@@ -588,7 +588,7 @@ end # function
 
 @doc raw"""
     centroids_kmedoids(
-        x::AbstractArray{<:Number},
+        x::AbstractArray,
         n_centroids::Int,
         dist::Distances.PreMetric=Distances.Euclidean();
         assign::Bool=false
@@ -599,7 +599,7 @@ can be used to down-sample the number of points used when computing the metric
 tensor in training a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractArray{<:Number}`: The input data. The last dimension of `x` should
+- `x::AbstractArray`: The input data. The last dimension of `x` should
   contain each of the samples that should be clustered.
 - `n_centroids::Int`: The number of centroids to compute.
 - `dist::Distances.PreMetric=Distances.Euclidean()`: The distance metric to use
@@ -621,7 +621,7 @@ centroids = centroids_kmedoids(data, 5)
 ```
 """
 function centroids_kmedoids(
-    x::AbstractArray{<:Number},
+    x::AbstractArray,
     n_centroids::Int,
     dist::Distances.PreMetric=Distances.Euclidean();
     assign::Bool=false
@@ -766,7 +766,7 @@ Draw a random sample from a multivariate normal distribution in canonical form.
   the input precision matrix.
 """
 function sample_MvNormalCanon(
-    Σ⁻¹::AbstractMatrix{<:Number}
+    Σ⁻¹::AbstractMatrix
 )
     # Invert the precision matrix
     Σ = LinearAlgebra.inv(Σ⁻¹ |> Flux.cpu)
@@ -915,7 +915,7 @@ ChainRulesCore.@ignore_derivatives unit_vector
 @doc raw"""
     finite_difference_gradient(
         f::Function,
-        x::AbstractVector{<:Number};
+        x::AbstractVector;
         fdtype::Symbol=:central
     )where {T<:AbstractFloat}
 
@@ -955,7 +955,7 @@ finite_difference_gradient(f, x, fdtype=:central)
 """
 function finite_difference_gradient(
     f::Function,
-    x::AbstractVector{<:Number};
+    x::AbstractVector;
     fdtype::Symbol=:central,
 )
     # Check that mode is either :forward or :central
@@ -992,7 +992,7 @@ end # function
 @doc raw"""
     finite_difference_gradient(
         f::Function,
-        x::AbstractMatrix{<:Number};
+        x::AbstractMatrix;
         fdtype::Symbol=:central
     )
 
@@ -1036,7 +1036,7 @@ finite_difference_gradient(f, x, fdtype=:central))
 """
 function finite_difference_gradient(
     f::Function,
-    x::AbstractMatrix{<:Number};
+    x::AbstractMatrix;
     fdtype::Symbol=:central
 )
     # Check that mode is either :forward or :central
@@ -1085,9 +1085,40 @@ end # function
 # Define TaylorDiff gradient function
 # ==============================================================================
 
+@doc raw"""
+    taylordiff_gradient(
+        f::Function,
+        x::AbstractVector
+    )
+
+Compute the gradient of a function `f` at a point `x` using Taylor series
+differentiation.
+
+# Arguments
+- `f::Function`: The function for which the gradient is to be computed.
+- `x::AbstractVector`: The point at which the gradient is to be computed.
+
+# Returns
+- A vector representing the gradient of `f` at `x`.
+
+# Description
+This function computes the gradient of a function `f` at a point `x` using
+Taylor series differentiation. The gradient is a vector where the `i`-th element
+is the partial derivative of `f` with respect to the `i`-th element of `x`.
+
+The partial derivatives are computed using the TaylorDiff.derivative function.
+
+# Example
+```julia
+f(x) = sum(x.^2)
+x = [1.0, 2.0, 3.0]
+taylordiff_gradient(f, x)  
+# Returns the vector [2.0, 4.0, 6.0]
+```
+"""
 function taylordiff_gradient(
     f::Function,
-    x::AbstractVector{<:Number};
+    x::AbstractVector;
 )
     # Compute the finite difference gradient for each element of x
     grad = [
