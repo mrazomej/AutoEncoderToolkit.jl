@@ -4,6 +4,7 @@ import Flux
 # Import AutoDiff backends
 import Zygote
 import ForwardDiff
+import TaylorDiff
 
 # Import GPU libraries
 using CUDA
@@ -45,7 +46,7 @@ using ..VAEs: reparameterize
 
 # Import functions
 using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
-    slogdet
+    slogdet, taylordiff_gradient
 
 using ..HVAEs: quadratic_tempering, null_tempering
 
@@ -1774,6 +1775,50 @@ function ∇hamiltonian_ForwardDiff(
         position_logprior=position_logprior,
         momentum_logprior=momentum_logprior,
     )
+end # function
+
+# ------------------------------------------------------------------------------
+
+function ∇hamiltonian_TaylorDiff(
+    x::AbstractArray{<:Number},
+    z::AbstractVector{<:Number},
+    ρ::AbstractVector{<:Number},
+    G⁻¹::AbstractMatrix{<:Number},
+    logdetG::Union{<:Number,AbstractVector{<:Number}},
+    decoder::AbstractVariationalDecoder,
+    decoder_output::NamedTuple,
+    var::Symbol;
+    reconstruction_loglikelihood::Function=decoder_loglikelihood,
+    position_logprior::Function=spherical_logprior,
+    momentum_logprior::Function=riemannian_logprior,
+)
+    # Check that var is a valid variable
+    if var ∉ (:z, :ρ)
+        error("var must be :z or :ρ")
+    end # if
+
+    # Compute gradient with respect to var
+    if var == :z
+        return taylordiff_gradient(
+            z -> hamiltonian(
+                x, z, ρ, G⁻¹, logdetG, decoder, decoder_output;
+                reconstruction_loglikelihood=reconstruction_loglikelihood,
+                position_logprior=position_logprior,
+                momentum_logprior=momentum_logprior,
+            ),
+            z
+        )
+    elseif var == :ρ
+        return taylordiff_gradient(
+            ρ -> hamiltonian(
+                x, z, ρ, G⁻¹, logdetG, decoder, decoder_output;
+                reconstruction_loglikelihood=reconstruction_loglikelihood,
+                position_logprior=position_logprior,
+                momentum_logprior=momentum_logprior,
+            ),
+            ρ
+        )
+    end # if
 end # function
 
 # ==============================================================================

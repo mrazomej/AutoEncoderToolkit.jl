@@ -6,6 +6,7 @@ import Flux
 
 # Import AutoDiff library
 import ChainRulesCore
+import TaylorDiff
 
 # Import library to find nearest neighbors
 import NearestNeighbors
@@ -1077,5 +1078,22 @@ function finite_difference_gradient(
     end # if
 
     # Return gradient updated to GPU
+    return grad |> Flux.gpu
+end # function
+
+# ==============================================================================
+# Define TaylorDiff gradient function
+# ==============================================================================
+
+function taylordiff_gradient(
+    f::Function,
+    x::AbstractVector{<:Number};
+)
+    # Compute the finite difference gradient for each element of x
+    grad = [
+        TaylorDiff.derivative(f, x, unit_vector(x, i, eltype(x)), 1)
+        for i in eachindex(x)
+    ]
+
     return grad |> Flux.gpu
 end # function
