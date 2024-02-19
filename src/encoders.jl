@@ -759,6 +759,57 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
+    spherical_logprior(
+        z::AbstractMatrix,
+        σ::Real=1.0f0,
+        index::Int
+    )
+
+Computes the log-prior of the latent variable `z` for a single data point
+specified by `index` under a spherical Gaussian distribution with zero mean and
+standard deviation `σ`.
+
+# Arguments
+- `z::AbstractMatrix`: The latent variable for which the log-prior is to be
+  computed. Each column of `z` represents a different data point.
+- `σ::Real=1.0f0`: The standard deviation of the spherical Gaussian
+  distribution.  Defaults to `1.0f0`.
+- `index::Int`: The index of the data point for which the log-prior is to be
+  computed.
+
+# Returns
+- `log_prior::Float32`: The computed log-prior of the latent variable `z` for
+  the specified data point.
+
+# Description
+The function computes the log-prior of the latent variable `z` for a single data
+point specified by `index` under a spherical Gaussian distribution with zero
+mean and standard deviation `σ`. The log-prior is computed using the formula for
+the log-prior of a Gaussian distribution.
+
+# Note
+Ensure the dimensions of `z` match the expected input dimensionality of the
+latent space. Also, ensure that `index` is a valid index for the data points in
+`z`.
+"""
+function spherical_logprior(
+    z::AbstractMatrix,
+    σ::Real=1.0f0,
+    index::Int
+)
+    # Convert to type T
+    σ = convert(eltype(z), σ)
+
+    # Compute log-prior
+    log_prior = -0.5f0 * sum((z[:, index] / σ) .^ 2) -
+                0.5f0 * length(z[:, index]) * (2.0f0 * log(σ) + log(2.0f0π))
+
+    return log_prior
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
     encoder_logposterior(
         z::AbstractVector,
         encoder::AbstractGaussianLogEncoder,
@@ -812,6 +863,7 @@ function encoder_logposterior(
 end # function
 
 # ------------------------------------------------------------------------------
+
 @doc raw"""
     encoder_logposterior(
         z::AbstractMatrix,
@@ -866,6 +918,68 @@ function encoder_logposterior(
             sum(logσ[:, i]) - 0.5f0 * size(z, 1) * log(2.0f0π)
         end for i in axes(z, 2)
     ] |> Flux.gpu
+
+    return logposterior
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    encoder_logposterior(
+        z::AbstractMatrix,
+        encoder::AbstractGaussianLogEncoder,
+        encoder_output::NamedTuple,
+        index::Int
+    )
+
+Computes the log-posterior of the latent variable `z` for a single data point
+specified by `index` given the encoder output under a Gaussian distribution with
+mean and standard deviation given by the encoder.
+
+# Arguments
+- `z::AbstractMatrix`: The latent variable for which the log-posterior is to be
+  computed. Each column of `z` represents a different data point.
+- `encoder::AbstractGaussianLogEncoder`: The encoder of the VAE, which is not
+  used in the computation of the log-posterior. This argument is only used to
+  know which method to call.
+- `encoder_output::NamedTuple`: The output of the encoder, which includes the
+  mean and log standard deviation of the Gaussian distribution for multiple data
+  points.
+- `index::Int`: The index of the data point for which the log-posterior is to be
+  computed.
+
+# Returns
+- `logposterior::Float32`: The computed log-posterior of the latent variable `z`
+    for the specified data point given the encoder output.
+
+# Description
+The function computes the log-posterior of the latent variable `z` for a single
+data point specified by `index` given the encoder output under a Gaussian
+distribution. The mean and log standard deviation of the Gaussian distribution
+are extracted from the `encoder_output` for the specified data point. The
+standard deviation is then computed by exponentiating the log standard
+deviation. The log-posterior is computed using the formula for the log-posterior
+of a Gaussian distribution.
+
+# Note
+Ensure the dimensions of `z` match the expected input dimensionality of the
+`encoder`. Also, ensure that `index` is a valid index for the data points in
+`encoder_output`.
+"""
+function encoder_logposterior(
+    z::AbstractMatrix,
+    encoder::AbstractGaussianLogEncoder,
+    encoder_output::NamedTuple,
+    index::Int
+)
+    # Extract mean and log standard deviation from encoder output
+    µ, logσ = encoder_output.µ[:, index], encoder_output.logσ[:, index]
+    # Compute variance
+    σ² = exp.(2logσ)
+
+    # Compute variational log-posterior
+    logposterior = -0.5f0 * sum((z[:, index] - μ) .^ 2 ./ σ²) -
+                   sum(logσ) - 0.5f0 * length(z[:, index]) * log(2.0f0π)
 
     return logposterior
 end # function
