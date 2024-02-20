@@ -1,8 +1,11 @@
 # Import Zygote
-import Zygote
+using Zygote
+using Zygote: @adjoint
 # Import FillArrays
 using FillArrays: Fill
-
+# Import TaylorDiff
+using TaylorDiff
+using TaylorDiff: value
 
 # ==============================================================================
 # Define Zygote.@adjoint for FillArrays.fill
@@ -14,7 +17,7 @@ using FillArrays: Fill
 
 # Define the Zygote.@adjoint function for the FillArrays.fill method.
 # The function takes a matrix `x` of type Float32 and a size `sz` as input.
-Zygote.@adjoint function (::Type{T})(
+@adjoint function (::Type{T})(
     x::AbstractMatrix{Float32}, sz
 ) where {T<:Fill}
     # Define the backpropagation function for the adjoint. The function takes a
@@ -29,7 +32,7 @@ Zygote.@adjoint function (::Type{T})(
 end # @adjoint
 
 
-Zygote.@adjoint function fill!(A::AbstractArray, x)
+@adjoint function fill!(A::AbstractArray, x)
     # Define the backward pass
     function back(Δ::AbstractArray)
         # The gradient with respect to x is the sum of all elements in Δ
@@ -40,4 +43,19 @@ Zygote.@adjoint function fill!(A::AbstractArray, x)
 
     # Execute the operation and return the result and the backward pass
     return fill!(A, x), back
+end
+
+# ==============================================================================
+# Define Zygote.@adjoint for TaylorDiff.TaylorScalar
+# ==============================================================================
+
+# Note: These are supposed to be included as rrules in the TaylorDiff package.
+# But, for some reason I cannot get them to work. So, I am including them here
+# as I copied them from an old commit in their repo, before they migrated to
+# ChainRulesCore.jl.
+
+@adjoint value(t::TaylorScalar) = value(t), v̄ -> (TaylorScalar(v̄),)
+@adjoint TaylorScalar(v) = TaylorScalar(v), t̄ -> (t̄.value,)
+@adjoint function getindex(t::NTuple{N,T}, i::Int) where {N,T<:Number}
+    getindex(t, i), v̄ -> (tuple(zeros(T, i - 1)..., v̄, zeros(T, N - i)...), nothing)
 end
