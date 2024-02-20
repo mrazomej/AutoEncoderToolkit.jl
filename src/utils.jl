@@ -4,7 +4,7 @@ import CUDA
 # Import ML library
 import Flux
 
-# Import AutoDiff library
+# Import AutoDiff backends
 import ChainRulesCore
 import TaylorDiff
 
