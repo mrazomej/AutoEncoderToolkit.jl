@@ -2,9 +2,10 @@
 import Flux
 
 # Import AutoDiff backends
+import ChainRulesCore
+import TaylorDiff
 import Zygote
 import ForwardDiff
-import TaylorDiff
 
 # Import GPU libraries
 using CUDA
@@ -881,8 +882,8 @@ by the Riemannian metric.
 - `logdetG::Number`: The log determinant of the Riemannian metric tensor.
 
 # Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This is
-  used to scale the inverse metric tensor. Default is `1.0f0`.
+- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
+    is used to scale the inverse metric tensor. Default is `1.0f0`.
 
 # Returns
 The log-prior of the Gaussian distribution with a covariance matrix given by the
@@ -891,8 +892,6 @@ Riemannian metric.
 # Notes
 - Ensure that the dimensions of `ρ` match the dimensions of the latent space of
   the RHVAE model.
-- This function is designed to work with CUDA arrays for GPU-accelerated
-  computations.
 """
 function riemannian_logprior(
     ρ::AbstractVector,
@@ -905,7 +904,7 @@ function riemannian_logprior(
 
     # Return the log-prior
     return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) -
-           0.5f0 * ρ' * G⁻¹ * ρ
+           0.5f0 * LinearAlgebra.dot(ρ, G⁻¹, ρ)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -924,15 +923,15 @@ by the Riemannian metric.
 # Arguments
 - `ρ::AbstractMatrix`: The momentum variables. Each column represents a
   different set of momentum variables.
-- `G⁻¹::AbstractArray{<:Number,3}`: The inverse of the Riemannian metric tensor. Each
-  slice along the third dimension represents the inverse metric tensor at a
+- `G⁻¹::AbstractArray{<:Number,3}`: The inverse of the Riemannian metric tensor.
+  Each slice along the third dimension represents the inverse metric tensor at a
   different point in the latent space.
-- `logdetG::AbstractVector`: The log determinant of the Riemannian metric
-  tensor for each slice of `G⁻¹` along the third dimension.
+- `logdetG::AbstractVector`: The log determinant of the Riemannian metric tensor
+  for each slice of `G⁻¹` along the third dimension.
 
 # Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This is
-  used to scale the inverse metric tensor. Default is `1.0f0`.
+- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
+  is used to scale the inverse metric tensor. Default is `1.0f0`.
 
 # Returns
 The log-prior of the Gaussian distribution with a covariance matrix given by the
@@ -994,10 +993,8 @@ Riemannian metric for the specified data point.
 
 # Notes
 - Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
-  dimensionality of the RHVAE model. Also, ensure that `index` is a valid index
-  for the data points in `ρ` and `G⁻¹`.
-- This function is designed to work with CUDA arrays for GPU-accelerated
-  computations.
+    dimensionality of the RHVAE model. Also, ensure that `index` is a valid
+    index for the data points in `ρ` and `G⁻¹`.
 """
 function riemannian_logprior(
     ρ::AbstractVector,
@@ -1011,7 +1008,120 @@ function riemannian_logprior(
 
     # Return the log-prior
     return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) -
-           0.5f0 * ρ' * G⁻¹ * ρ
+           0.5f0 * LinearAlgebra.dot(ρ, G⁻¹, ρ)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior_loop(
+        ρ::AbstractVector,
+        G⁻¹::AbstractMatrix,
+        logdetG::Number;
+        σ::Number=1.0f0,
+        prod::Symbol=:dot
+    )
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric.
+
+This method performs the product ρᵀ G⁻¹ ρ using a list comprehension. This is
+done to avoid the use of the LinearAlgebra.dot function, which is not compatible
+with the composition of `Zygote.jl` over `TaylorDiff.jl`
+
+# Arguments
+- `ρ::AbstractVector`: The momentum vector.
+- `G⁻¹::AbstractMatrix`: The inverse of the Riemannian metric tensor.
+- `logdetG::Number`: The log determinant of the Riemannian metric tensor.
+
+# Optional Keyword Arguments
+- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
+    is used to scale the inverse metric tensor. Default is `1.0f0`.
+
+# Returns
+The log-prior of the Gaussian distribution with a covariance matrix given by the
+Riemannian metric.
+
+# Notes
+- Ensure that the dimensions of `ρ` match the dimensions of the latent space of
+  the RHVAE model.
+"""
+function riemannian_logprior_loop(
+    ρ::AbstractVector,
+    G⁻¹::AbstractMatrix,
+    logdetG::Number;
+    σ::Number=1.0f0,
+)
+    # Multiply G⁻¹ by σ²
+    G⁻¹ = σ^2 .* G⁻¹
+
+    # Return the log-prior
+    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) -
+           0.5f0 * sum(
+        begin
+            ρ[i] * G⁻¹[i, j] * ρ[j]
+        end for i in eachindex(ρ) for j in eachindex(ρ)
+    )
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior_loop(
+        ρ::AbstractMatrix,
+        G⁻¹::AbstractArray,
+        logdetG::AbstractVector,
+        index::Int;
+        σ::Number=1.0f0,
+    )
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric for a single data point specified by `index`.
+
+This method performs the product ρᵀ G⁻¹ ρ using a list comprehension. This is
+done to avoid the use of the LinearAlgebra.dot function, which is not compatible
+with the composition of `Zygote.jl` over `TaylorDiff.jl`
+
+# Arguments
+- `ρ::AbstractMatrix`: The momentum vectors. Each column of `ρ` represents a
+  different data point.
+- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
+  of `G⁻¹` represents the inverse metric for a different data point.
+- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
+  tensor. Each element of `logdetG` corresponds to a different data point.
+- `index::Int`: The index of the data point for which the log-prior is to be
+  computed.
+
+# Optional Keyword Arguments
+- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
+  is used to scale the inverse metric tensor. Default is `1.0f0`.
+
+# Returns
+The log-prior of the Gaussian distribution with a covariance matrix given by the
+Riemannian metric for the specified data point.
+
+# Notes
+- Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
+    dimensionality of the RHVAE model. Also, ensure that `index` is a valid
+    index for the data points in `ρ` and `G⁻¹`.
+"""
+function riemannian_logprior_loop(
+    ρ::AbstractVector,
+    G⁻¹::AbstractArray,
+    logdetG::AbstractVector,
+    index::Int;
+    σ::Number=1.0f0,
+)
+    # Multiply G⁻¹ by σ²
+    G⁻¹ = σ^2 .* G⁻¹[.., index]
+
+    # Return the log-prior
+    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) -
+           0.5f0 * sum(
+        begin
+            ρ[i] * G⁻¹[i, j] * ρ[j]
+        end for i in eachindex(ρ) for j in eachindex(ρ)
+    )
 end # function
 
 # ==============================================================================
@@ -1960,7 +2070,7 @@ end # function
         var::Symbol;
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior,
+        momentum_logprior::Function=riemannian_logprior_loop,
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using
@@ -2011,8 +2121,8 @@ the point `z`.
   latent space position. Default is `spherical_logprior`. This function must
   take as input the point `z` in the latent space.
 - `momentum_logprior::Function`: The function to compute the log-prior of the
-  momentum. Default is `riemannian_logprior`. This function must take as input
-  the momentum `ρ` and the inverse of the Riemannian metric tensor `G⁻¹`.
+  momentum. Default is `riemannian_logprior_loop`. This function must take as
+  input the momentum `ρ` and the inverse of the Riemannian metric tensor `G⁻¹`.
 
 # Returns
 A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
@@ -2033,7 +2143,7 @@ function ∇hamiltonian_TaylorDiff(
     var::Symbol;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior,
+    momentum_logprior::Function=riemannian_logprior_loop,
 )
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
@@ -2078,7 +2188,7 @@ end # function
         var::Symbol;
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior,
+        momentum_logprior::Function=riemannian_logprior_loop,
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using
@@ -2133,9 +2243,9 @@ the point `z`.
   latent space position. Default is `spherical_logprior`. This function must
   take as input the latent space matrix `z` and the `index`.
 - `momentum_logprior::Function`: The function to compute the log-prior of the
-  momentum. Default is `riemannian_logprior`. This function must take as input
-  the momentum matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`,
-  the log determinants of the Riemannian metric tensor `logdetG`, and the
+  momentum. Default is `riemannian_logprior_loop`. This function must take as
+  input the momentum matrix `ρ`, the inverse of the Riemannian metric tensor
+  `G⁻¹`, the log determinants of the Riemannian metric tensor `logdetG`, and the
   `index`.
 
 # Returns
@@ -2157,7 +2267,7 @@ function ∇hamiltonian_TaylorDiff(
     var::Symbol;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior,
+    momentum_logprior::Function=riemannian_logprior_loop,
 )
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
