@@ -2329,7 +2329,7 @@ end # function
         decoder_output::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
@@ -2365,25 +2365,25 @@ variables `z`. The result is returned as ρ̃.
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
-- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the Riemannian
-  metric tensor. If vector, each element represents the log determinant of the
-  metric tensor at the corresponding column of `z`.
+- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the
+  Riemannian metric tensor. If vector, each element represents the log
+  determinant of the metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default is
-  0.01f0.
+- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default
+  is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`, and `G_inv`.
@@ -2402,11 +2402,11 @@ function _leapfrog_first_step(
     decoder_output::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
 )
     # Copy ρ to iterate over it
@@ -2435,7 +2435,7 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
@@ -2471,18 +2471,18 @@ variables `z`. The result is returned as ρ̃.
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `rhvae::RHVAE`: The `RHVAE` instance.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default is
-  0.01f0.
+- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default
+  is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `reconstruction_loglikelihood`, `position_logprior`, and
   `momentum_logprior`.
@@ -2500,11 +2500,11 @@ function _leapfrog_first_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
 )
@@ -2540,11 +2540,11 @@ end # function
         decoder_output::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior,
+                momentum_logprior=riemannian_logprior_loop,
         ),
     )
 
@@ -2577,24 +2577,24 @@ variables `ρ`. The result is returned as z̄.
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
-- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the Riemannian
-  metric tensor. If vector, each element represents the log determinant of the
-  metric tensor at the corresponding column of `z`.
+- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the
+  Riemannian metric tensor. If vector, each element represents the log
+  determinant of the metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 
 # Optional Keyword Arguments
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is 0.01.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`.
@@ -2613,11 +2613,11 @@ function _leapfrog_second_step(
     decoder_output::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
 )
     # Compute Hamiltonian gradient for initial point not to repeat it at each
@@ -2654,11 +2654,11 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior,
+                momentum_logprior=riemannian_logprior_loop,
         ),
         G_inv::Function=G_inv,
     )
@@ -2691,19 +2691,19 @@ variables `ρ`. The result is returned as z̄.
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `rhvae::RHVAE`: The `RHVAE` instance.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default is
-  0.01f0.
+- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default
+  is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `reconstruction_loglikelihood`, `position_logprior`, and
   `momentum_logprior`.
@@ -2721,11 +2721,11 @@ function _leapfrog_second_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
 )
@@ -2760,11 +2760,11 @@ end # function
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior,
+                momentum_logprior=riemannian_logprior_loop,
         ),
     )
 
@@ -2795,23 +2795,24 @@ variables `z`. The result is returned as ρ̃.
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
-- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the Riemannian
-  metric tensor. If vector, each element represents the log determinant of the
-  metric tensor at the corresponding column of `z`.
+- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the
+  Riemannian metric tensor. If vector, each element represents the log
+  determinant of the metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is 0.01f0.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is
+  0.01f0.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`.
@@ -2829,11 +2830,11 @@ function _leapfrog_third_step(
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
 )
     # Update momentum variable with half step. No fixed-point iterations are
@@ -2853,11 +2854,11 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior,
+                momentum_logprior=riemannian_logprior_loop,
         ),
         G_inv::Function=G_inv,
     )
@@ -2889,17 +2890,18 @@ variables `z`. The result is returned as ρ̃.
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `rhvae::RHVAE`: The `RHVAE` instance.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}`: The leapfrog step size. Default is 0.01f0.
+- `ϵ::Union{<:Number,<:AbstractVector}`: The leapfrog step size. Default is
+  0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `reconstruction_loglikelihood`, `position_logprior`, and
   `momentum_logprior`.
@@ -2917,11 +2919,11 @@ function _leapfrog_third_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
 )
@@ -2957,11 +2959,11 @@ end # function
         metric_param::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior,
+                momentum_logprior=riemannian_logprior_loop,
         ),
         G_inv::Function=G_inv,
     )
@@ -2992,16 +2994,16 @@ helper functions.
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. If 3D
   array, each slice along the third dimension represents the inverse of the
   metric tensor at the corresponding column of `z`.
-- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the Riemannian
-  metric tensor. If vector, each element represents the log determinant of the
-  metric tensor at the corresponding column of `z`.
+- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the
+  Riemannian metric tensor. If vector, each element represents the log
+  determinant of the metric tensor at the corresponding column of `z`.
 - `decoder::AbstractVariationalDecoder`: The decoder instance.
 - `decoder_output::NamedTuple`: The output of the decoder.
 - `metric_param::NamedTuple`: The parameters for the metric tensor.
@@ -3010,8 +3012,8 @@ helper functions.
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is 0.01.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `decoder_loglikelihood`, `position_logprior`,
   `momentum_logprior`, and `G_inv`.
@@ -3035,11 +3037,11 @@ function general_leapfrog_step(
     metric_param::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
 )
@@ -3085,7 +3087,7 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
@@ -3116,19 +3118,19 @@ This function performs these three steps in sequence, using the
 - `x::AbstractArray`: The point in the data space. This does not necessarily
   need to be a vector. Array inputs are supported. The last dimension is assumed
   to have each of the data points.
-- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each
-  column represents a point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum. If matrux, each column represents a
   momentum vector.
 - `rhvae::RHVAE`: The `RHVAE` instance.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default is
-  0.01f0.
+- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default
+  is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
-  the Hamiltonian. Default is `∇hamiltonian_finite`.
+- `∇H::Function=∇hamiltonian_TaylorDiff`: The function to compute the gradient
+  of the Hamiltonian. Default is `∇hamiltonian_TaylorDiff`.
 - `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇H`. Default
   is a tuple with `decoder_loglikelihood`, `position_logprior`, and
   `momentum_logprior`
@@ -3147,11 +3149,11 @@ function general_leapfrog_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
 )
@@ -3213,7 +3215,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                         reconstruction_loglikelihood=decoder_loglikelihood,
                         position_logprior=spherical_logprior,
@@ -3227,8 +3229,8 @@ Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractArray`: The data to be processed. If `Array`, the last
-  dimension must be of size 1.
+- `x::AbstractArray`: The data to be processed. If `Array`, the last dimension
+  must be of size 1.
 - `zₒ::AbstractVector`: The initial latent variable. 
 - `Gₒ⁻¹::AbstractArray`: The initial inverse of the Riemannian metric tensor.
 - `logdetGₒ::Union{<:Number,AbstractVector}`: The log determinant of the initial
@@ -3239,12 +3241,12 @@ Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `metric_param::NamedTuple`: The parameters of the metric tensor.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog steps in the
-  HMC algorithm. This can be a scalar or an array. Default is 0.01f0.  
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog steps in
+  the HMC algorithm. This can be a scalar or an array. Default is 0.01f0.  
 - `K::Int`: The number of leapfrog steps to perform in the Hamiltonian Monte
   Carlo (HMC) algorithm. Default is 3.
-- `βₒ::Number`: The initial inverse temperature for the tempering schedule. Default
-  is 0.3f0.
+- `βₒ::Number`: The initial inverse temperature for the tempering schedule.
+  Default is 0.3f0.
 - `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
 - `∇H::Function`: The function to compute the gradient of the Hamiltonian.
   Default is `∇hamiltonian_finite`.
@@ -3296,11 +3298,11 @@ function general_leapfrog_tempering_step(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -3369,7 +3371,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
@@ -3383,17 +3385,17 @@ Combines the leapfrog and tempering steps into a single function for the
 Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 
 # Arguments
-- `x::AbstractArray`: The data to be processed. If `Array`, the last
-  dimension must be of size 1.
+- `x::AbstractArray`: The data to be processed. If `Array`, the last dimension
+  must be of size 1.
 - `zₒ::AbstractVecOrMat`: The initial latent variable. 
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog steps in the
-  HMC algorithm. This can be a scalar or an array. Default is 0.01f0.  
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog steps in
+  the HMC algorithm. This can be a scalar or an array. Default is 0.01f0.  
 - `K::Int`: The number of leapfrog steps to perform in the Hamiltonian Monte
   Carlo (HMC) algorithm. Default is 3.
-- `βₒ::Number`: The initial inverse temperature for the tempering schedule. Default
-  is 0.3f0.
+- `βₒ::Number`: The initial inverse temperature for the tempering schedule.
+  Default is 0.3f0.
 - `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
 - `∇H::Function`: The function to compute the gradient of the Hamiltonian.
   Default is `∇hamiltonian_finite`.
@@ -3437,11 +3439,11 @@ function general_leapfrog_tempering_step(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -3519,7 +3521,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                         reconstruction_loglikelihood=decoder_loglikelihood,
                         position_logprior=spherical_logprior,
@@ -3541,13 +3543,14 @@ separate input in the form of a NamedTuple.
 - `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
 
 # Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size for the leapfrog steps
-  in the HMC part of the RHVAE. If it is a scalar, the same step size is used
-  for all dimensions. If it is an array, each element corresponds to the step
-  size for a specific dimension.
+- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size for the leapfrog
+  steps in the HMC part of the RHVAE. If it is a scalar, the same step size is
+  used for all dimensions. If it is an array, each element corresponds to the
+  step size for a specific dimension.
 - `K::Int=3`: The number of leapfrog steps to perform in the Hamiltonian Monte
   Carlo (HMC) part of the RHVAE.
-- `βₒ::Number=0.3f0`: The initial inverse temperature for the tempering schedule.
+- `βₒ::Number=0.3f0`: The initial inverse temperature for the tempering
+  schedule.
 - `steps::Int=3`: The number of fixed-point iterations to perform.  
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian in the HMC part of the RHVAE.
@@ -3591,11 +3594,11 @@ function (rhvae::RHVAE{VAE{E,D}})(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -3644,7 +3647,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         K::Int=3,
         βₒ::Number=0.3f0,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
@@ -3659,18 +3662,19 @@ Run the Riemannian Hamiltonian Variational Autoencoder (RHVAE) on the given
 input.
 
 # Arguments
-- `x::AbstractArray`: The input to the RHVAE. If it is a vector, it
-  represents a single data point. If `Array,` the last dimension must contain
-  each of the data points.
+- `x::AbstractArray`: The input to the RHVAE. If it is a vector, it represents a
+  single data point. If `Array,` the last dimension must contain each of the
+  data points.
 
 # Optional Keyword Arguments
 - `K::Int=3`: The number of leapfrog steps to perform in the Hamiltonian Monte
   Carlo (HMC) part of the RHVAE.
-- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size for the leapfrog steps
-  in the HMC part of the RHVAE. If it is a scalar, the same step size is used
-  for all dimensions. If it is an array, each element corresponds to the step
-  size for a specific dimension.
-- `βₒ::Number=0.3f0`: The initial inverse temperature for the tempering schedule.
+- `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size for the leapfrog
+  steps in the HMC part of the RHVAE. If it is a scalar, the same step size is
+  used for all dimensions. If it is an array, each element corresponds to the
+  step size for a specific dimension.
+- `βₒ::Number=0.3f0`: The initial inverse temperature for the tempering
+  schedule.
 - `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian in the HMC part of the RHVAE.
@@ -3713,11 +3717,11 @@ function (rhvae::RHVAE{VAE{E,D}})(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -3865,9 +3869,13 @@ on the dimensionality of the latent space and the initial temperature.
 - `βₒ::Number`: The initial temperature for the tempering steps, where `T` is a
   subtype of `Float32`.
 
+# Optional Keyword Arguments
+- `momentum_logprior::Function`: The function to compute the log prior of the
+  momentum variables. Default is `riemannian_logprior`.
+
 # Returns
-- `log_q̄::Vector`: The second term of the log of the unbiased estimator of
-    the marginal likelihood for each data point.
+- `log_q̄::Vector`: The second term of the log of the unbiased estimator of the
+    marginal likelihood for each data point.
 
 # Note
 This is an internal function and should not be called directly. It is used as
@@ -3876,7 +3884,8 @@ part of the `riemannian_hamiltonian_elbo` function.
 function _log_q̄(
     rhvae::RHVAE,
     rhvae_outputs::NamedTuple,
-    βₒ::Number
+    βₒ::Number;
+    momentum_logprior::Function=riemannian_logprior,
 )
     # log q̄ = log q(zₒ | x) + log p(ρₒ | zₒ) - d/2 log(βₒ)
 
@@ -3888,7 +3897,7 @@ function _log_q̄(
     )
 
     # Compute log p(ρₒ|zₒ)
-    log_p_ρₒ_given_zₒ = riemannian_logprior(
+    log_p_ρₒ_given_zₒ = momentum_logprior(
         rhvae_outputs.phase_space.ρ_init,
         rhvae_outputs.phase_space.Ginv_init,
         rhvae_outputs.phase_space.logdetG_init,
@@ -3912,7 +3921,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
@@ -3921,6 +3930,8 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
+        p_coeff::Number=1.0f0,
+        q_coeff::Number=1.0f0,
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -3940,8 +3951,8 @@ estimate `log q̄`.
   `Array`, the last dimension must contain each of the data points.
 
 ## Optional Keyword Arguments
-- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog integrator
-  (default is 0.01).
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
+  integrator (default is 0.01).
 - `K::Int`: The number of RHMC steps (default is 3).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of leapfrog steps (default is 3).
@@ -3959,10 +3970,14 @@ estimate `log q̄`.
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
+- `p_coeff::Number`: The coefficient for the log likelihood term in the ELBO.
+  Default is 1.0.
+- `q_coeff::Number`: The coefficient for the log variational term in the ELBO.
+  Default is 1.0.
 
 # Returns
-- `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`, also
-  returns the outputs of the RHVAE.
+- `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
+  also returns the outputs of the RHVAE.
 """
 function riemannian_hamiltonian_elbo(
     rhvae::RHVAE,
@@ -3972,15 +3987,17 @@ function riemannian_hamiltonian_elbo(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
+    p_coeff::Number=1.0f0,
+    q_coeff::Number=1.0f0,
 )
     # Forward Pass (run input through reconstruct function)
     rhvae_outputs = rhvae(
@@ -3995,10 +4012,10 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x, rhvae, rhvae_outputs)
+    log_p = p_coeff .* _log_p̄(x, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = q_coeff .* _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4017,7 +4034,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
@@ -4026,6 +4043,8 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
+        p_coeff::Number=1.0f0,
+        q_coeff::Number=1.0f0,
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -4051,8 +4070,8 @@ evidence estimate `log p̄` and the log variational estimate `log q̄`.
   `spherical_logprior`, `:momentum_logprior` set to `riemannian_logprior`, and
   `:G_inv` set to `G_inv`.
 - `K::Int`: The number of RHMC steps (default is 3).
-- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog integrator
-  (default is 0.001).
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
+  integrator (default is 0.001).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of leapfrog steps (default is 3).
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
@@ -4062,10 +4081,14 @@ evidence estimate `log p̄` and the log variational estimate `log q̄`.
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
+- `p_coeff::Number`: The coefficient for the log likelihood term in the ELBO.
+  Default is 1.0.
+- `q_coeff::Number`: The coefficient for the log variational term in the ELBO.
+  Default is 1.0.
 
 # Returns
-- `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`, also
-  returns the outputs of the RHVAE.
+- `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
+  also returns the outputs of the RHVAE.
 """
 function riemannian_hamiltonian_elbo(
     rhvae::RHVAE,
@@ -4074,15 +4097,17 @@ function riemannian_hamiltonian_elbo(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
+    p_coeff::Number=1.0f0,
+    q_coeff::Number=1.0f0,
 )
     # Compute metric_param
     metric_param = update_metric(rhvae)
@@ -4100,10 +4125,10 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x, rhvae, rhvae_outputs)
+    log_p = p_coeff .* _log_p̄(x, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = q_coeff .* _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4125,7 +4150,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H::Function=∇hamiltonian_finite,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
         ∇H_kwargs::Union{NamedTuple,Dict}=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
@@ -4135,7 +4160,7 @@ end # function
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-        reg_strength::Float32=1.0f0
+        reg_strength::Number=1.0f0
     )
 
 Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -4166,7 +4191,11 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
   in `reg_kwargs`.
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
   regularization function.
-- `reg_strength::Float32=1.0f0`: The strength of the regularization term.
+- `reg_strength::Number=1.0f0`: The strength of the regularization term.
+- `p_coeff::Number`: The coefficient for the log likelihood term in the ELBO.
+  Default is 1.0.
+- `q_coeff::Number`: The coefficient for the log variational term in the ELBO.
+  Default is 1.0.
 
 # Returns
 - The computed loss.
@@ -4178,17 +4207,19 @@ function loss(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H::Function=∇hamiltonian_finite,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior,
+        momentum_logprior=riemannian_logprior_loop,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-    reg_strength::Float32=1.0f0
+    reg_strength::Float32=1.0f0,
+    p_coeff::Number=1.0f0,
+    q_coeff::Number=1.0f0,
 )
     # Update metric so that we can backpropagate through it
     metric_param = update_metric(rhvae)
@@ -4202,7 +4233,8 @@ function loss(
             ∇H=∇H, ∇H_kwargs=∇H_kwargs,
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
-            return_outputs=true
+            return_outputs=true,
+            p_coeff=p_coeff, q_coeff=q_coeff
         )
 
         # Compute regularization
@@ -4217,6 +4249,7 @@ function loss(
             ∇H=∇H, ∇H_kwargs=∇H_kwargs,
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
+            p_coeff=p_coeff, q_coeff=q_coeff
         )
     end # if
 end # function
