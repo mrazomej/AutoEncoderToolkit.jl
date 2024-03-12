@@ -280,21 +280,23 @@ network is used to map to the latent space mean `µ` and log standard deviation
 # Fields
 - `encoder::Flux.Chain`: The primary neural network used to process input data
   and map it into a latent space representation.
-- `µ::Flux.Dense`: A dense layer mapping from the output of the `encoder` to the
-  mean of the latent space.
-- `logσ::Flux.Dense`: A dense layer mapping from the output of the `encoder` to
-  the log standard deviation of the latent space.
+- `µ::Union{Flux.Dense,Flux.Chain}`: A dense layer or a chain of layers mapping
+  from the output of the `encoder` to the mean of the latent space.
+- `logσ::Union{Flux.Dense,Flux.Chain}`: A dense layer or a chain of layers
+  mapping from the output of the `encoder` to the log standard deviation of the
+  latent space.
 
 # Example
 ```julia
 enc = JointLogEncoder(
-    Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
+        Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
 )
+```
 """
 struct JointLogEncoder <: AbstractGaussianLogEncoder
     encoder::Flux.Chain
-    µ::Flux.Dense
-    logσ::Flux.Dense
+    µ::Union{Flux.Dense,Flux.Chain}
+    logσ::Union{Flux.Dense,Flux.Chain}
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
