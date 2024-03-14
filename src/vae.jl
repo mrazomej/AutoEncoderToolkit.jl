@@ -514,7 +514,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    train!(vae, x, opt; loss_function, loss_kwargs, verbose)
+    train!(vae, x, opt; loss_function, loss_kwargs, verbose, loss_return)
 
 Customized training function to update parameters of a variational autoencoder
 given a specified loss function.
@@ -533,6 +533,8 @@ given a specified loss function.
   function. These might include parameters like `σ`, or `β`, depending on the
   specific loss function in use.
 - `verbose::Bool=false`: If true, the loss value will be printed during
+  training.
+- `loss_return::Bool=false`: If true, the loss value will be returned after
   training.
 
 # Description
@@ -555,6 +557,7 @@ function train!(
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     verbose::Bool=false,
+    loss_return::Bool=false
 )
     # Compute VAE gradient
     L, ∇L = Flux.withgradient(vae) do vae_model
@@ -563,6 +566,11 @@ function train!(
 
     # Update parameters
     Flux.Optimisers.update!(opt, vae, ∇L[1])
+
+    # Check if loss should be returned
+    if loss_return
+        return L
+    end # if
 
     # Check if loss should be printed
     if verbose
@@ -573,7 +581,10 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        `train!(vae, x_in, x_out, opt; loss_function, loss_kwargs...)`
+        `train!(
+            vae, x_in, x_out, opt; 
+            loss_function, loss_kwargs, verbose, loss_return
+        )`
 
 Customized training function to update parameters of a variational autoencoder
 given a loss function.
@@ -598,6 +609,8 @@ given a loss function.
   specific loss function in use.
 - `verbose::Bool=false`: Whether to print the loss value after each training
   step.
+- `loss_return::Bool=false`: Whether to return the loss value after each
+  training step.
 
 # Description
 Trains the VAE by:
@@ -619,7 +632,8 @@ function train!(
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    verbose::Bool=false
+    verbose::Bool=false,
+    loss_return::Bool=false
 )
     # Compute VAE gradient
     L, ∇L = Flux.withgradient(vae) do vae_model
@@ -628,6 +642,11 @@ function train!(
 
     # Update parameters
     Flux.Optimisers.update!(opt, vae, ∇L[1])
+
+    # Check if loss should be returned
+    if loss_return
+        return L
+    end # if
 
     # Check if loss should be printed
     if verbose

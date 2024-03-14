@@ -4610,7 +4610,9 @@ end # function
         x::AbstractArray, 
         opt::NamedTuple; 
         loss_function::Function=loss, 
-        loss_kwargs::Dict=Dict()
+        loss_kwargs::Dict=Dict(),
+        verbose::Bool=false,
+        loss_return::Bool=false,
     )
 
 Customized training function to update parameters of a Riemannian Hamiltonian
@@ -4632,6 +4634,7 @@ Variational Autoencoder given a specified loss function.
   `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
   on the specific loss function in use.
 - `verbose::Bool=false`: Whether to print the loss at each iteration.
+- `loss_return::Bool=false`: Whether to return the loss at each iteration.
 
 # Description
 Trains the RHVAE by:
@@ -4646,6 +4649,7 @@ function train!(
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict(),
     verbose::Bool=false,
+    loss_return::Bool=false,
 )
     # Compute VAE gradient
     L, ∇L = Flux.withgradient(rhvae) do rhvae_model
@@ -4658,6 +4662,11 @@ function train!(
     # Update metric
     update_metric!(rhvae)
 
+    # Check if loss should be returned
+    if loss_return
+        return L
+    end # if
+
     # Check if loss should be printed
     if verbose
         println("Loss: ", L)
@@ -4666,7 +4675,7 @@ end # function
 
 # ------------------------------------------------------------------------------
 
-"""
+@doc raw"""
     train!(
         rhvae::RHVAE,
         x::CUDA.CuArray,
@@ -4674,6 +4683,7 @@ end # function
         loss_function::Function=loss,
         loss_kwargs::Dict=Dict(),
         verbose::Bool=false,
+        loss_return::Bool=false,
     )
 
 Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
@@ -4689,6 +4699,8 @@ Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
 - `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
   loss function.
 - `verbose::Bool=false`: If `true`, the loss will be printed at each iteration.
+- `loss_return::Bool=false`: If `true`, the loss will be returned at each
+  iteration.
 
 # Description
 This function trains the RHVAE model on a CUDA array `x` using the specified
@@ -4714,6 +4726,7 @@ function train!(
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict(),
     verbose::Bool=false,
+    loss_return::Bool=false,
 )
     # Compute VAE gradient
     L, ∇L = CUDA.allowscalar() do
@@ -4727,6 +4740,11 @@ function train!(
 
     # Update metric
     update_metric!(rhvae)
+
+    # Check if loss should be printed
+    if loss_return
+        return L
+    end # if
 
     # Check if loss should be printed
     if verbose
@@ -4744,7 +4762,9 @@ end # function
         x_out::AbstractArray,
         opt::NamedTuple; 
         loss_function::Function=loss, 
-        loss_kwargs::Dict=Dict()
+        loss_kwargs::Dict=Dict(),
+        verbose::Bool=false,
+        loss_return::Bool=false,
     )
 
 Customized training function to update parameters of a Riemannian Hamiltonian
@@ -4768,6 +4788,7 @@ Variational Autoencoder given a specified loss function.
   `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
   on the specific loss function in use.
 - `verbose::Bool=false`: Whether to print the loss at each iteration.
+- `loss_return::Bool=false`: Whether to return the loss at each iteration.
 
 # Description
 Trains the RHVAE by:
@@ -4783,6 +4804,7 @@ function train!(
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict(),
     verbose::Bool=false,
+    loss_return::Bool=false,
 )
     # Compute VAE gradient
     L, ∇L = Flux.withgradient(rhvae) do rhvae_model
@@ -4794,6 +4816,11 @@ function train!(
 
     # Update metric
     update_metric!(rhvae)
+
+    # Check if loss should be returned
+    if loss_return
+        return L
+    end # if
 
     # Check if loss should be printed
     if verbose
@@ -4812,6 +4839,7 @@ end # function
         loss_function::Function=loss,
         loss_kwargs::Dict=Dict(),
         verbose::Bool=false,
+        loss_return::Bool=false,
     )
 
 Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
@@ -4830,6 +4858,7 @@ Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
 - `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
   loss function.
 - `verbose::Bool=false`: If `true`, the loss will be printed at each iteration.
+- `loss_return::Bool=false`: If `true`, the loss will be returned.
 
 # Description
 This function trains the RHVAE model on a CUDA array `x` using the specified
@@ -4856,6 +4885,7 @@ function train!(
     loss_function::Function=loss,
     loss_kwargs::Dict=Dict(),
     verbose::Bool=false,
+    loss_return::Bool=false,
 )
     # Compute VAE gradient
     L, ∇L = CUDA.allowscalar() do
@@ -4869,6 +4899,11 @@ function train!(
 
     # Update metric
     update_metric!(rhvae)
+
+    # Check if loss should be returned
+    if loss_return
+        return L
+    end # if
 
     # Check if loss should be printed
     if verbose
