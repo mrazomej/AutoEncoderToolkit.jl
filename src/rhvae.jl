@@ -334,7 +334,7 @@ function RHVAE(
     end # if
 
     # Initialize centroids_latent
-    centroids_latent = zeros(Float32, ldim, n_centroids)
+    centroids_latent = zeros(eltype(centroids_data), ldim, n_centroids)
 
     # Initialize L as a 3D array of identity matrices
     L = reduce(
@@ -582,7 +582,7 @@ where each column of `centroids_latent` are the cᵢ.
 
 # Arguments
 - `z::CuArray{<:Number,1}`: The point in the latent space.
-- `centroids_latent::CuArray{Float32,2}`: The centroids in the latent space.
+- `centroids_latent::CuArray{<:Number,2}`: The centroids in the latent space.
 - `M::CuArray{<:Number,3}`: The 3D array representing the metric tensor.
 - `T::N`: The temperature.
 - `λ::N`: The regularization factor.
@@ -3642,7 +3642,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    (rhvae::RHVAE{VAE{AbstractGaussianLogEncoder,D}})(
+    (rhvae::RHVAE{VAE{E,D}})(
         x::AbstractArray;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         K::Int=3,
@@ -3656,7 +3656,7 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         latent::Bool=false,
-    ) where {D<:AbstractVariationalDecoder,T<:Float32}
+    ) where where {E<:AbstractGaussianLogEncoder,D<:AbstractVariationalDecoder}
 
 Run the Riemannian Hamiltonian Variational Autoencoder (RHVAE) on the given
 input.
@@ -3789,8 +3789,8 @@ variables.
     log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ(zₖ))
 
 # Arguments
-- `x::AbstractArray`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points.
+- `x::AbstractArray`: The input data. If `Array`, the last dimension must
+  contain each of the data points.
 - `rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractGaussianLogDecoder}}`:
   The Riemannian Hamiltonian Variational Autoencoder (RHVAE) model.
 - `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the final
@@ -3806,8 +3806,8 @@ variables.
   momentum variables. Default is `riemannian_logprior`.
 
 # Returns
-- `log_p̄::AbstractVector`: The first term of the log of the unbiased
-  estimator of the marginal likelihood for each data point.
+- `log_p̄::AbstractVector`: The first term of the log of the unbiased estimator
+  of the marginal likelihood for each data point.
 
 # Note
 This is an internal function and should not be called directly. It is used as
@@ -3866,8 +3866,7 @@ on the dimensionality of the latent space and the initial temperature.
   model.
 - `rhvae_outputs::NamedTuple`: The outputs of the RHVAE, including the initial
   latent variables `zₒ` and the initial momentum variables `ρₒ`.
-- `βₒ::Number`: The initial temperature for the tempering steps, where `T` is a
-  subtype of `Float32`.
+- `βₒ::Number`: The initial temperature for the tempering steps.
 
 # Optional Keyword Arguments
 - `momentum_logprior::Function`: The function to compute the log prior of the
@@ -3943,15 +3942,15 @@ difference between the `log p̄` and `log q̄` as
 
 elbo = mean(log p̄ - α * log q̄),
 
-where `α` is a scalar that can be used to weight the relative importance of 
-each term in the ELBO.
+where `α` is a scalar that can be used to weight the relative importance of each
+term in the ELBO.
 
 # Arguments
 - `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
   space.
 - `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
-- `x::AbstractArray`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points.
+- `x::AbstractArray`: The input data. If `Array`, the last dimension must
+  contain each of the data points.
 
 ## Optional Keyword Arguments
 - `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
@@ -4061,7 +4060,7 @@ term in the ELBO.
 # Arguments
 - `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
   space.
-- `x::AbstractVector`: The input data, where `T` is a subtype of `Float32`.
+- `x::AbstractVector`: The input data.
 
 ## Optional Keyword Arguments
 - `∇H::Function`: The gradient function of the Hamiltonian. This function must
@@ -4137,6 +4136,243 @@ function riemannian_hamiltonian_elbo(
     end # if
 end # function
 
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_hamiltonian_elbo(
+        rhvae::RHVAE,
+        metric_param::NamedTuple,
+        x_in::AbstractArray,
+        x_out::AbstractArray;
+        ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
+        K::Int=3,
+        βₒ::Number=0.3f0,
+        steps::Int=3,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+            reconstruction_loglikelihood=decoder_loglikelihood,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
+            G_inv=G_inv,
+        ),
+        tempering_schedule::Function=quadratic_tempering,
+        return_outputs::Bool=false,
+        α::Number=1.0f0,
+    )
+
+Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
+lower bound (ELBO) for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+This function takes as input an RHVAE, a NamedTuple of metric parameters, and a
+vector of input data `x`. It performs `K` RHMC steps with a leapfrog integrator
+and a tempering schedule to estimate the ELBO. The ELBO is computed as the
+difference between the `log p̄` and `log q̄` as
+
+elbo = mean(log p̄ - α * log q̄),
+
+where `α` is a scalar that can be used to weight the relative importance of each
+term in the ELBO.
+
+# Arguments
+- `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
+  space.
+- `metric_param::NamedTuple`: The parameters used to compute the metric tensor.
+- `x_in::AbstractArray`: Input data to the RHVAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
+- `x_out::AbstractArray`: Target data to compute the reconstruction error. The
+  last dimension is taken as having each of the samples in a batch.
+
+## Optional Keyword Arguments
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
+  integrator (default is 0.01).
+- `K::Int`: The number of RHMC steps (default is 3).
+- `βₒ::Number`: The initial inverse temperature (default is 0.3).
+- `steps::Int`: The number of leapfrog steps (default is 3).
+- `∇H::Function`: The gradient function of the Hamiltonian. This function must
+  take both `x` and `z` as arguments, but only computes the gradient with
+  respect to `z`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+  to the `∇H` function. Defaults to a NamedTuple with `:decoder_loglikelihood`
+  set to `decoder_loglikelihood`, `:position_logprior` set to
+  `spherical_logprior`, and `:momentum_logprior` set to `riemannian_logprior`.
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor. Defaults to `G_inv`.
+- `tempering_schedule::Function`: The tempering schedule function used in the
+  RHMC (default is `quadratic_tempering`).
+- `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
+  to `false`. NOTE: This is necessary to avoid computing the forward pass twice
+  when computing the loss function with regularization.
+- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
+
+# Returns
+- `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
+  also returns the outputs of the RHVAE.
+"""
+function riemannian_hamiltonian_elbo(
+    rhvae::RHVAE,
+    metric_param::NamedTuple,
+    x_in::AbstractArray,
+    x_out::AbstractArray;
+    ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
+    K::Int=3,
+    βₒ::Number=0.3f0,
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        reconstruction_loglikelihood=decoder_loglikelihood,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior_loop,
+    ),
+    G_inv::Function=G_inv,
+    tempering_schedule::Function=quadratic_tempering,
+    return_outputs::Bool=false,
+    α::Number=1.0f0,
+)
+    # Forward Pass (run input through reconstruct function)
+    rhvae_outputs = rhvae(
+        x_in, metric_param;
+        K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
+        ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+        tempering_schedule=tempering_schedule,
+        G_inv=G_inv,
+        latent=true
+    )
+    # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
+
+    # log p̄ = log p(x, zₖ) + log p(ρₖ)
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
+    log_p = _log_p̄(x_out, rhvae, rhvae_outputs)
+
+    # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
+    log_q = α .* _log_q̄(rhvae, rhvae_outputs, βₒ)
+
+    if return_outputs
+        return StatsBase.mean(log_p - log_q), rhvae_outputs
+    else
+        return StatsBase.mean(log_p - log_q)
+    end # if
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_hamiltonian_elbo(
+        rhvae::RHVAE,
+        x_in::AbstractArray,
+        x_out::AbstractArray;
+        K::Int=3,
+        ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
+        βₒ::Number=0.3f0,
+        steps::Int=3,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+            reconstruction_loglikelihood=decoder_loglikelihood,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
+            G_inv=G_inv,
+        ),
+        tempering_schedule::Function=quadratic_tempering,
+        return_outputs::Bool=false,
+        α::Number=1.0f0,
+    )
+
+Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
+lower bound (ELBO) for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+This function takes as input an RHVAE, a NamedTuple of metric parameters, and a
+vector of input data `x`. It performs `K` RHMC steps with a leapfrog integrator
+and a tempering schedule to estimate the ELBO. The ELBO is computed as the
+difference between the `log p̄` and `log q̄` as
+    
+elbo = mean(log p̄ - α * log q̄),
+    
+where `α` is a scalar that can be used to weight the relative importance of each
+term in the ELBO.
+
+# Arguments
+- `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
+  space.
+- `x_in::AbstractArray`: Input data to the RHVAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
+- `x_out::AbstractArray`: Target data to compute the reconstruction error. The
+  last dimension is taken as having each of the samples in a batch.
+
+## Optional Keyword Arguments
+- `∇H::Function`: The gradient function of the Hamiltonian. This function must
+  take both `x` and `z` as arguments, but only computes the gradient with
+  respect to `z`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+  to the `∇H` function. Defaults to a NamedTuple with `:decoder_loglikelihood`
+  set to `decoder_loglikelihood`, `:position_logprior` set to
+  `spherical_logprior`, `:momentum_logprior` set to `riemannian_logprior`, and
+  `:G_inv` set to `G_inv`.
+- `K::Int`: The number of RHMC steps (default is 3).
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
+  integrator (default is 0.001).
+- `βₒ::Number`: The initial inverse temperature (default is 0.3).
+- `steps::Int`: The number of leapfrog steps (default is 3).
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor (default is `G_inv`).
+- `tempering_schedule::Function`: The tempering schedule function used in the
+  RHMC (default is `quadratic_tempering`).
+- `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
+  to `false`. NOTE: This is necessary to avoid computing the forward pass twice
+  when computing the loss function with regularization.
+- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
+
+# Returns
+- `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
+  also returns the outputs of the RHVAE.
+"""
+function riemannian_hamiltonian_elbo(
+    rhvae::RHVAE,
+    x_in::AbstractArray,
+    x_out::AbstractArray;
+    K::Int=3,
+    ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
+    βₒ::Number=0.3f0,
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        reconstruction_loglikelihood=decoder_loglikelihood,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior_loop,
+    ),
+    G_inv::Function=G_inv,
+    tempering_schedule::Function=quadratic_tempering,
+    return_outputs::Bool=false,
+    α::Number=1.0f0,
+)
+    # Compute metric_param
+    metric_param = update_metric(rhvae)
+    # Forward Pass (run input through reconstruct function)
+    rhvae_outputs = rhvae(
+        x_in, metric_param;
+        K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
+        ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+        tempering_schedule=tempering_schedule,
+        G_inv=G_inv,
+        latent=true
+    )
+
+    # Compute log evidence estimate log π̂(x) = log p̄ - log q̄
+
+    # log p̄ = log p(x, zₖ) + log p(ρₖ)
+    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
+    log_p = _log_p̄(x_out, rhvae, rhvae_outputs)
+
+    # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
+    log_q = α .* _log_q̄(rhvae, rhvae_outputs, βₒ)
+
+    if return_outputs
+        return StatsBase.mean(log_p - log_q), rhvae_outputs
+    else
+        # Return ELBO normalized by number of samples
+        return StatsBase.mean(log_p - log_q)
+    end # if
+end # function
+
 # ==============================================================================
 # RHVAE Loss function
 # ==============================================================================
@@ -4168,14 +4404,14 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 # Arguments
 - `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
   space.
-  - `x::AbstractArray`: The input data, where `T` is a subtype of `Float32`. If
-  `Array`, the last dimension must contain each of the data points.
+- `x::AbstractArray`: Input data to the RHVAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
 
 ## Optional Keyword Arguments
 - `K::Int`: The number of HMC steps (default is 3).
-- `ϵ::Union{Float32,<:AbstractVector{Float32}}`: The step size for the leapfrog
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
   integrator (default is 0.001).
-- `βₒ::Float32`: The initial inverse temperature (default is 0.3).
+- `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of steps in the leapfrog integrator (default is 3).
 - `∇H::Function`: The gradient function of the Hamiltonian (default is
   `∇hamiltonian`).
@@ -4186,7 +4422,7 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `tempering_schedule::Function`: The tempering schedule function used in the
   HMC (default is `quadratic_tempering`).
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
-  regularization term based on the VAE outputs. Should return a Float32. This
+  regularization term based on the VAE outputs. This
   function must take as input the VAE outputs and the keyword arguments provided
   in `reg_kwargs`.
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
@@ -4214,7 +4450,7 @@ function loss(
     tempering_schedule::Function=quadratic_tempering,
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-    reg_strength::Float32=1.0f0,
+    reg_strength::Number=1.0f0,
     α::Number=1.0f0,
 )
     # Update metric so that we can backpropagate through it
@@ -4250,6 +4486,120 @@ function loss(
     end # if
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    loss(
+        rhvae::RHVAE,
+        x_in::AbstractArray,
+        x_out::AbstractArray;
+        K::Int=3,
+        ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
+        βₒ::Number=0.3f0,
+        steps::Int=3,
+        ∇H::Function=∇hamiltonian_TaylorDiff,
+        ∇H_kwargs::Union{NamedTuple,Dict}=(
+            reconstruction_loglikelihood=decoder_loglikelihood,
+            position_logprior=spherical_logprior,
+            momentum_logprior=riemannian_logprior,
+        ),
+        G_inv::Function=G_inv,
+        tempering_schedule::Function=quadratic_tempering,
+        reg_function::Union{Function,Nothing}=nothing,
+        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_strength::Number=1.0f0
+        α::Number=1.0f0
+    )
+
+Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
+
+# Arguments
+- `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
+  space.
+- `x_in::AbstractArray`: Input data to the RHVAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
+- `x_out::AbstractArray`: Target data to compute the reconstruction error. The
+  last dimension is taken as having each of the samples in a batch.
+
+## Optional Keyword Arguments
+- `K::Int`: The number of HMC steps (default is 3).
+- `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
+  integrator (default is 0.001).
+- `βₒ::Number`: The initial inverse temperature (default is 0.3).
+- `steps::Int`: The number of steps in the leapfrog integrator (default is 3).
+- `∇H::Function`: The gradient function of the Hamiltonian (default is
+  `∇hamiltonian`).
+- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+  to the `∇H` function.
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor (default is `G_inv`).
+- `tempering_schedule::Function`: The tempering schedule function used in the
+  HMC (default is `quadratic_tempering`).
+- `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
+  regularization term based on the VAE outputs. This function must take as input
+  the VAE outputs and the keyword arguments provided in `reg_kwargs`.
+- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+  regularization function.
+- `reg_strength::Number=1.0f0`: The strength of the regularization term.
+- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
+
+# Returns
+- The computed loss.
+"""
+function loss(
+    rhvae::RHVAE,
+    x_in::AbstractArray,
+    x_out::AbstractArray;
+    K::Int=3,
+    ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
+    βₒ::Number=0.3f0,
+    steps::Int=3,
+    ∇H::Function=∇hamiltonian_TaylorDiff,
+    ∇H_kwargs::Union{NamedTuple,Dict}=(
+        reconstruction_loglikelihood=decoder_loglikelihood,
+        position_logprior=spherical_logprior,
+        momentum_logprior=riemannian_logprior_loop,
+    ),
+    G_inv::Function=G_inv,
+    tempering_schedule::Function=quadratic_tempering,
+    reg_function::Union{Function,Nothing}=nothing,
+    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_strength::Number=1.0f0,
+    α::Number=1.0f0,
+)
+    # Update metric so that we can backpropagate through it
+    metric_param = update_metric(rhvae)
+
+    # Check if there is regularization 
+    if reg_function !== nothing
+        # Compute ELBO
+        elbo, rhvae_outputs = riemannian_hamiltonian_elbo(
+            rhvae, metric_param, x_in, x_out;
+            K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
+            ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+            G_inv=G_inv,
+            tempering_schedule=tempering_schedule,
+            return_outputs=true,
+            α=α
+        )
+
+        # Compute regularization
+        reg_term = reg_function(rhvae_outputs; reg_kwargs...)
+
+        return -elbo + reg_strength * reg_term
+    else
+        # Compute ELBO
+        return -riemannian_hamiltonian_elbo(
+            rhvae, metric_param, x_int, x_out;
+            K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
+            ∇H=∇H, ∇H_kwargs=∇H_kwargs,
+            G_inv=G_inv,
+            tempering_schedule=tempering_schedule,
+            α=α
+        )
+    end # if
+end # function
+
 # ==============================================================================
 # train! function for RHVAEs
 # ==============================================================================
@@ -4257,7 +4607,7 @@ end # function
 @doc raw"""
     train!(
         rhvae::RHVAE, 
-        x::AbstractVecOrMat{Float32}, 
+        x::AbstractArray, 
         opt::NamedTuple; 
         loss_function::Function=loss, 
         loss_kwargs::Dict=Dict()
@@ -4269,8 +4619,8 @@ Variational Autoencoder given a specified loss function.
 # Arguments
 - `rhvae::RHVAE`: A struct containing the elements of a Riemannian Hamiltonian
   Variational Autoencoder.
-- `x::AbstractVecOrMat{Float32}`: Data on which to evaluate the loss function.
-  Columns represent individual samples.
+- `x::AbstractArray`: Input data to the RHVAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
 - `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
   initialized using `Flux.Optimisers.update!`.
 
@@ -4319,7 +4669,7 @@ end # function
 """
     train!(
         rhvae::RHVAE,
-        x::CUDA.CuArray{Float32},
+        x::CUDA.CuArray,
         opt::NamedTuple;
         loss_function::Function=loss,
         loss_kwargs::Dict=Dict(),
@@ -4330,7 +4680,7 @@ Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
 
 # Arguments
 - `rhvae::RHVAE`: The RHVAE model to be trained.
-- `x::CUDA.CuArray{Float32}`: The training data.
+- `x::CUDA.CuArray`: The training data.
 - `opt::NamedTuple`: The optimizer to be used for training.
 
 # Optional Keyword Arguments
@@ -4369,6 +4719,148 @@ function train!(
     L, ∇L = CUDA.allowscalar() do
         Flux.withgradient(rhvae) do rhvae_model
             loss_function(rhvae_model, x; loss_kwargs...)
+        end # do block
+    end
+
+    # Update parameters
+    Flux.Optimisers.update!(opt, rhvae, ∇L[1])
+
+    # Update metric
+    update_metric!(rhvae)
+
+    # Check if loss should be printed
+    if verbose
+        println("Loss: ", L)
+    end # if
+end # function
+
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    train!(
+        rhvae::RHVAE, 
+        x_in::AbstractArray,
+        x_out::AbstractArray,
+        opt::NamedTuple; 
+        loss_function::Function=loss, 
+        loss_kwargs::Dict=Dict()
+    )
+
+Customized training function to update parameters of a Riemannian Hamiltonian
+Variational Autoencoder given a specified loss function.
+
+# Arguments
+- `rhvae::RHVAE`: A struct containing the elements of a Riemannian Hamiltonian
+  Variational Autoencoder.
+- `x_in::AbstractArray`: Input data to the RHVAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
+- `x_out::AbstractArray`: Target data to compute the reconstruction error. The
+  last dimension is taken as having each of the samples in a batch.
+- `opt::NamedTuple`: State of the optimizer for updating parameters. Typically
+  initialized using `Flux.Optimisers.update!`.
+
+# Optional Keyword Arguments
+- `loss_function::Function=loss`: The loss function used for training. It should
+  accept the RHVAE model, data `x`, and keyword arguments in that order.
+- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might
+  include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
+  `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
+  on the specific loss function in use.
+- `verbose::Bool=false`: Whether to print the loss at each iteration.
+
+# Description
+Trains the RHVAE by:
+1. Computing the gradient of the loss w.r.t the RHVAE parameters.
+2. Updating the RHVAE parameters using the optimizer.
+3. Updating the metric parameters.
+"""
+function train!(
+    rhvae::RHVAE,
+    x_in::AbstractArray,
+    x_out::AbstractArray,
+    opt::NamedTuple;
+    loss_function::Function=loss,
+    loss_kwargs::Dict=Dict(),
+    verbose::Bool=false,
+)
+    # Compute VAE gradient
+    L, ∇L = Flux.withgradient(rhvae) do rhvae_model
+        loss_function(rhvae_model, x_in, x_out; loss_kwargs...)
+    end # do block
+
+    # Update parameters
+    Flux.Optimisers.update!(opt, rhvae, ∇L[1])
+
+    # Update metric
+    update_metric!(rhvae)
+
+    # Check if loss should be printed
+    if verbose
+        println("Loss: ", L)
+    end # if
+end # function
+
+# ------------------------------------------------------------------------------
+
+"""
+    train!(
+        rhvae::RHVAE,
+        x_in::CUDA.CuArray,
+        x_out::CUDA.CuArray,
+        opt::NamedTuple;
+        loss_function::Function=loss,
+        loss_kwargs::Dict=Dict(),
+        verbose::Bool=false,
+    )
+
+Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
+
+# Arguments
+- `rhvae::RHVAE`: The RHVAE model to be trained.
+- `x_in::CUDA.CuArray`: Input data to the RHVAE encoder. The last dimension is
+  taken as having each of the samples in a batch.
+- `x_out::CUDA.CuArray`: Target data to compute the reconstruction error. The
+  last dimension is taken as having each of the samples in a batch.
+- `opt::NamedTuple`: The optimizer to be used for training.
+
+# Optional Keyword Arguments
+- `loss_function::Function=loss`: The loss function to be used for training.
+  Defaults to the `loss` function.
+- `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
+  loss function.
+- `verbose::Bool=false`: If `true`, the loss will be printed at each iteration.
+
+# Description
+This function trains the RHVAE model on a CUDA array `x` using the specified
+optimizer `opt`. The training process involves computing the gradient of the
+loss function with respect to the model parameters, and then updating the model
+parameters using the optimizer.
+
+The gradient computation is performed on the GPU and requires the use of
+`CUDA.allowscalar` to ensure that backpropagation can work with CUDA arrays.
+
+# Example
+```julia
+rhvae = RHVAE(...)
+x = CUDA.cu(rand(Float32, 100, 100))
+opt = (lr=0.01,)
+train!(rhvae, x, opt; verbose=true)
+```
+"""
+function train!(
+    rhvae::RHVAE,
+    x_in::CUDA.CuArray,
+    x_out::CUDA.CuArray,
+    opt::NamedTuple;
+    loss_function::Function=loss,
+    loss_kwargs::Dict=Dict(),
+    verbose::Bool=false,
+)
+    # Compute VAE gradient
+    L, ∇L = CUDA.allowscalar() do
+        Flux.withgradient(rhvae) do rhvae_model
+            loss_function(rhvae_model, x_in, x_out; loss_kwargs...)
         end # do block
     end
 
