@@ -16,26 +16,27 @@ using Clustering: kmedoids
 
 # Import Abstract Types
 using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder,
-    SplitLogDecoder, AbstractDeterministicDecoder, AbstractVariationalEncoder
+    SplitLogDecoder, JointDecoder, SplitDecoder,
+    AbstractDeterministicDecoder, AbstractVariationalEncoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Differential Geometry on Riemmanian Manifolds
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
 @doc raw"""
-    pullback_metric(manifold, val)
+    pullback_metric(manifold::Function, z::AbstractVector)
 
 Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold using
 numerical differentiation with `Zygote.jl`. The metric is computed at a specific
-point on the manifold.
+point `z` on the manifold.
 
 # Arguments
 - `manifold::Function`: A function defining the manifold.
-- `val::Vector{<:AbstractFloat}`: A vector specifying the point on the manifold
-  where the metric should be evaluated.
+- `z::AbstractVector`: A vector specifying the point on the manifold where
+  the metric should be evaluated.
 
 # Returns
-- `M::Matrix{<:AbstractFloat}`: The Riemannian metric matrix evaluated at `val`.
+- `M::Matrix`: The Riemannian metric matrix evaluated at `val`.
 
 # Example
 ```julia-repl
@@ -45,123 +46,96 @@ M = pullback_metric(manifold, val)
 ```
 """
 function pullback_metric(
-    manifold::Function, val::Vector{T}
-)::Matrix{T} where {T<:AbstractFloat}
+    manifold::Function, z::AbstractVector
+)
     # Compute Jacobian
-    jac = first(Zygote.jacobian(manifold, val))
+    jac = first(Zygote.jacobian(manifold, z))
     # Compute the metric
     return jac' * jac
 end # function
 
-@doc raw"""
-    pullback_metric(manifold, val)
-
-Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold defined
-by a decoder neural network using numerical differentiation with `Zygote.jl`.
-The metric is evaluated based on the outputs of the network with respect to its
-inputs.
-
-# Arguments
-- `manifold::Flux.Chain`: A neural network model (as a chain) defining the
-  manifold.
-- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
-  (neural network) where the metric should be evaluated.
-
-# Returns
-- `M::Matrix{<:AbstractFloat}`: The Riemannian metric matrix evaluated at `val`.
-
-# Example
-```julia-repl
-model = Chain(Dense(2, 3, relu), Dense(3, 2))
-val = [1.0, 2.0]
-M = pullback_metric(model, val)
-```
-"""
-function pullback_metric(
-    manifold::Flux.Chain, val::Vector{T}
-)::Matrix{T} where {T<:AbstractFloat}
-    # Compute Jacobian with respect to the input
-    jac = first(Zygote.jacobian(manifold, val))
-    # Compute the metric
-    return jac' * jac
-end # function
+# ------------------------------------------------------------------------------
 
 @doc raw"""
-    pullback_metric(manifold::AbstractDeterministicDecoder, 
-    val::Vector{T})::Matrix{T} where {T<:AbstractFloat}
+    pullback_metric(decoder::AbstractDeterministicDecoder, z::AbstractVector)
 
-Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold defined
-by the decoder structure of a variational autoencoder (VAE) using numerical
-differentiation with `Zygote.jl`. The metric is the squared Jacobian matrix,
-representing the local geometry of the decoder's output space in relation to its
+Compute the Riemannian metric (pullback metric) `M = JᵀJ` at a specific point on
+a manifold. The manifold is defined by the decoder structure of an autoencoder
+(AE). This function uses numerical differentiation with `Zygote.jl` to compute
+the metric. The metric is the squared Jacobian matrix, which encapsulates the
+local geometric properties of the decoder's output space with respect to its
 input space.
 
 # Arguments
-- `manifold::AbstractDeterministicDecoder`: A VAE decoder structure containing a
-  neural network model that defines the manifold. It should be an instance of a
-  subtype of `AbstractDeterministicDecoder`.
-- `val::Vector{T}`: A vector of type `T` where `T` is a subtype of
-  `AbstractFloat`, specifying the input to the decoder (neural network) where
-  the metric should be evaluated.
+- `decoder::AbstractDeterministicDecoder`: A deterministic decoder structure
+  that defines the manifold. It should be an instance of a subtype of
+  `AbstractDeterministicDecoder`.
+- `z::AbstractVector`: A vector specifying the point in the latent space of the
+  manifold where the metric should be evaluated.
 
 # Returns
-- `M::Matrix{T}`: The Riemannian metric matrix evaluated at `val`, where `M` is
-  of the same floating-point type as the input `val`.
+- `M::Matrix`: The Riemannian metric matrix evaluated at `z`.
 
-# Example
-```julia-repl
-decoder_model = Chain(Dense(2, 3, relu), Dense(3, 2))
-decoder = SimpleDecoder(decoder_model)
-val = [1.0, 2.0]
-M = pullback_metric(decoder, val)
-```
+# Citation
+> Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
+> Curvature of Deep Generative Models. Preprint at
+> http://arxiv.org/abs/1710.11379 (2021).
 """
 function pullback_metric(
-    manifold::AbstractDeterministicDecoder, val::Vector{T}
-)::Matrix{T} where {T<:AbstractFloat}
+    decoder::AbstractDeterministicDecoder, z::AbstractVector
+)
     # Compute Jacobian with respect to the input
-    jac = first(Zygote.jacobian(manifold.decoder, val))
+    jac = first(Zygote.jacobian(decoder.decoder, z))
     # Compute the metric
     return jac' * jac
 end # function
 
-@doc raw"""
-    pullback_metric(manifold, val)
+# ------------------------------------------------------------------------------
 
-Compute the Riemannian metric (pull-back metric) `M = JᵀJ` of a manifold defined
-by the decoder structure of a variational autoencoder (VAE) using numerical
+@doc raw"""
+        pullback_metric(decoder::SimpleDecoder, z::AbstractVector)
+
+Compute the Riemannian metric (pull-back metric) of a manifold defined by the
+decoder structure of a variational autoencoder (VAE) using numerical
 differentiation with `Zygote.jl`. The metric is evaluated based on the outputs
-of the decoder with respect to its inputs.
+of the decoder with respect to its inputs. The metric is defined as
+
+M̲̲ = J̲̲_µᵀ J̲̲_µ
+
+where J̲̲_µ is the Jacobian matrix of the decoder with respect to its input.
+
+The `SimpleDecoder` is a variational decoder that assumes a constant diagonal
+covariance matrix in the output. Therefore, the second term of the metric, which
+would account for the variance, is not added in this case.
 
 # Arguments
-- `manifold::SimpleDecoder`: A VAE decoder structure containing a neural network
-  model that defines the manifold.
-- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the decoder
-  (neural network) where the metric should be evaluated.
+- `decoder::SimpleDecoder`: A Variational decoder structure containing a neural
+  network model that defines the manifold. It assumes a constant diagonal
+  covariance matrix in the output.
+- `z::AbstractVector`: A vector specifying the latent space input to the decoder
+  where the metric should be evaluated.
 
 # Returns
-- `M::Matrix{<:AbstractFloat}`: The Riemannian metric matrix evaluated at `val`.
+- `M::AbstractMatrix`: The Riemannian metric matrix evaluated at `z`.
 
-# Example
-```julia-repl
-decoder_model = Chain(Dense(2, 3, relu), Dense(3, 2))
-decoder = SimpleDecoder(decoder_model)
-val = [1.0, 2.0]
-M = pullback_metric(decoder, val)
-```
+# Citation
+> Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
+> Curvature of Deep Generative Models. Preprint at
+> http://arxiv.org/abs/1710.11379 (2021).
 """
 function pullback_metric(
-    manifold::SimpleDecoder, val::Vector{T}
-)::Matrix{T} where {T<:AbstractFloat}
+    decoder::SimpleDecoder, z::AbstractVector
+)
     # Compute Jacobian with respect to the input
-    jac = first(Zygote.jacobian(manifold.decoder, val))
+    jac = first(Zygote.jacobian(decoder.decoder, z))
     # Compute the metric
     return jac' * jac
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
-    pullback_metric(manifold::JointLogDecoder, val::Vector{T}) 
-        where {T<:AbstractFloat}
+    pullback_metric(decoder::JointLogDecoder, z::AbstractVector) 
 
 Compute the Riemannian metric (pull-back metric) `M̲̲` for a stochastic manifold
 defined by a `JointLogDecoder` using numerical differentiation with `Zygote.jl`.
@@ -169,48 +143,44 @@ The metric is evaluated based on the outputs of the neural network with respect
 to its inputs.
 
 The Riemannian metric of a stochastic manifold with a mean `µ` and standard
-deviation `σ` is given by: M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ Where J̲̲_µ and
-J̲̲_σ are the Jacobians of `µ` and `σ` respectively with respect to the input.
-Given that we compute the Jacobian of `logσ` directly, the Jacobian of `σ` is
-obtained using the chain rule.
+deviation `σ` is given by: 
+
+M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ 
+
+where J̲̲_µ and J̲̲_σ are the Jacobians of `µ` and `σ` respectively with respect
+to the input. Given that we compute the Jacobian of `logσ` directly, the
+Jacobian of `σ` is obtained using the chain rule.
 
 # Arguments
-- `manifold::JointLogDecoder`: A VAE decoder structure that has separate paths
+- `decoder::JointLogDecoder`: A VAE decoder structure that has separate paths
   for determining both the mean and log standard deviation of the latent space.
-- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
-  (neural network) where the metric should be evaluated.
+- `z::AbstractVector`: A vector specifying the latent space input to the decoder
+  where the metric should be evaluated.
 
 # Returns
-- `M̲̲::Matrix{<:AbstractFloat}`: The Riemannian metric matrix evaluated at
-  `val`.
+- `M̲̲::AbstractMatrix`: The Riemannian metric matrix evaluated at `z`.
 
-# Example
-```julia-repl
-model = JointLogDecoder(
-    Chain(Dense(2, 3, relu), Dense(3, 2)),
-    Dense(2, 1),
-    Dense(2, 1)
-)
-val = [1.0, 2.0]
-M = pullback_metric(model, val)
-```
+# Citation
+> Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
+> Curvature of Deep Generative Models. Preprint at
+> http://arxiv.org/abs/1710.11379 (2021).
 """
 function pullback_metric(
-    manifold::JointLogDecoder, val::Vector{T}
-)::Matrix{T} where {T<:AbstractFloat}
+    decoder::JointLogDecoder, z::AbstractVector
+)
     # Compute Jacobian with respect to the input for the mean µ
     jac_µ = first(
-        Zygote.jacobian(Flux.Chain(manifold.decoder..., manifold.µ), val)
+        Zygote.jacobian(Flux.Chain(decoder.decoder..., decoder.µ), z)
     )
 
     # Compute Jacobian with respect to the input for the log standard deviation
     jac_logσ = first(
-        Zygote.jacobian(Flux.Chain(manifold.decoder..., manifold.logσ), val)
+        Zygote.jacobian(Flux.Chain(decoder.decoder..., decoder.logσ), z)
     )
 
     # Convert jac_logσ to jac_σ using the chain rule:
     # 1. Compute σ by exponentiating logσ
-    σ_val = exp.(Flux.Chain(manifold.decoder..., manifold.logσ)(val))
+    σ_val = exp.(Flux.Chain(decoder.decoder..., decoder.logσ)(z))
     # 2. Use the chain rule
     jac_σ = σ_val .* jac_logσ
 
@@ -219,7 +189,7 @@ function pullback_metric(
 end # function
 
 @doc raw"""
-    pullback_metric(manifold::SplitLogDecoder, val::Vector{T}) where {T<:AbstractFloat}
+    pullback_metric(decoder::SplitLogDecoder, z::AbstractVector)
 
 Compute the Riemannian metric (pull-back metric) `M̲̲` for a stochastic manifold
 defined by a `SplitLogDecoder` using numerical differentiation with `Zygote.jl`.
@@ -227,44 +197,132 @@ The metric is evaluated based on the outputs of the individual neural networks
 with respect to their inputs.
 
 The Riemannian metric of a stochastic manifold with a mean `µ` and standard
-deviation `σ` is given by: M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ Where J̲̲_µ and
-J̲̲_σ are the Jacobians of `µ` and `σ` respectively with respect to the input.
-Given that we compute the Jacobian of `logσ` directly, the Jacobian of `σ` is
-obtained using the chain rule.
+deviation `σ` is given by
+
+M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ 
+
+where J̲̲_µ and J̲̲_σ are the Jacobians of `µ` and `σ` respectively with respect
+to the input. Given that we compute the Jacobian of `logσ` directly, the
+Jacobian of `σ` is obtained using the chain rule.
 
 # Arguments
-- `manifold::SplitLogDecoder`: A VAE decoder structure that has separate neural
+- `decoder::SplitLogDecoder`: A VAE decoder structure that has separate neural
   networks for determining both the mean and log standard deviation of the
   latent space.
-- `val::Vector{<:AbstractFloat}`: A vector specifying the input to the manifold
-  (neural networks) where the metric should be evaluated.
+- `z::AbstractVector`: A vector specifying the latent space input to the decoder
+  where the metric should be evaluated.
 
 # Returns
-- `M̲̲::Matrix{<:AbstractFloat}`: The Riemannian metric matrix evaluated at
-  `val`.
+- `M̲̲::Matrix`: The Riemannian metric matrix evaluated at `z`.
 
-# Example
-```julia-repl
-model = SplitLogDecoder(
-    Chain(Dense(2, 3, relu), Dense(3, 1)),
-    Chain(Dense(2, 3, relu), Dense(3, 1))
-)
-val = [1.0, 2.0]
-M = pullback_metric(model, val)
-```
+# Citation
+> Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
+> Curvature of Deep Generative Models. Preprint at
+> http://arxiv.org/abs/1710.11379 (2021).
 """
-function pullback_metric(
-    manifold::SplitLogDecoder, val::Vector{T}
-)::Matrix{T} where {T<:AbstractFloat}
+function pullback_metric(decoder::SplitLogDecoder, z::AbstractVector)
     # Compute Jacobian with respect to the input for the mean µ
-    jac_µ = first(Zygote.jacobian(manifold.µ, val))
+    jac_µ = first(Zygote.jacobian(decoder.µ, z))
 
     # Compute Jacobian with respect to the input for the log standard deviation
-    jac_logσ = first(Zygote.jacobian(manifold.logσ, val))
+    jac_logσ = first(Zygote.jacobian(decoder.logσ, z))
 
     # Convert jac_logσ to jac_σ using the chain rule
-    σ_val = exp.(manifold.logσ(val))
+    σ_val = exp.(decoder.logσ(z))
     jac_σ = σ_val .* jac_logσ
+
+    # Compute the metric
+    return jac_µ' * jac_µ + jac_σ' * jac_σ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    pullback_metric(decoder::JointDecoder, z::AbstractVector) 
+
+Compute the Riemannian metric (pull-back metric) `M̲̲` for a stochastic manifold
+defined by a `JointDecoder` using numerical differentiation with
+`Zygote.jl`. The metric is evaluated based on the outputs of the neural network
+with respect to its inputs.
+
+The Riemannian metric of a stochastic manifold with a mean `µ` and standard
+deviation `σ` is given by: 
+
+M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ 
+
+where J̲̲_µ and J̲̲_σ are the Jacobians of `µ` and `σ` respectively with respect
+to the input.
+
+# Arguments
+- `decoder::JointDecoder`: A VAE decoder structure that has separate paths
+  for determining both the mean and standard deviation of the latent space.
+- `z::AbstractVector`: A vector specifying the latent space input to the decoder
+  where the metric should be evaluated.
+
+# Returns
+- `M̲̲::AbstractMatrix`: The Riemannian metric matrix evaluated at `z`.
+
+# Citation
+> Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
+> Curvature of Deep Generative Models. Preprint at
+> http://arxiv.org/abs/1710.11379 (2021).
+"""
+function pullback_metric(
+    decoder::JointDecoder, z::AbstractVector
+)
+    # Compute Jacobian with respect to the input for the mean µ
+    jac_µ = first(
+        Zygote.jacobian(Flux.Chain(decoder.decoder..., decoder.µ), z)
+    )
+
+    # Compute Jacobian with respect to the input for the standard deviation
+    jac_σ = first(
+        Zygote.jacobian(Flux.Chain(decoder.decoder..., decoder.σ), z)
+    )
+
+    # Compute the metric
+    return jac_µ' * jac_µ + jac_σ' * jac_σ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    pullback_metric(decoder::SplitDecoder, z::AbstractVector)
+
+Compute the Riemannian metric (pull-back metric) `M̲̲` for a stochastic manifold
+defined by a `SplitDecoder` using numerical differentiation with
+`Zygote.jl`. The metric is evaluated based on the outputs of the individual
+neural networks with respect to their inputs.
+
+The Riemannian metric of a stochastic manifold with a mean `µ` and standard
+deviation `σ` is given by
+
+M̲̲ = J̲̲_µᵀ J̲̲_µ + J̲̲_σᵀ J̲̲_σ 
+
+where J̲̲_µ and J̲̲_σ are the Jacobians of `µ` and `σ` respectively with respect
+to the input.
+
+# Arguments
+- `decoder::SplitDecoder`: A VAE decoder structure that has separate
+  neural networks for determining both the mean and standard deviation of the
+  latent space.
+- `z::AbstractVector`: A vector specifying the latent space input to the decoder
+  where the metric should be evaluated.
+
+# Returns
+- `M̲̲::Matrix`: The Riemannian metric matrix evaluated at `z`.
+
+# Citation
+> Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
+> Curvature of Deep Generative Models. Preprint at
+> http://arxiv.org/abs/1710.11379 (2021).
+"""
+function pullback_metric(decoder::SplitDecoder, z::AbstractVector)
+    # Compute Jacobian with respect to the input for the mean µ
+    jac_µ = first(Zygote.jacobian(decoder.µ, z))
+
+    # Compute Jacobian with respect to the input for the standard deviation
+    jac_σ = first(Zygote.jacobian(decoder.σ, z))
 
     # Compute the metric
     return jac_µ' * jac_µ + jac_σ' * jac_σ
