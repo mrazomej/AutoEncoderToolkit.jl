@@ -145,7 +145,8 @@ Algorithm to generate mini-batches based on spatial locality as determined by a
 pre-constructed nearest neighbors tree.
 
 # Arguments
-- `data::Matrix{<:Float32}`: A matrix containing the data points in its columns.
+- `data::AbstractArray`: An array containing the data points. The data points
+  can be of any dimension.
 - `dist_tree::NearestNeighbors.NNTree`: `NearestNeighbors.jl` tree used to
   determine the distance between data points.
 - `n_primary::Int`: Number of primary points to sample.
@@ -159,8 +160,10 @@ pre-constructed nearest neighbors tree.
   `false`, returns the `data` corresponding to the indexes. Defaults to `false`.
 
 # Returns
-- `sample_idx::Vector{Int64}`: Indices of data points to include in the
-  mini-batch.
+- If `index` is `true`, returns `sample_idx::Vector{Int64}`: Indices of data
+  points to include in the mini-batch.
+- If `index` is `false`, returns `sample_data::AbstractArray`: The data points
+  to include in the mini-batch.
 
 # Description
 This sampling algorithm consists of three steps:
@@ -183,7 +186,7 @@ sample_indices = locality_sampler(data, dist_tree, 10, 5, 50)
 > vol. 32 (Curran Associates, Inc., 2019).
 """
 function locality_sampler(
-    data::Matrix{<:Float32},
+    data::AbstractArray,
     dist_tree::NearestNeighbors.NNTree,
     n_primary::Int,
     n_secondary::Int,
@@ -198,10 +201,12 @@ function locality_sampler(
 
     # Sample n_primary primary sampling units with uniform probability without
     # replacement among all N units
-    idx_primary = StatsBase.sample(1:size(data, 2), n_primary, replace=false)
+    idx_primary = StatsBase.sample(
+        1:size(data, ndims(data)), n_primary, replace=false
+    )
 
     # Extract primary sample
-    sample_primary = @view data[:, idx_primary]
+    sample_primary = @view data[.., idx_primary]
 
     # Compute k_nearest neighbors for each of the points
     k_idxs, dists = NearestNeighbors.knn(
@@ -219,7 +224,7 @@ function locality_sampler(
     if index
         return [idx_primary; idx_secondary]
     else
-        return @view data[:, [idx_primary; idx_secondary]]
+        return @view data[.., [idx_primary; idx_secondary]]
     end # if
 end # function
 
