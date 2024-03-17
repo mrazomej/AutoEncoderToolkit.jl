@@ -17,7 +17,8 @@ using Clustering: kmedoids
 # Import Abstract Types
 using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder,
     SplitLogDecoder, JointDecoder, SplitDecoder,
-    AbstractDeterministicDecoder, AbstractVariationalEncoder
+    AbstractDeterministicDecoder, AbstractVariationalDecoder,
+    AbstractVariationalEncoder, AbstractDecoder
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Differential Geometry on Riemmanian Manifolds
@@ -326,6 +327,49 @@ function pullback_metric(decoder::SplitDecoder, z::AbstractVector)
 
     # Compute the metric
     return jac_µ' * jac_µ + jac_σ' * jac_σ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        pullback_metric(decoder::AbstractDecoder, z::AbstractMatrix)
+
+Compute the Riemannian metric (pull-back metric) for each column of `z` on a
+manifold defined by the decoder structure of a variational autoencoder (VAE).
+The metric is evaluated based on the outputs of the decoder with respect to its
+inputs. 
+
+This function applies the `pullback_metric` function to each column of `z` using
+broadcasting.
+
+# Arguments
+- `decoder::AbstractDecoder`: A decoder structure containing a neural network
+  model that defines the manifold.
+- `z::AbstractMatrix`: A matrix where each column represents a point in the
+  latent space where the metric should be evaluated.
+
+# Returns
+- `M::AbstractArray`: An array of Riemannian metric matrices, one for each
+  column of `z`.
+
+# Notes
+- The Riemannian metric provides a measure of the "stretching" or "shrinking"
+  effect of the decoder at a particular point in the latent space. It is crucial
+  for understanding the geometric properties of the learned latent space in
+  VAEs.
+- The metric is computed using the Jacobian of the decoder, which is obtained
+  through automatic differentiation using `Zygote.jl`.
+
+# Citation
+> Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
+> Curvature of Deep Generative Models. Preprint at
+> http://arxiv.org/abs/1710.11379 (2021).
+"""
+function pullback_metric(decoder::AbstractDecoder, z::AbstractMatrix)
+    # Compute pullback metric for each column of z
+    return reduce(
+        x -> cat(x, dims=3), pullback_metric.(Ref(decoder), eachcol(z))
+    )
 end # function
 
 # ==============================================================================
