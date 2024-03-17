@@ -175,15 +175,15 @@ function pullback_metric(
     )
 
     # Compute Jacobian with respect to the input for the log standard deviation
-    jac_logσ = first(
-        Zygote.jacobian(Flux.Chain(decoder.decoder..., decoder.logσ), z)
+    logσ_val, jac_logσ = Zygote.withjacobian(
+        Flux.Chain(decoder.decoder..., decoder.logσ), z
     )
 
     # Convert jac_logσ to jac_σ using the chain rule:
     # 1. Compute σ by exponentiating logσ
-    σ_val = exp.(Flux.Chain(decoder.decoder..., decoder.logσ)(z))
+    σ_val = exp.(logσ_val)
     # 2. Use the chain rule
-    jac_σ = σ_val .* jac_logσ
+    jac_σ = σ_val .* first(jac_logσ)
 
     # Compute the metric
     return jac_µ' * jac_µ + jac_σ' * jac_σ
@@ -226,11 +226,11 @@ function pullback_metric(decoder::SplitLogDecoder, z::AbstractVector)
     jac_µ = first(Zygote.jacobian(decoder.µ, z))
 
     # Compute Jacobian with respect to the input for the log standard deviation
-    jac_logσ = first(Zygote.jacobian(decoder.logσ, z))
+    logσ_val, jac_logσ = Zygote.withjacobian(decoder.logσ, z)
 
     # Convert jac_logσ to jac_σ using the chain rule
-    σ_val = exp.(decoder.logσ(z))
-    jac_σ = σ_val .* jac_logσ
+    σ_val = exp.(logσ_val)
+    jac_σ = σ_val .* first(jac_logσ)
 
     # Compute the metric
     return jac_µ' * jac_µ + jac_σ' * jac_σ
