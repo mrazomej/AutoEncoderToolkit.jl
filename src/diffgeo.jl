@@ -368,7 +368,7 @@ broadcasting.
 function pullback_metric(decoder::AbstractDecoder, z::AbstractMatrix)
     # Compute pullback metric for each column of z
     return reduce(
-        x -> cat(x, dims=3), pullback_metric.(Ref(decoder), eachcol(z))
+        (x, y) -> cat(x, y, dims=3), pullback_metric.(Ref(decoder), eachcol(z))
     )
 end # function
 
