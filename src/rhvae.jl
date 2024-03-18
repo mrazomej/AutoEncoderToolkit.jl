@@ -3929,7 +3929,6 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
-        α::Number=1.0f0,
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -3940,10 +3939,7 @@ vector of input data `x`. It performs `K` RHMC steps with a leapfrog integrator
 and a tempering schedule to estimate the ELBO. The ELBO is computed as the
 difference between the `log p̄` and `log q̄` as
 
-elbo = mean(log p̄ - α * log q̄),
-
-where `α` is a scalar that can be used to weight the relative importance of each
-term in the ELBO.
+elbo = mean(log p̄ - log q̄),
 
 # Arguments
 - `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
@@ -3972,7 +3968,6 @@ term in the ELBO.
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
-- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -3995,7 +3990,6 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
-    α::Number=1.0f0,
 )
     # Forward Pass (run input through reconstruct function)
     rhvae_outputs = rhvae(
@@ -4013,7 +4007,7 @@ function riemannian_hamiltonian_elbo(
     log_p = _log_p̄(x, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = α .* _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4041,7 +4035,6 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
-        α::Number=1.0f0,
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -4052,11 +4045,8 @@ vector of input data `x`. It performs `K` RHMC steps with a leapfrog integrator
 and a tempering schedule to estimate the ELBO. The ELBO is computed as the
 difference between the `log p̄` and `log q̄` as
     
-elbo = mean(log p̄ - α * log q̄),
+elbo = mean(log p̄ - log q̄)
     
-where `α` is a scalar that can be used to weight the relative importance of each
-term in the ELBO.
-
 # Arguments
 - `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
   space.
@@ -4083,7 +4073,6 @@ term in the ELBO.
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
-- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -4105,7 +4094,6 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
-    α::Number=1.0f0,
 )
     # Compute metric_param
     metric_param = update_metric(rhvae)
@@ -4126,7 +4114,7 @@ function riemannian_hamiltonian_elbo(
     log_p = _log_p̄(x, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = α .* _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4158,7 +4146,6 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
-        α::Number=1.0f0,
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -4169,10 +4156,7 @@ vector of input data `x`. It performs `K` RHMC steps with a leapfrog integrator
 and a tempering schedule to estimate the ELBO. The ELBO is computed as the
 difference between the `log p̄` and `log q̄` as
 
-elbo = mean(log p̄ - α * log q̄),
-
-where `α` is a scalar that can be used to weight the relative importance of each
-term in the ELBO.
+elbo = mean(log p̄ - log q̄),
 
 # Arguments
 - `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
@@ -4203,7 +4187,6 @@ term in the ELBO.
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
-- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -4227,7 +4210,6 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
-    α::Number=1.0f0,
 )
     # Forward Pass (run input through reconstruct function)
     rhvae_outputs = rhvae(
@@ -4245,7 +4227,7 @@ function riemannian_hamiltonian_elbo(
     log_p = _log_p̄(x_out, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = α .* _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4274,7 +4256,6 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
-        α::Number=1.0f0,
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -4285,11 +4266,8 @@ vector of input data `x`. It performs `K` RHMC steps with a leapfrog integrator
 and a tempering schedule to estimate the ELBO. The ELBO is computed as the
 difference between the `log p̄` and `log q̄` as
     
-elbo = mean(log p̄ - α * log q̄),
+elbo = mean(log p̄ - log q̄).
     
-where `α` is a scalar that can be used to weight the relative importance of each
-term in the ELBO.
-
 # Arguments
 - `rhvae::RHVAE`: The RHVAE used to encode the input data and decode the latent
   space.
@@ -4319,7 +4297,6 @@ term in the ELBO.
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
-- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -4342,7 +4319,6 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
-    α::Number=1.0f0,
 )
     # Compute metric_param
     metric_param = update_metric(rhvae)
@@ -4363,7 +4339,7 @@ function riemannian_hamiltonian_elbo(
     log_p = _log_p̄(x_out, rhvae, rhvae_outputs)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = α .* _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4396,7 +4372,6 @@ end # function
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
         reg_strength::Number=1.0f0
-        α::Number=1.0f0
     )
 
 Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -4428,7 +4403,6 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
-- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
 
 # Returns
 - The computed loss.
@@ -4451,7 +4425,6 @@ function loss(
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Number=1.0f0,
-    α::Number=1.0f0,
 )
     # Update metric so that we can backpropagate through it
     metric_param = update_metric(rhvae)
@@ -4466,7 +4439,6 @@ function loss(
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
             return_outputs=true,
-            α=α
         )
 
         # Compute regularization
@@ -4481,7 +4453,6 @@ function loss(
             ∇H=∇H, ∇H_kwargs=∇H_kwargs,
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
-            α=α
         )
     end # if
 end # function
@@ -4508,7 +4479,6 @@ end # function
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
         reg_strength::Number=1.0f0
-        α::Number=1.0f0
     )
 
 Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -4541,7 +4511,6 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
-- `α::Number`: The weight of the log q̄ term in the ELBO. Default is 1.0.
 
 # Returns
 - The computed loss.
@@ -4565,7 +4534,6 @@ function loss(
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Number=1.0f0,
-    α::Number=1.0f0,
 )
     # Update metric so that we can backpropagate through it
     metric_param = update_metric(rhvae)
@@ -4580,7 +4548,6 @@ function loss(
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
             return_outputs=true,
-            α=α
         )
 
         # Compute regularization
@@ -4595,7 +4562,6 @@ function loss(
             ∇H=∇H, ∇H_kwargs=∇H_kwargs,
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
-            α=α
         )
     end # if
 end # function
