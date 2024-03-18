@@ -3778,6 +3778,7 @@ end # function
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
+        prefactor::AbstractArray=ones(Float32, 3),
     )
 
 This is an internal function used in `riemannian_hamiltonian_elbo` to compute
@@ -3804,6 +3805,9 @@ variables.
   latent variables. Default is `spherical_logprior`.
 - `momentum_logprior::Function`: The function to compute the log prior of the
   momentum variables. Default is `riemannian_logprior`.
+- `prefactor::AbstractArray`: A 3-element array to scale the log likelihood,
+  log prior of the latent variables, and log prior of the momentum variables.
+  Default is an array of ones.
 
 # Returns
 - `log_p̄::AbstractVector`: The first term of the log of the unbiased estimator
@@ -3820,8 +3824,14 @@ function _log_p̄(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
+    prefactor::AbstractArray=ones(Float32, 3),
 )
-    # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ | zₖ)
+    # Check that prefactor is the correct size
+    if length(prefactor) != 3
+        throw(ArgumentError("prefactor must be a 3-element array"))
+    end # if
+
+    # log p̄ = log p(x | zₖ) + log p(ρₖ | zₖ) + log p(zₖ) 
 
     # Compute log p(x | zₖ)
     log_p_x_given_zₖ = reconstruction_loglikelihood(
@@ -3829,19 +3839,22 @@ function _log_p̄(
         rhvae_outputs.phase_space.z_final,
         rhvae.vae.decoder,
         rhvae_outputs.decoder
-    )
-
-    # Compute log p(zₖ)
-    log_p_zₖ = position_logprior(rhvae_outputs.phase_space.z_final)
+    ) .* prefactor[1]
 
     # Compute log p(ρₖ | zₖ)
     log_p_ρₖ_given_zₖ = momentum_logprior(
         rhvae_outputs.phase_space.ρ_final,
         rhvae_outputs.phase_space.Ginv_final,
         rhvae_outputs.phase_space.logdetG_final,
-    )
+    ) .* prefactor[2]
 
-    return log_p_x_given_zₖ + log_p_zₖ + log_p_ρₖ_given_zₖ
+    # Compute log p(zₖ)
+    log_p_zₖ = position_logprior(
+        rhvae_outputs.phase_space.z_final
+    ) .* prefactor[3]
+
+
+    return log_p_x_given_zₖ + log_p_ρₖ_given_zₖ + log_p_zₖ
 end # function
 
 # ------------------------------------------------------------------------------
@@ -3850,7 +3863,9 @@ end # function
     _log_q̄(
         rhvae::RHVAE,
         rhvae_outputs::NamedTuple,
-        βₒ::Number
+        βₒ::Number;
+        momentum_logprior::Function=riemannian_logprior,
+        prefactor::AbstractArray=ones(Float32, 3),
     )
 
 This is an internal function used in `riemannian_hamiltonian_elbo` to compute
@@ -3871,6 +3886,9 @@ on the dimensionality of the latent space and the initial temperature.
 # Optional Keyword Arguments
 - `momentum_logprior::Function`: The function to compute the log prior of the
   momentum variables. Default is `riemannian_logprior`.
+- `prefactor::AbstractArray`: A 3-element array to scale the log posterior of
+  the initial latent variables, log prior of the initial momentum variables, and
+  the tempering Jacobian term. Default is an array of ones.
 
 # Returns
 - `log_q̄::Vector`: The second term of the log of the unbiased estimator of the
@@ -3885,7 +3903,12 @@ function _log_q̄(
     rhvae_outputs::NamedTuple,
     βₒ::Number;
     momentum_logprior::Function=riemannian_logprior,
+    prefactor::AbstractArray=ones(Float32, 3),
 )
+    # Check that prefactor is the correct size
+    if length(prefactor) != 3
+        throw(ArgumentError("prefactor must be a 2-element array"))
+    end # if
     # log q̄ = log q(zₒ | x) + log p(ρₒ | zₒ) - d/2 log(βₒ)
 
     # Compute log q(zₒ | x).
@@ -3893,17 +3916,17 @@ function _log_q̄(
         rhvae_outputs.phase_space.z_init,
         rhvae.vae.encoder,
         rhvae_outputs.encoder
-    )
+    ) .* prefactor[1]
 
     # Compute log p(ρₒ|zₒ)
     log_p_ρₒ_given_zₒ = momentum_logprior(
         rhvae_outputs.phase_space.ρ_init,
         rhvae_outputs.phase_space.Ginv_init,
         rhvae_outputs.phase_space.logdetG_init,
-    )
+    ) .* prefactor[2]
 
     # Compute tempering Jacobian term
-    tempering_jacobian = 0.5f0 *
+    tempering_jacobian = prefactor[3] * 0.5f0 *
                          size(rhvae_outputs.phase_space.z_init, 1) * log(βₒ)
 
     return log_q_zₒ_given_x + log_p_ρₒ_given_zₒ .- tempering_jacobian
@@ -3929,6 +3952,8 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
+        logp_prefactor::AbstractArray=ones(Float32, 3),
+        logq_prefactor::AbstractArray=ones(Float32, 3),
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -3968,6 +3993,12 @@ elbo = mean(log p̄ - log q̄),
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
+- `logp_prefactor::AbstractArray`: A 3-element array to scale the log
+  likelihood, log prior of the latent variables, and log prior of the momentum
+  variables. Default is an array of ones.
+- `logq_prefactor::AbstractArray`: A 3-element array to scale the log posterior
+  of the initial latent variables, log prior of the initial momentum variables,
+  and the tempering Jacobian term. Default is an array of ones.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -3990,6 +4021,8 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
+    logp_prefactor::AbstractArray=ones(Float32, 3),
+    logq_prefactor::AbstractArray=ones(Float32, 3),
 )
     # Forward Pass (run input through reconstruct function)
     rhvae_outputs = rhvae(
@@ -4004,10 +4037,10 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x, rhvae, rhvae_outputs)
+    log_p = _log_p̄(x, rhvae, rhvae_outputs; prefactor=logp_prefactor)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ; prefactor=logq_prefactor)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4035,6 +4068,8 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
+        logp_prefactor::AbstractArray=ones(Float32, 3),
+        logq_prefactor::AbstractArray=ones(Float32, 3),
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -4073,6 +4108,12 @@ elbo = mean(log p̄ - log q̄)
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
+- `logp_prefactor::AbstractArray`: A 3-element array to scale the log
+  likelihood, log prior of the latent variables, and log prior of the momentum
+  variables. Default is an array of ones.
+- `logq_prefactor::AbstractArray`: A 3-element array to scale the log posterior
+  of the initial latent variables, log prior of the initial momentum variables,
+  and the tempering Jacobian term. Default is an array of ones.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -4094,6 +4135,8 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
+    logp_prefactor::AbstractArray=ones(Float32, 3),
+    logq_prefactor::AbstractArray=ones(Float32, 3),
 )
     # Compute metric_param
     metric_param = update_metric(rhvae)
@@ -4111,10 +4154,10 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x, rhvae, rhvae_outputs)
+    log_p = _log_p̄(x, rhvae, rhvae_outputs; prefactor=logp_prefactor)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ; prefactor=logq_prefactor)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4146,6 +4189,8 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
+        logp_prefactor::AbstractArray=ones(Float32, 3),
+        logq_prefactor::AbstractArray=ones(Float32, 3),
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -4187,6 +4232,12 @@ elbo = mean(log p̄ - log q̄),
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
+- `logp_prefactor::AbstractArray`: A 3-element array to scale the log
+  likelihood, log prior of the latent variables, and log prior of the momentum
+  variables. Default is an array of ones.
+- `logq_prefactor::AbstractArray`: A 3-element array to scale the log posterior
+  of the initial latent variables, log prior of the initial momentum variables,
+  and the tempering Jacobian term. Default is an array of ones.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -4210,6 +4261,8 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
+    logp_prefactor::AbstractArray=ones(Float32, 3),
+    logq_prefactor::AbstractArray=ones(Float32, 3),
 )
     # Forward Pass (run input through reconstruct function)
     rhvae_outputs = rhvae(
@@ -4224,10 +4277,10 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x_out, rhvae, rhvae_outputs)
+    log_p = _log_p̄(x_out, rhvae, rhvae_outputs; prefactor=logp_prefactor)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ; prefactor=logq_prefactor)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4256,6 +4309,8 @@ end # function
         ),
         tempering_schedule::Function=quadratic_tempering,
         return_outputs::Bool=false,
+        logp_prefactor::AbstractArray=ones(Float32, 3),
+        logq_prefactor::AbstractArray=ones(Float32, 3),
     )
 
 Compute the Riemannian Hamiltonian Monte Carlo (RHMC) estimate of the evidence
@@ -4297,6 +4352,12 @@ elbo = mean(log p̄ - log q̄).
 - `return_outputs::Bool`: Whether to return the outputs of the RHVAE. Defaults
   to `false`. NOTE: This is necessary to avoid computing the forward pass twice
   when computing the loss function with regularization.
+- `logp_prefactor::AbstractArray`: A 3-element array to scale the log
+  likelihood, log prior of the latent variables, and log prior of the momentum
+  variables. Default is an array of ones.
+- `logq_prefactor::AbstractArray`: A 3-element array to scale the log posterior
+  of the initial latent variables, log prior of the initial momentum variables,
+  and the tempering Jacobian term. Default is an array of ones.
 
 # Returns
 - `elbo::Number`: The RHMC estimate of the ELBO. If `return_outputs` is `true`,
@@ -4319,6 +4380,8 @@ function riemannian_hamiltonian_elbo(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     return_outputs::Bool=false,
+    logp_prefactor::AbstractArray=ones(Float32, 3),
+    logq_prefactor::AbstractArray=ones(Float32, 3),
 )
     # Compute metric_param
     metric_param = update_metric(rhvae)
@@ -4336,10 +4399,10 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x_out, rhvae, rhvae_outputs)
+    log_p = _log_p̄(x_out, rhvae, rhvae_outputs; prefactor=logp_prefactor)
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ)
+    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ; prefactor=logq_prefactor)
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4371,7 +4434,9 @@ end # function
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-        reg_strength::Number=1.0f0
+        reg_strength::Number=1.0f0,
+        logp_prefactor::AbstractArray=ones(Float32, 3),
+        logq_prefactor::AbstractArray=ones(Float32, 3),
     )
 
 Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -4403,6 +4468,12 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
+- `logp_prefactor::AbstractArray`: A 3-element array to scale the log
+  likelihood, log prior of the latent variables, and log prior of the momentum
+  variables. Default is an array of ones.
+- `logq_prefactor::AbstractArray`: A 3-element array to scale the log posterior
+  of the initial latent variables, log prior of the initial momentum variables,
+  and the tempering Jacobian term. Default is an array of ones.
 
 # Returns
 - The computed loss.
@@ -4425,6 +4496,8 @@ function loss(
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Number=1.0f0,
+    logp_prefactor::AbstractArray=ones(Float32, 3),
+    logq_prefactor::AbstractArray=ones(Float32, 3),
 )
     # Update metric so that we can backpropagate through it
     metric_param = update_metric(rhvae)
@@ -4439,6 +4512,8 @@ function loss(
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
             return_outputs=true,
+            logp_prefactor=logp_prefactor,
+            logq_prefactor=logq_prefactor
         )
 
         # Compute regularization
@@ -4453,6 +4528,8 @@ function loss(
             ∇H=∇H, ∇H_kwargs=∇H_kwargs,
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
+            logp_prefactor=logp_prefactor,
+            logq_prefactor=logq_prefactor
         )
     end # if
 end # function
@@ -4478,7 +4555,9 @@ end # function
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
         reg_kwargs::Union{NamedTuple,Dict}=Dict(),
-        reg_strength::Number=1.0f0
+        reg_strength::Number=1.0f0,
+        logp_prefactor::AbstractArray=ones(Float32, 3),
+        logq_prefactor::AbstractArray=ones(Float32, 3),
     )
 
 Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
@@ -4511,6 +4590,12 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
+- `logp_prefactor::AbstractArray`: A 3-element array to scale the log
+  likelihood, log prior of the latent variables, and log prior of the momentum
+  variables. Default is an array of ones.
+- `logq_prefactor::AbstractArray`: A 3-element array to scale the log posterior
+  of the initial latent variables, log prior of the initial momentum variables,
+  and the tempering Jacobian term. Default is an array of ones.
 
 # Returns
 - The computed loss.
@@ -4534,6 +4619,8 @@ function loss(
     reg_function::Union{Function,Nothing}=nothing,
     reg_kwargs::Union{NamedTuple,Dict}=Dict(),
     reg_strength::Number=1.0f0,
+    logp_prefactor::AbstractArray=ones(Float32, 3),
+    logq_prefactor::AbstractArray=ones(Float32, 3),
 )
     # Update metric so that we can backpropagate through it
     metric_param = update_metric(rhvae)
@@ -4548,6 +4635,8 @@ function loss(
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
             return_outputs=true,
+            logp_prefactor=logp_prefactor,
+            logq_prefactor=logq_prefactor
         )
 
         # Compute regularization
@@ -4562,6 +4651,8 @@ function loss(
             ∇H=∇H, ∇H_kwargs=∇H_kwargs,
             G_inv=G_inv,
             tempering_schedule=tempering_schedule,
+            logp_prefactor=logp_prefactor,
+            logq_prefactor=logq_prefactor
         )
     end # if
 end # function
