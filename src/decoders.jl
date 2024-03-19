@@ -1557,6 +1557,72 @@ function (decoder::BernoulliDecoder)(z::AbstractArray)
 end # function
 
 # ==============================================================================
+# struct CategoricalDecoder <: AbstractVariationalDecoder
+# ==============================================================================
+
+@doc raw"""
+    CategoricalDecoder <: AbstractVariationalDecoder
+
+A decoder structure for variational autoencoders (VAEs) that models the output
+data as a categorical distribution. This is typically used when the outputs of
+the decoder are categorical variables encoded as one-hot vectors.
+
+# Fields
+- `decoder::Flux.Chain`: The primary neural network used to process the latent
+  space and map it to the output (or reconstructed) space.
+
+# Description
+`CategoricalDecoder` represents a VAE decoder that models the output data as a
+categorical distribution. It's commonly used when the outputs of the decoder are
+categorical variables, such as in a multi-class one-hot encoded vectors. Unlike
+a Gaussian decoder, there's no need for separate paths or operations on the mean
+or log standard deviation.
+
+# Note
+Ensure the last layer of the decoder outputs a probability distribution over the
+categories, as this is required for a categorical distribution. This can be done
+using a softmax activation function, for example.
+"""
+struct CategoricalDecoder <: AbstractVariationalDecoder
+    decoder::Flux.Chain
+end
+
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+Flux.@functor CategoricalDecoder
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    (decoder::CategoricalDecoder)(z::AbstractArray)
+
+Maps the given latent representation `z` through the `CategoricalDecoder`
+network to reconstruct the original input.
+
+# Arguments
+- `z::AbstractArray`: The latent space representation to be decoded.  This can
+  be a vector or a matrix, where each column represents a separate sample from
+  the latent space of a VAE.
+
+# Returns
+- A NamedTuple `(p=p,)` where `p` is an array representing the output of the
+  decoder, which should resemble the original input to the VAE (post encoding
+  and sampling from the latent space).
+
+# Description
+This function processes the latent space representation `z` using the neural
+network defined in the `CategoricalDecoder` struct. The aim is to decode or
+reconstruct the original input from this representation.
+
+# Note
+Ensure that the latent space representation z matches the expected input
+dimensionality for the CategoricalDecoder.
+"""
+function (decoder::CategoricalDecoder)(z::AbstractArray)
+    # Run input to decoder network
+    return (p=decoder.decoder(z),)
+end # function
+
+# ==============================================================================
 # Defining functions to compute log-likelihoods
 # ==============================================================================
 
@@ -1610,7 +1676,7 @@ function decoder_loglikelihood(
     # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
-    loglikelihood = -Flux.Losses.logitbinarycrossentropy(x, p; agg=sum)
+    loglikelihood = -Flux.Losses.logitbinarycrossentropy(p, x; agg=sum)
 
     return loglikelihood
 end
@@ -1669,7 +1735,7 @@ function decoder_loglikelihood(
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
     loglikelihood = [
         begin
-            -Flux.Losses.logitbinarycrossentropy(x[.., i], p[.., i]; agg=sum)
+            -Flux.Losses.logitbinarycrossentropy(p[.., i], x[.., i]; agg=sum)
         end
         for i in axes(z, 2)
     ] |> Flux.gpu
@@ -1736,7 +1802,208 @@ function decoder_loglikelihood(
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
     loglikelihood = -Flux.Losses.logitbinarycrossentropy(
-        x[.., index], p; agg=sum
+        p, x[.., index]; agg=sum
+    )
+
+    return loglikelihood
+end # function
+
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    decoder_loglikelihood(
+        x::AbstractArray,
+        z::AbstractVector,
+        decoder::CategoricalDecoder,
+        decoder_output::NamedTuple;
+        dims::Int=1
+    )
+
+Computes the log-likelihood of the observed data `x` given the decoder output
+under a Categorical distribution with probability given by the decoder.
+
+# Arguments
+- `x::AbstractArray`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension.  However, the
+  last dimension must be of size 1.
+- `z::AbstractVector`: The corresponding latent space representation used to
+  generate the decoder output. This argument is not used in the computation of
+  the log-likelihood since the decoder output is already provided. This is only
+  used to know which method to call.
+- `decoder::CategoricalDecoder`: The decoder of the VAE, which is used to
+  compute the probability of the Categorical distribution.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  probability of the Categorical distribution.
+
+## Optional Keyword Arguments
+- `dims::Int=1`: The dimension along which to compute the log-likelihood.
+
+# Returns
+- `loglikelihood::T`: The computed log-likelihood of the observed data `x` given
+  the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+decoder output under a Categorical distribution. The probability of the
+Categorical distribution is extracted from the `decoder_output`. The
+log-likelihood is computed using the formula for the log-likelihood of a
+Categorical distribution.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`.
+"""
+function decoder_loglikelihood(
+    x::AbstractArray,
+    z::AbstractVector,
+    decoder::CategoricalDecoder,
+    decoder_output::NamedTuple;
+    dims::Int=1,
+)
+    # Extract the probability of the Categorical distribution from the decoder
+    p = decoder_output.p
+
+    # Compute log-likelihood. Note: The log-likelihood of a Categorical
+    # decoder is given by the cross-entropy loss
+    loglikelihood = -Flux.Losses.logitcrossentropy(p, x; agg=sum, dims=dims)
+
+    return loglikelihood
+end
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    decoder_loglikelihood(
+        x::AbstractArray,
+        z::AbstractMatrix,
+        decoder::CategoricalDecoder,
+        decoder_output::NamedTuple;
+        dims::Int=1
+    )
+
+Computes the log-likelihood of the observed data `x` given the decoder output
+under a Categorical distribution with probability given by the decoder.
+
+# Arguments
+- `x::AbstractArray`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. The last
+  dimension is assumed to be the number of samples.
+- `z::AbstractMatrix`: The corresponding latent space representations used to
+  generate the decoder output. This argument is not used in the computation of
+  the log-likelihood since the decoder output is already provided. This is only
+  used to know which method to call.
+- `decoder::CategoricalDecoder`: The decoder of the VAE, which is used to
+  compute the probability of the Categorical distribution.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  probability of the Categorical distribution.
+
+## Optional Keyword Arguments
+- `dims::Int=1`: The dimension along which to compute the log-likelihood.
+
+# Returns
+- `loglikelihood::Vector`: The computed log-likelihoods of the observed data `x`
+  given the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+decoder output under a Categorical distribution. The probability of the
+Categorical distribution is extracted from the `decoder_output`. The
+log-likelihood is computed using the formula for the log-likelihood of a
+Categorical distribution.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`.
+"""
+function decoder_loglikelihood(
+    x::AbstractArray,
+    z::AbstractMatrix,
+    decoder::CategoricalDecoder,
+    decoder_output::NamedTuple;
+    dims::Int=1,
+)
+    # Extract the probability of the Bernoulli distribution from the decoder
+    p = decoder_output.p
+
+    # Compute log-likelihood. Note: The log-likelihood of a Categorical
+    # decoder is given by the cross-entropy loss
+    loglikelihood = [
+        begin
+            -Flux.Losses.logitcrossentropy(
+                p[.., i], x[.., i]; agg=sum, dims=dims
+            )
+        end
+        for i in axes(z, 2)
+    ] |> Flux.gpu
+
+    return loglikelihood
+end
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    decoder_loglikelihood(
+        x::AbstractArray,
+        z::AbstractVector,
+        decoder::CategoricalDecoder,
+        decoder_output::NamedTuple,
+        index::Int;
+        dims::Int=1
+    )
+
+Computes the log-likelihood of the observed data `x` for a single data point
+specified by `index` given the decoder output under a Categorical distribution
+with probability given by the decoder.
+
+# Arguments
+- `x::AbstractArray`: The observed data for which the log-likelihood is to be
+  computed. Each column of `x` represents a different data point.
+- `z::AbstractVector`: The corresponding latent space representation used to
+  generate the decoder output. This argument is not used in the computation of
+  the log-likelihood since the decoder output is already provided. This is only
+  used to know which method to call.
+- `decoder::CategoricalDecoder`: The decoder of the VAE, which is used to
+  compute the probability of the Categorical distribution.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  probability of the Categorical distribution for multiple data points.
+- `index::Int`: The index of the data point for which the log-likelihood is to
+  be computed.
+
+## Optional Keyword Arguments
+- `dims::Int=1`: The dimension along which to compute the log-likelihood.
+
+# Returns
+- `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
+  for the specified data point given the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` for a single
+data point specified by `index` given the decoder output under a Categorical
+distribution. The probability of the Categorical distribution is extracted from
+the `decoder_output` for the specified data point. The log-likelihood is
+computed using the formula for the log-likelihood of a Categorical distribution.
+
+# Note
+Ensure the dimensions of `x` match the expected input dimensionality of the
+`decoder`. Also, ensure that `index` is a valid index for the data points in `x`
+and `decoder_output`.
+"""
+function decoder_loglikelihood(
+    x::AbstractArray,
+    z::AbstractVector,
+    decoder::CategoricalDecoder,
+    decoder_output::NamedTuple,
+    index::Int;
+    dims::Int=1
+)
+    # Extract the probability of the Bernoulli distribution from the decoder
+    p = decoder_output.p[.., index]
+
+    # Compute log-likelihood. Note: The log-likelihood of a Categorical
+    # decoder is given by the cross-entropy loss
+    loglikelihood = -Flux.Losses.logitcrossentropy(
+        p, x[.., index]; agg=sum, dims=dims
     )
 
     return loglikelihood
