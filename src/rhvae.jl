@@ -857,6 +857,84 @@ function G_inv(
     )
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    metric_tensor(
+        z::AbstractVector,
+        metric_param::Union{RHVAE,NamedTuple},
+    )
+
+Compute the metric tensor G for a given point in the latent space.
+
+This function takes a `RHVAE` instance and a point `z` in the latent space, and
+computes the metric tensor G at that point. The computation is based on the
+inverse of the metric tensor G, which is computed by the `G_inv` function.
+
+# Arguments
+- `z::AbstractVector`: The point in the latent space.
+- `metric_param::Union{RHVAE,NamedTuple}`: Either an `RHVAE` instance or a named
+  tuple containing the fields `centroids_latent`, `M`, `T`, and `λ`.
+
+# Returns
+A matrix representing the metric tensor G at the point `z`.
+
+# Notes
+The computation involves the inverse of the metric tensor G at the point z. The
+result is a matrix of the same size as the latent space.
+"""
+function metric_tensor(
+    z::AbstractVector,
+    metric_param::Union{RHVAE,NamedTuple},
+)
+    # Compute the inverse of the metric tensor G at the point z and return its
+    # inverse.
+    return LinearAlgebra.inv(G_inv(z, metric_param))
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    metric_tensor(
+        z::AbstractMatrix,
+        metric_param::Union{RHVAE,NamedTuple},
+    )
+
+Compute the metric tensor G for each point in a set of points in the latent
+space.
+
+This function takes a `RHVAE` instance or a named tuple and a matrix `z` of
+points in the latent space, and computes the metric tensor G at each point. The
+computation is based on the inverse of the metric tensor G, which is computed by
+the `G_inv` function.
+
+# Arguments
+- `z::AbstractMatrix`: The matrix of points in the latent space.
+- `metric_param::Union{RHVAE,NamedTuple}`: Either an `RHVAE` instance or a named
+  tuple containing the fields `centroids_latent`, `M`, `T`, and `λ`.
+
+# Returns
+A 3D array where each slice represents the metric tensor G at a point in `z`.
+
+# Notes
+The computation involves the inverse of the metric tensor G at each point in
+`z`. The result is a 3D array where each slice is a matrix of the same size as
+the latent space.
+"""
+function metric_tensor(
+    z::AbstractMatrix,
+    metric_param::Union{RHVAE,NamedTuple},
+)
+    # Compute the inverse of the metric tensor G at each point in z.
+    G⁻¹ = G_inv(z, metric_param)
+
+    # Invert each slice of G⁻¹ and return the result.
+    reduce(
+        (x, y) -> cat(x, y, dims=3),
+        [inv(g⁻¹) for g⁻¹ in eachslice(G⁻¹, dims=3)]
+    )
+end # function
+
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Generalized Hamiltonian Dynamics
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
