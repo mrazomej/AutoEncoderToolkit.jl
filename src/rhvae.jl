@@ -47,7 +47,8 @@ using ..VAEs: reparameterize
 
 # Import functions
 using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
-    slogdet, taylordiff_gradient
+    slogdet, taylordiff_gradient, vec_mat_vec_loop,
+    vec_mat_vec_batched, vec_mat_vec_batched
 
 using ..HVAEs: quadratic_tempering, null_tempering
 
@@ -949,6 +950,7 @@ end # function
         G⁻¹::AbstractMatrix,
         logdetG::Number;
         σ::Number=1.0f0,
+        vec_mat_vec::Function=vec_mat_vec_loop
     )
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
@@ -961,7 +963,11 @@ by the Riemannian metric.
 
 # Optional Keyword Arguments
 - `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-    is used to scale the inverse metric tensor. Default is `1.0f0`.
+  is used to scale the inverse metric tensor. Default is `1.0f0`.
+- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
+  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
+  accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
+  to compute Hamiltonian gradients. The latter works better on GPUs.
 
 # Returns
 The log-prior of the Gaussian distribution with a covariance matrix given by the
@@ -976,13 +982,16 @@ function riemannian_logprior(
     G⁻¹::AbstractMatrix,
     logdetG::Number;
     σ::Number=1.0f0,
+    vec_mat_vec::Function=vec_mat_vec_loop
 )
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹
 
+    # Compute ρᵀ G ρ
+    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
+
     # Return the log-prior
-    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) -
-           0.5f0 * LinearAlgebra.dot(ρ, G⁻¹, ρ)
+    return -0.5f0 * (size(G⁻¹, 1) * log(2.0f0π) + logdetG) - (0.5f0 * ρᵀ_G_ρ)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -990,26 +999,30 @@ end # function
 @doc raw"""
     riemannian_logprior(
         ρ::AbstractMatrix,
-        G⁻¹::AbstractArray{<:Number,3},
+        G⁻¹::AbstractArray,
         logdetG::AbstractVector;
         σ::Number=1.0f0,
+        vec_mat_vec::Function=vec_mat_vec_loop
     )
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
 by the Riemannian metric.
 
 # Arguments
-- `ρ::AbstractMatrix`: The momentum variables. Each column represents a
-  different set of momentum variables.
-- `G⁻¹::AbstractArray{<:Number,3}`: The inverse of the Riemannian metric tensor.
-  Each slice along the third dimension represents the inverse metric tensor at a
-  different point in the latent space.
-- `logdetG::AbstractVector`: The log determinant of the Riemannian metric tensor
-  for each slice of `G⁻¹` along the third dimension.
+- `ρ::AbstractMatrix`: The momentum variables. Each column of `ρ` represents a
+  different data point.
+- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each 3D
+  slice of `G⁻¹` represents the inverse metric for a different data point.
+- `logdetG::AbstractVector`: The log determinant of the Riemannian metric
+  tensor. Each element of `logdetG` corresponds to a different data point.
 
 # Optional Keyword Arguments
 - `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
   is used to scale the inverse metric tensor. Default is `1.0f0`.
+- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
+  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
+  accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
+  to compute Hamiltonian gradients. The latter works better on GPUs.
 
 # Returns
 The log-prior of the Gaussian distribution with a covariance matrix given by the
@@ -1018,23 +1031,23 @@ Riemannian metric.
 # Notes
 - Ensure that the dimensions of `ρ` match the dimensions of the latent space of
   the RHVAE model.
-- This function is designed to work with CUDA arrays for GPU-accelerated
-  computations.
 """
 function riemannian_logprior(
     ρ::AbstractMatrix,
     G⁻¹::AbstractArray,
     logdetG::AbstractVector;
     σ::Number=1.0f0,
+    vec_mat_vec::Function=vec_mat_vec_loop
 )
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹
 
-    # Compute ρᵀ G⁻¹ ρ in a broadcasted manner
-    ρᵀ_G⁻¹_ρ = sum(ρ .* Flux.batched_vec(G⁻¹, ρ), dims=1)
+    # Compute ρᵀ G ρ
+    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
 
-    return -0.5f0 * (size(ρ, 1) * log(2.0f0π) .+ logdetG) .-
-           0.5f0 .* vec(ρᵀ_G⁻¹_ρ)
+    # Return the log-prior
+    return -0.5f0 .* (size(G⁻¹, 1) * log(2.0f0π) .+ logdetG) .-
+           (0.5f0 .* ρᵀ_G_ρ)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -1046,6 +1059,7 @@ end # function
         logdetG::AbstractVector,
         index::Int;
         σ::Number=1.0f0,
+        vec_mat_vec::Function=vec_mat_vec_loop
     )
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
@@ -1064,6 +1078,10 @@ by the Riemannian metric for a single data point specified by `index`.
 # Optional Keyword Arguments
 - `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
   is used to scale the inverse metric tensor. Default is `1.0f0`.
+- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
+  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
+  accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
+  to compute Hamiltonian gradients. The latter works better on GPUs.
 
 # Returns
 The log-prior of the Gaussian distribution with a covariance matrix given by the
@@ -1071,8 +1089,8 @@ Riemannian metric for the specified data point.
 
 # Notes
 - Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
-    dimensionality of the RHVAE model. Also, ensure that `index` is a valid
-    index for the data points in `ρ` and `G⁻¹`.
+  dimensionality of the RHVAE model. Also, ensure that `index` is a valid index
+  for the data points in `ρ` and `G⁻¹`.
 """
 function riemannian_logprior(
     ρ::AbstractVector,
@@ -1080,130 +1098,20 @@ function riemannian_logprior(
     logdetG::AbstractVector,
     index::Int;
     σ::Number=1.0f0,
+    vec_mat_vec::Function=vec_mat_vec_loop
 )
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹[.., index]
 
-    # Return the log-prior
-    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) -
-           0.5f0 * LinearAlgebra.dot(ρ, G⁻¹, ρ)
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    riemannian_logprior_loop(
-        ρ::AbstractVector,
-        G⁻¹::AbstractMatrix,
-        logdetG::Number;
-        σ::Number=1.0f0,
-        prod::Symbol=:dot
-    )
-
-Compute the log-prior of a Gaussian distribution with a covariance matrix given
-by the Riemannian metric.
-
-This method performs the product ρᵀ G⁻¹ ρ using a list comprehension. This is
-done to avoid the use of the LinearAlgebra.dot function, which is not compatible
-with the composition of `Zygote.jl` over `TaylorDiff.jl`
-
-# Arguments
-- `ρ::AbstractVector`: The momentum vector.
-- `G⁻¹::AbstractMatrix`: The inverse of the Riemannian metric tensor.
-- `logdetG::Number`: The log determinant of the Riemannian metric tensor.
-
-# Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-    is used to scale the inverse metric tensor. Default is `1.0f0`.
-
-# Returns
-The log-prior of the Gaussian distribution with a covariance matrix given by the
-Riemannian metric.
-
-# Notes
-- Ensure that the dimensions of `ρ` match the dimensions of the latent space of
-  the RHVAE model.
-"""
-function riemannian_logprior_loop(
-    ρ::AbstractVector,
-    G⁻¹::AbstractMatrix,
-    logdetG::Number;
-    σ::Number=1.0f0,
-)
-    # Multiply G⁻¹ by σ²
-    G⁻¹ = σ^2 .* G⁻¹
+    # Compute ρᵀ G ρ
+    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
 
     # Return the log-prior
-    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG) -
-           0.5f0 * sum(
-        begin
-            ρ[i] * G⁻¹[i, j] * ρ[j]
-        end for i in eachindex(ρ) for j in eachindex(ρ)
-    )
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    riemannian_logprior_loop(
-        ρ::AbstractMatrix,
-        G⁻¹::AbstractArray,
-        logdetG::AbstractVector,
-        index::Int;
-        σ::Number=1.0f0,
-    )
-
-Compute the log-prior of a Gaussian distribution with a covariance matrix given
-by the Riemannian metric for a single data point specified by `index`.
-
-This method performs the product ρᵀ G⁻¹ ρ using a list comprehension. This is
-done to avoid the use of the LinearAlgebra.dot function, which is not compatible
-with the composition of `Zygote.jl` over `TaylorDiff.jl`
-
-# Arguments
-- `ρ::AbstractMatrix`: The momentum vectors. Each column of `ρ` represents a
-  different data point.
-- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
-  of `G⁻¹` represents the inverse metric for a different data point.
-- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
-  tensor. Each element of `logdetG` corresponds to a different data point.
-- `index::Int`: The index of the data point for which the log-prior is to be
-  computed.
-
-# Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-  is used to scale the inverse metric tensor. Default is `1.0f0`.
-
-# Returns
-The log-prior of the Gaussian distribution with a covariance matrix given by the
-Riemannian metric for the specified data point.
-
-# Notes
-- Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
-    dimensionality of the RHVAE model. Also, ensure that `index` is a valid
-    index for the data points in `ρ` and `G⁻¹`.
-"""
-function riemannian_logprior_loop(
-    ρ::AbstractVector,
-    G⁻¹::AbstractArray,
-    logdetG::AbstractVector,
-    index::Int;
-    σ::Number=1.0f0,
-)
-    # Multiply G⁻¹ by σ²
-    G⁻¹ = σ^2 .* G⁻¹[.., index]
-
-    # Return the log-prior
-    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) -
-           0.5f0 * sum(
-        begin
-            ρ[i] * G⁻¹[i, j] * ρ[j]
-        end for i in eachindex(ρ) for j in eachindex(ρ)
-    )
+    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) - 0.5f0 * ρᵀ_G_ρ
 end # function
 
 # ==============================================================================
-# Hamiltonian and gradient computations
+# Hamiltonian computations
 # ==============================================================================
 
 @doc raw"""
@@ -1212,7 +1120,7 @@ end # function
         z::AbstractVecOrMat,
         ρ::AbstractVecOrMat,
         G⁻¹::AbstractArray,
-        logdetG::Union{<:Number,AbstractVector},
+        logdetG::Union{<:Number,<:AbstractVector},
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         decoder_loglikelihood::Function=decoder_loglikelihood,
@@ -1287,7 +1195,7 @@ function hamiltonian(
     z::AbstractVecOrMat,
     ρ::AbstractVecOrMat,
     G⁻¹::AbstractArray,
-    logdetG::Union{<:Number,AbstractVector},
+    logdetG::Union{<:Number,<:AbstractVector},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
@@ -1528,6 +1436,12 @@ function hamiltonian(
     )
 end # function
 
+# ==============================================================================
+# Hamiltonian gradient computation
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Finite difference method
 # ------------------------------------------------------------------------------
 
 @doc raw"""
@@ -1770,6 +1684,8 @@ function ∇hamiltonian_finite(
     )
 end # function
 
+# ------------------------------------------------------------------------------
+# ForwardDiff.jl method
 # ------------------------------------------------------------------------------
 
 @doc raw"""
@@ -2135,6 +2051,8 @@ function ∇hamiltonian_ForwardDiff(
 end # function
 
 # ------------------------------------------------------------------------------
+# TaylorDiff.jl method
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     ∇hamiltonian_TaylorDiff(
@@ -2148,7 +2066,7 @@ end # function
         var::Symbol;
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior_loop,
+        momentum_logprior::Function=riemannian_logprior,
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using
@@ -2199,7 +2117,7 @@ the point `z`.
   latent space position. Default is `spherical_logprior`. This function must
   take as input the point `z` in the latent space.
 - `momentum_logprior::Function`: The function to compute the log-prior of the
-  momentum. Default is `riemannian_logprior_loop`. This function must take as
+  momentum. Default is `riemannian_logprior`. This function must take as
   input the momentum `ρ` and the inverse of the Riemannian metric tensor `G⁻¹`.
 
 # Returns
@@ -2212,16 +2130,16 @@ this function one should use `Zygote.jl.`
 """
 function ∇hamiltonian_TaylorDiff(
     x::AbstractArray,
-    z::AbstractVector,
-    ρ::AbstractVector,
-    G⁻¹::AbstractMatrix,
-    logdetG::Number,
+    z::AbstractVecOrMat,
+    ρ::AbstractVecOrMat,
+    G⁻¹::AbstractArray,
+    logdetG::Union{<:Number,AbstractVector},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple,
     var::Symbol;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior_loop,
+    momentum_logprior::Function=riemannian_logprior,
 )
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
@@ -2257,26 +2175,23 @@ end # function
 @doc raw"""
     ∇hamiltonian_TaylorDiff(
         x::AbstractArray,
-        z::AbstractMatrix,
-        ρ::AbstractMatrix,
-        G⁻¹::AbstractArray,
-        logdetG::AbstractVector,
-        decoder::AbstractVariationalDecoder,
-        decoder_output::NamedTuple,
+        z::AbstractVecOrMat,
+        ρ::AbstractVecOrMat,
+        rhvae::RHVAE,
         var::Symbol;
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior_loop,
+        momentum_logprior::Function=riemannian_logprior,
+        G_inv::Function=G_inv,
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using
 the TaylorDiff.jl automatic differentiation library.
 
-This function takes a data array `x`, a latent space matrix `z`, a momentum
-matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`, a `decoder` of
-type `AbstractVariationalDecoder`, a `decoder_output` NamedTuple, and a variable
-`var` (:z or :ρ), and computes the gradient of the Hamiltonian with respect to
-`var` using TaylorDiff.jl.
+This function takes a point `x` in the data space, a point `z` in the latent
+space, a momentum `ρ`, an instance of `RHVAE`, and a variable `var` (:z or :ρ),
+and computes the gradient of the Hamiltonian with respect to `var` using
+TaylorDiff.jl.
 
 The Hamiltonian is computed as follows:
 
@@ -2296,18 +2211,14 @@ where D is the dimension of the latent space, and G(z) is the metric tensor at
 the point `z`.
 
 # Arguments
-- `x::AbstractArray`: The data array. Each column of `x` represents a different
-  data point.
-- `z::AbstractMatrix`: The latent space matrix. Each column of `z` represents
-  the latent space for a different data point.
-- `ρ::AbstractMatrix`: The momentum matrix. Each column of `ρ` represents the
-  momentum for a different data point.
-- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
-  of `G⁻¹` represents the inverse metric for a different data point.
-- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
-  tensor. Each element of `logdetG` corresponds to a different data point.
-- `decoder::AbstractVariationalDecoder`: The decoder instance.
-- `decoder_output::NamedTuple`: The output of the decoder.
+- `x::AbstractArray`: The point in the data space. This does not necessarily
+  need to be a vector. Array inputs are supported. The last dimension is assumed
+  to have each of the data points.
+- `z::AbstractVecOrMat`: The point in the latent space. If matrix, each column
+  represents a point in the latent space.
+- `ρ::AbstractVecOrMat`: The momentum. If matrix, each column represents a
+  momentum vector.
+- `rhvae::RHVAE`: An instance of the RHVAE model.
 - `var::Symbol`: The variable with respect to which the gradient is computed.
   Must be :z or :ρ.
 
@@ -2315,81 +2226,52 @@ the point `z`.
 - `reconstruction_loglikelihood::Function`: The function to compute the
   log-likelihood of the decoder reconstruction. Default is
   `decoder_loglikelihood`. This function must take as input the decoder, the
-  data array `x`, the latent space matrix `z`, the `decoder_output`, and the
-  `index`.
+  point `x` in the data space, and the `decoder_output`.
 - `position_logprior::Function`: The function to compute the log-prior of the
   latent space position. Default is `spherical_logprior`. This function must
-  take as input the latent space matrix `z` and the `index`.
+  take as input the point `z` in the latent space.
 - `momentum_logprior::Function`: The function to compute the log-prior of the
-  momentum. Default is `riemannian_logprior_loop`. This function must take as
-  input the momentum matrix `ρ`, the inverse of the Riemannian metric tensor
-  `G⁻¹`, the log determinants of the Riemannian metric tensor `logdetG`, and the
-  `index`.
+  momentum. Default is `riemannian_logprior`. This function must take as input
+  the momentum `ρ` and the inverse of the Riemannian metric tensor `G⁻¹`.
+- `G_inv::Function`: The function to compute the inverse of the Riemannian
+  metric tensor. Default is `G_inv`. This function must take as input the point
+  `z` in the latent space and the `rhvae` instance.
 
 # Returns
-A matrix representing the gradient of the Hamiltonian at the points `(z, ρ)`
-with respect to variable `var`.
-
-# Note
-`TaylorDiff.jl` is composable with `Zygote.jl.` Thus, for backpropagation using
-this function one should use `Zygote.jl.`
+A matrix representing the gradient of the Hamiltonian at the point `(z, ρ)` with
+respect to variable `var`.
 """
 function ∇hamiltonian_TaylorDiff(
     x::AbstractArray,
-    z::AbstractMatrix,
-    ρ::AbstractMatrix,
-    G⁻¹::AbstractArray,
-    logdetG::AbstractVector,
-    decoder::AbstractVariationalDecoder,
-    decoder_output::NamedTuple,
+    z::AbstractVecOrMat,
+    ρ::AbstractVecOrMat,
+    rhvae::RHVAE,
     var::Symbol;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior_loop,
+    momentum_logprior::Function=riemannian_logprior,
+    G_inv::Function=G_inv,
 )
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
         error("var must be :z or :ρ")
     end # if
 
-    # Compute gradient with respect to var
-    if var == :z
-        # Compute gradient for each column of z
-        grad = [
-            begin
-                taylordiff_gradient(
-                    z_col -> hamiltonian(
-                        x, z_col, ρ_col, G⁻¹, logdetG, decoder, decoder_output,
-                        index;
-                        reconstruction_loglikelihood=reconstruction_loglikelihood,
-                        position_logprior=position_logprior,
-                        momentum_logprior=momentum_logprior,
-                    ),
-                    z_col
-                )
-            end for (index, (z_col, ρ_col)) in
-            enumerate(zip(Vector.(eachcol(z)), Vector.(eachcol(ρ))))
-        ]
-    elseif var == :ρ
-        # Compute gradient for each column of ρ
-        grad = [
-            begin
-                taylordiff_gradient(
-                    ρ_col -> hamiltonian(
-                        x, z_col, ρ_col, G⁻¹, logdetG, decoder, decoder_output,
-                        index;
-                        reconstruction_loglikelihood=reconstruction_loglikelihood,
-                        position_logprior=position_logprior,
-                        momentum_logprior=momentum_logprior,
-                    ),
-                    ρ_col
-                )
-            end for (index, (z_col, ρ_col)) in
-            enumerate(zip(Vector.(eachcol(z)), Vector.(eachcol(ρ))))
-        ]
-    end # if
+    # Compute inverse of the metric tensor
+    G⁻¹ = G_inv(z, rhvae)
 
-    return reduce(hcat, grad)
+    # Compute the log determinant of the metric tensor
+    logdetG = -slogdet(G⁻¹)
+
+    # Compute output of the decoder
+    decoder_output = rhvae.vae.decoder(z)
+
+    return ∇hamiltonian_TaylorDiff(
+        x, z, ρ, G⁻¹, logdetG, rhvae.vae.decoder, decoder_output, var;
+        reconstruction_loglikelihood=reconstruction_loglikelihood,
+        position_logprior=position_logprior,
+        momentum_logprior=momentum_logprior,
+    )
 end # function
 
 # ==============================================================================
@@ -2484,7 +2366,7 @@ function _leapfrog_first_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
 )
     # Copy ρ to iterate over it
@@ -2582,7 +2464,7 @@ function _leapfrog_first_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
 )
@@ -2622,7 +2504,7 @@ end # function
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior_loop,
+                momentum_logprior=riemannian_logprior,
         ),
     )
 
@@ -2695,7 +2577,7 @@ function _leapfrog_second_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
 )
     # Compute Hamiltonian gradient for initial point not to repeat it at each
@@ -2736,7 +2618,7 @@ end # function
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior_loop,
+                momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
     )
@@ -2803,7 +2685,7 @@ function _leapfrog_second_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
 )
@@ -2842,7 +2724,7 @@ end # function
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior_loop,
+                momentum_logprior=riemannian_logprior,
         ),
     )
 
@@ -2912,7 +2794,7 @@ function _leapfrog_third_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
 )
     # Update momentum variable with half step. No fixed-point iterations are
@@ -2936,7 +2818,7 @@ end # function
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior_loop,
+                momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
     )
@@ -3001,7 +2883,7 @@ function _leapfrog_third_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
 )
@@ -3041,7 +2923,7 @@ end # function
         ∇H_kwargs::Union{NamedTuple,Dict}=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
-                momentum_logprior=riemannian_logprior_loop,
+                momentum_logprior=riemannian_logprior,
         ),
         G_inv::Function=G_inv,
     )
@@ -3119,7 +3001,7 @@ function general_leapfrog_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
 )
@@ -3231,7 +3113,7 @@ function general_leapfrog_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
 )
@@ -3380,7 +3262,7 @@ function general_leapfrog_tempering_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -3521,7 +3403,7 @@ function general_leapfrog_tempering_step(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -3676,7 +3558,7 @@ function (rhvae::RHVAE{VAE{E,D}})(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -3799,7 +3681,7 @@ function (rhvae::RHVAE{VAE{E,D}})(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -4094,7 +3976,7 @@ function riemannian_hamiltonian_elbo(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -4208,7 +4090,7 @@ function riemannian_hamiltonian_elbo(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -4334,7 +4216,7 @@ function riemannian_hamiltonian_elbo(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -4453,7 +4335,7 @@ function riemannian_hamiltonian_elbo(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -4567,7 +4449,7 @@ function loss(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
@@ -4690,7 +4572,7 @@ function loss(
     ∇H_kwargs::Union{NamedTuple,Dict}=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
-        momentum_logprior=riemannian_logprior_loop,
+        momentum_logprior=riemannian_logprior,
     ),
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
