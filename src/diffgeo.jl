@@ -83,4 +83,6 @@ include("diffgeo/splines.jl")
 # > Variational Auto-Encoder. Preprint at http://arxiv.org/abs/2010.11518
 # > (2020).
 
+module NeuralGeodesics
 include("diffgeo/neural_geodesics.jl")
+end # submodule

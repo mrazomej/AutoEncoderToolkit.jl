@@ -11,13 +11,13 @@ import NNlib
 using EllipsisNotation
 
 # Import abstract types from RHVAEs
-using ..RHVAEs: RHVAE
+using ...RHVAEs: RHVAE
 
 # Import functions from RHVAEs module
-using ..RHVAEs: G_inv
+using ...RHVAEs: metric_tensor
 
 # Import functions from utils module
-using ..utils: taylordiff_gradient
+using ...utils: vec_mat_vec_batched, vec_mat_vec_loop
 
 # ==============================================================================
 # > Chen, N. et al. Metrics for Deep Generative Models. in Proceedings of the
@@ -115,11 +115,11 @@ function (g::NeuralGeodesic)(t)
     ẑ_end = g.mlp([one(Float32)])
 
     # Compute scale and shift parameters
-    scale = (g.z_init - g.z_end) ./ (ẑ_init - ẑ_end)
-    shift = (g.z_init .* ẑ_end - g.z_end .* ẑ_init) ./ (ẑ_init - ẑ_end)
+    scale = @. (g.z_init - g.z_end) / (ẑ_init - ẑ_end)
+    shift = @. ((g.z_init * ẑ_end) - (g.z_end * ẑ_init)) / (ẑ_init - ẑ_end)
 
     # Return shifted and scaled output
-    return scale .* g_t .- shift
+    return @. (scale * g_t) - shift
 end
 
 # ------------------------------------------------------------------------------
@@ -178,11 +178,11 @@ function (g::NeuralGeodesic)(t::AbstractVector{<:Number})
     ẑ_end = g.mlp([one(Float32)])
 
     # Compute scale and shift parameters
-    scale = (g.z_init .- g.z_end) ./ (ẑ_init .- ẑ_end)
-    shift = (g.z_init .* ẑ_end .- g.z_end .* ẑ_init) ./ (ẑ_init .- ẑ_end)
+    scale = @. (g.z_init - g.z_end) / (ẑ_init - ẑ_end)
+    shift = @. ((g.z_init * ẑ_end) - (g.z_end .* ẑ_init)) / (ẑ_init - ẑ_end)
 
     # Return shifted and scaled output
-    return scale .* g_t .- shift
+    return @. (scale * g_t) - shift
 end
 
 # ------------------------------------------------------------------------------
@@ -342,7 +342,9 @@ end # function
 @doc raw"""
     curve_length(
         riemannian_metric::AbstractArray,
-        curve_velocity::AbstractArray
+        curve_velocity::AbstractArray,
+        t::AbstractVector;
+        vec_mat_vec::Function=vec_mat_vec_batched
     )
 
 Function to compute the (discretized) integral defining the length of a curve γ̲
@@ -355,7 +357,8 @@ Riemmanian metric tensor. For this function, we approximate the integral as
 
     L(γ̲) ≈ ∑ᵢ Δt √(⟨γ̲̇(tᵢ)ᵀ G̲̲ (γ̲(tᵢ+1) γ̲̇(tᵢ))⟩),
 
-where Δt is the time step between points.
+where Δt is the time step between points. Note that this Δt is assumed to be
+constant, thus, the time points `t` must be equally spaced.
 
 # Arguments
 - `riemannian_metric::AbstractArray`: `d×d×N` tensor where `d` is the dimension
@@ -366,47 +369,57 @@ where Δt is the time step between points.
   the manifold on which the curve lies and `N` is the number of sampled time
   points along the curve. Each column represents the velocity of the curve at
   the corresponding time point.
+- `t::AbstractVector`: Vector of time points at which the curve is sampled.
+
+## Optional Keyword Arguments
+- `vec_mat_vec::Function=vec_mat_vec_batched`: Function to compute the product
+  of a vector with a matrix with a vector. Default is `vec_mat_vec_batched`, but
+  also accepts `vec_mat_vec_loop`. The former is faster since it uses batched
+  operations, the latter is necessary for automatic differentiation with
+  `Zygote.jl` over `TaylorDiff.jl`.
 
 # Returns
 - `Length::Number`: Approximation of the Length for the path on the manifold.
 """
 function curve_length(
     riemannian_metric::AbstractArray,
-    curve_velocity::AbstractArray
+    curve_velocity::AbstractArray,
+    t::AbstractVector;
+    vec_mat_vec::Function=vec_mat_vec_batched
 )
-    # Compute γ̲̇ᵀ G̲̲ γ̲̇ in a broadcasted manner
-    γ̲̇ᵀ_G_γ̲̇ = sum(
-        curve_velocity .* Flux.batched_vec(riemannian_metric * curve_velocity),
-        dims=1
-    )
+    # Compute Δt
+    Δt = t[2] - t[1]
 
-    # Return curve length
+    # Compute γ̲̇ᵀ G̲̲ γ̲̇ 
+    γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec(curve_velocity, riemannian_metric, curve_velocity)
+
     return sum(sqrt.(γ̲̇ᵀ_G_γ̲̇) .* Δt)
 end # function
 
 # ------------------------------------------------------------------------------
+# Curve energy computation
+# ------------------------------------------------------------------------------
 
 @doc raw"""
-    curve_length_loop(
+    curve_energy(
         riemannian_metric::AbstractArray,
-        curve_velocity::AbstractArray
+        curve_velocity::AbstractArray,
+        t::AbstractVector;
+        vec_mat_vec::Function=vec_mat_vec_batched
     )
 
-Function to compute the (discretized) integral defining the length of a curve γ̲
-on a Riemmanina manifold. The length is defined as
+Function to compute the (discretized) integral defining the energy of a curve γ̲
+on a Riemmanina manifold. The energy is defined as
 
-    L(γ̲) = ∫ dt √(⟨γ̲̇(t), G̲̲ γ̲̇(t)⟩),
+        E(γ̲) = ∫ dt ⟨γ̲̇(t), G̲̲ γ̲̇(t)⟩,
 
 where γ̲̇(t) defines the velocity of the parametric curve, and G̲̲ is the
 Riemmanian metric tensor. For this function, we approximate the integral as
 
-    L(γ̲) ≈ ∑ᵢ Δt √(⟨γ̲̇(tᵢ)ᵀ G̲̲ (γ̲(tᵢ+1) γ̲̇(tᵢ))⟩),
+        E(γ̲) ≈ ∑ᵢ Δt ⟨γ̲̇(tᵢ)ᵀ G̲̲ (γ̲(tᵢ+1) γ̲̇(tᵢ))⟩,
 
-where Δt is the time step between points.
-
-This method performs the product ⟨γ̲̇(tᵢ)ᵀ G̲̲ (γ̲(tᵢ+1) γ̲̇(tᵢ))⟩ using a list
-comprehension. This is done to avoid the use of the LinearAlgebra.dot function,
-which is not compatible with the composition of `Zygote.jl` over `TaylorDiff.jl`
+where Δt is the time step between points. Note that this Δt is assumed to be
+constant, thus, the time points `t` must be equally spaced.
 
 # Arguments
 - `riemannian_metric::AbstractArray`: `d×d×N` tensor where `d` is the dimension
@@ -417,22 +430,171 @@ which is not compatible with the composition of `Zygote.jl` over `TaylorDiff.jl`
   the manifold on which the curve lies and `N` is the number of sampled time
   points along the curve. Each column represents the velocity of the curve at
   the corresponding time point.
+- `t::AbstractVector`: Vector of time points at which the curve is sampled.
+
+## Optional Keyword Arguments
+- `vec_mat_vec::Function=vec_mat_vec_batched`: Function to compute the product
+  of a vector with a matrix with a vector. Default is `vec_mat_vec_batched`, but
+  also accepts `vec_mat_vec_loop`. The former is faster since it uses batched
+  operations, the latter is necessary for automatic differentiation with
+  `Zygote.jl` over `TaylorDiff.jl`.
 
 # Returns
-- `Length::Number`: Approximation of the Length for the path on the manifold.
+- `Energy::Number`: Approximation of the Energy for the path on the manifold.
 """
-function curve_length_loop(
-    riemannian_metric::AbstractMatrix,
-    curve_velocity::AbstractVector
+function curve_energy(
+    riemannian_metric::AbstractArray,
+    curve_velocity::AbstractArray,
+    t::AbstractVector;
+    vec_mat_vec::Function=vec_mat_vec_batched
 )
-    # Compute γ̲̇ᵀ G̲̲ γ̲̇ in a loop
-    return sum(
-        begin
-            curve_velocity[i] * riemannian_metric[i, j] * curve_velocity[j]
-        end
-        for i in eachindex(curve_velocity)
-        for j in eachindex(curve_velocity)
+    # Compute Δt
+    Δt = t[2] - t[1]
+
+    # Compute γ̲̇ᵀ G̲̲ γ̲̇ 
+    γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec(curve_velocity, riemannian_metric, curve_velocity)
+
+    return sum(γ̲̇ᵀ_G_γ̲̇ .* Δt) / 2
+end # function
+
+# ==============================================================================
+# Neural Geodesic Training 
+# ==============================================================================
+
+@doc raw"""
+    loss(
+        curve::NeuralGeodesic,
+        rhvae::RHVAE,
+        t::AbstractVector;
+        curve_velocity::Function=curve_velocity_TaylorDiff,
+        curve_integral::Function=curve_length,
+        vec_mat_vec::Function=vec_mat_vec_loop,
     )
+
+Function to compute the loss for a given curve on a Riemmanian manifold. The
+loss is defined as the integral over the curve, computed using the provided
+`curve_integral` function (either length or energy).
+
+# Arguments
+- `curve::NeuralGeodesic`: The curve on the Riemmanian manifold.
+- `rhvae::RHVAE`: The Riemmanian Hamiltonian Variational AutoEncoder used to
+  compute the Riemmanian metric tensor.
+- `t::AbstractVector`: Vector of time points at which the curve is sampled.
+
+## Optional Keyword Arguments
+- `curve_velocity::Function=curve_velocity_TaylorDiff`: Function to compute the
+  velocity of the curve. Default is `curve_velocity_TaylorDiff`. Also accepts
+  `curve_velocity_finitediff`.
+- `curve_integral::Function=curve_length`: Function to compute the integral over
+  the curve. Default is `curve_length`. Also accepts `curve_energy`.
+- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
+  vector with a matrix with a vector. Default is `vec_mat_vec_loop`. This
+  function is used in the computation of the integral over the curve. Also
+  accepts `vec_mat_vec_batched`. But this latter is not compatible with
+  `curve_velocity_TaylorDiff`.
+
+# Returns
+- `Loss::Number`: The computed loss for the given curve.
+
+# Notes
+This function first computes the geodesic curve using the provided `curve`
+function. It then computes the Riemmanian metric tensor using the
+`metric_tensor` function from the `RHVAE` module with the computed curve and the
+provided `rhvae`. The velocity of the curve is then computed using the provided
+`curve_velocity` function. Finally, the integral over the curve is computed
+using the provided `curve_integral` function and returned as the loss.
+"""
+function loss(
+    curve::NeuralGeodesic,
+    rhvae::RHVAE,
+    t::AbstractVector;
+    curve_velocity::Function=curve_velocity_TaylorDiff,
+    curve_integral::Function=curve_length,
+    vec_mat_vec::Function=vec_mat_vec_loop,
+)
+    # Compute the geodesic curve
+    z_mat = curve(t)
+
+    # Compute the Riemmanian metric tensor
+    G = metric_tensor(z_mat, rhvae)
+
+    # Compute the curve velocity
+    γ̇ = curve_velocity(curve, t)
+
+    # Compute and return the integral over the curve
+    return curve_integral(G, γ̇, t; vec_mat_vec=vec_mat_vec)
 end # function
 
 # ------------------------------------------------------------------------------
+
+@doc raw"""
+    train!(
+        curve::NeuralGeodesic,
+        rhvae::RHVAE,
+        t::AbstractVector,
+        opt::NamedTuple;
+        loss::Function=loss,
+        loss_kwargs::Dict=Dict(),
+        verbose::Bool=false,
+        loss_return::Bool=false,
+    )
+
+Function to train a NeuralGeodesic model using a Riemmanian Hamiltonian
+Variational AutoEncoder (RHVAE). The training process involves computing the
+gradient of the loss function and updating the model parameters accordingly.
+
+# Arguments
+- `curve::NeuralGeodesic`: The curve on the Riemmanian manifold.
+- `rhvae::RHVAE`: The Riemmanian Hamiltonian Variational AutoEncoder used to
+  compute the Riemmanian metric tensor.
+- `t::AbstractVector`: Vector of time points at which the curve is sampled.
+  These must be equally spaced.
+- `opt::NamedTuple`: The optimization parameters.
+
+## Optional Keyword Arguments
+- `loss_function::Function=loss`: The loss function to be minimized during
+  training. Default is `loss`.
+- `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
+  loss function.
+- `verbose::Bool=false`: If `true`, the loss value is printed at each iteration.
+- `loss_return::Bool=false`: If `true`, the function returns the loss value.
+
+# Returns
+- `Loss::Number`: The computed loss for the given curve. This is only returned
+  if `loss_return` is `true`.
+
+# Notes
+This function first computes the gradient of the loss function with respect to
+the model parameters. It then updates the model parameters using the computed
+gradient and the provided optimization parameters. If `verbose` is `true`, the
+loss value is printed at each iteration. If `loss_return` is `true`, the
+function returns the loss value.
+"""
+function train!(
+    curve::NeuralGeodesic,
+    rhvae::RHVAE,
+    t::AbstractVector,
+    opt::NamedTuple;
+    loss_function::Function=loss,
+    loss_kwargs::Dict=Dict(),
+    verbose::Bool=false,
+    loss_return::Bool=false,
+)
+    # Compute VAE gradient
+    L, ∇L = Flux.withgradient(curve) do curve_nn
+        loss_function(curve_nn, rhvae, t; loss_kwargs...)
+    end # do block
+
+    # Update parameters
+    Flux.Optimisers.update!(opt, curve, ∇L[1])
+
+    # Check if loss should be returned
+    if loss_return
+        return L
+    end # if
+
+    # Check if loss should be printed
+    if verbose
+        println("Loss: ", L)
+    end # if
+end # function
