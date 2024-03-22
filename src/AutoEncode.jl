@@ -81,6 +81,8 @@ module utils
 include("utils.jl")
 end # submodule
 
+# Temporary fix for some TaylorDiff limitations
+include("diffgeo/primitives.jl")
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Add AEs module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
