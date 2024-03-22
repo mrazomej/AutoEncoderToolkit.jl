@@ -394,6 +394,106 @@ function vec_to_ltri(
 end # function
 
 ## =============================================================================
+# Vector Matrix Vector multiplication
+## =============================================================================
+
+@doc raw"""
+    vec_mat_vec_batched(
+        v::AbstractMatrix, 
+        M::AbstractArray, 
+        w::AbstractMatrix
+    )
+
+Compute the batched product of vectors and matrices in the form v̲ᵀ M̲̲ w̲.
+
+This function takes two matrices `v` and `w`, and a 3D array `M`, and computes
+the batched product v̲ M̲̲ w̲. The computation is performed in a broadcasted
+manner using the `Flux.batched_vec` function.
+
+# Arguments
+- `v::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
+  and `n` is the number of vectors.
+- `M::AbstractArray`: A `d×d×n` array, where `d` is the dimension of the
+  matrices and `n` is the number of matrices.
+- `w::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
+  and `n` is the number of vectors.
+
+# Returns
+A `1×n` matrix where each element is the result of the product v̲ M̲̲ w̲ for the
+corresponding vectors and matrix.
+
+# Notes
+This function uses the `Flux.batched_vec` function to perform the batched
+multiplication of the matrices in `M` with the vectors in `w`. The resulting
+vectors are then element-wise multiplied with the vectors in `v` and summed over
+the dimensions to obtain the final result.
+"""
+function vec_mat_vec_batched(
+    v::AbstractMatrix,
+    M::AbstractArray,
+    w::AbstractMatrix
+)
+    # Compute v̲ M̲̲ w̲ in a broadcasted manner
+    return sum(v .* Flux.batched_vec(M, w), dims=1)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    vec_mat_vec_loop(
+        v::AbstractMatrix, 
+        M::AbstractArray, 
+        w::AbstractMatrix
+    )
+
+Compute the product of vectors and matrices in the form v̲ᵀ M̲̲ w̲ using loops.
+
+This function takes two matrices `v` and `w`, and a 3D array `M`, and computes
+the product v̲ M̲̲ w̲ using nested loops. This method might be slower than using
+batched operations, but it is needed when performing differentiation with
+`Zygote.jl` over `TaylorDiff.jl`.
+
+# Arguments
+- `v::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
+  and `n` is the number of vectors.
+- `M::AbstractArray`: A `d×d×n` array, where `d` is the dimension of the
+  matrices and `n` is the number of matrices.
+- `w::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
+  and `n` is the number of vectors.
+
+# Returns
+A `1×n` matrix where each element is the result of the product v̲ M̲̲ w̲ for the
+corresponding vectors and matrix.
+
+# Notes
+This function uses nested loops to perform the multiplication of the matrices in
+`M` with the vectors in `w`. The resulting vectors are then element-wise
+multiplied with the vectors in `v` and summed over the dimensions to obtain the
+final result. This method might be slower than using batched operations, but it
+is needed when performing differentiation with `Zygote.jl` over `TaylorDiff.jl`.
+"""
+function vec_mat_vec_loop(
+    v::AbstractMatrix,
+    M::AbstractArray,
+    w::AbstractMatrix
+)
+    # Compute v̲ M̲̲ w̲ in a loop
+    [
+        begin
+            sum(
+                begin
+                    v[i, k] *
+                    M[i, j, k] *
+                    w[j, k]
+                end
+                for i in axes(v, 1)
+                for j in axes(w, 1)
+            )
+        end for k in axes(v, 2)
+    ]
+end # function
+
+## =============================================================================
 # Define centroids via k-means
 ## =============================================================================
 
@@ -754,7 +854,7 @@ function slogdet(
 end # function
 
 ## =============================================================================
-# Defining random number generators for different GPU backends
+# Defining random number generators 
 ## =============================================================================
 
 @doc raw"""
@@ -1125,7 +1225,7 @@ function taylordiff_gradient(
     f::Function,
     x::AbstractVector;
 )
-    # Compute the finite difference gradient for each element of x
+    # Compute the gradient for each element of x
     grad = [
         TaylorDiff.derivative(f, x, unit_vector(x, i, eltype(x)), 1)
         for i in eachindex(x)
