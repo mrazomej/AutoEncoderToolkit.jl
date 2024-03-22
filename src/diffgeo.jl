@@ -69,3 +69,18 @@ include("diffgeo/splines.jl")
 
 # include("diffgeo/encoder_metric.jl")
 
+# ==============================================================================
+# Geodesic computation via neural networks
+# ==============================================================================
+
+# References
+
+# > Chen, N. et al. Metrics for Deep Generative Models. in Proceedings of the
+# > Twenty-First International Conference on Artificial Intelligence and
+# > Statistics 1540–1550 (PMLR, 2018).
+
+# > Chadebec, C., Mantoux, C. & Allassonnière, S. Geometry-Aware Hamiltonian
+# > Variational Auto-Encoder. Preprint at http://arxiv.org/abs/2010.11518
+# > (2020).
+
+include("diffgeo/neural_geodesics.jl")
