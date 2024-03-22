@@ -399,6 +399,46 @@ end # function
 
 @doc raw"""
     vec_mat_vec_batched(
+        v::AbstractVector, 
+        M::AbstractMatrix, 
+        w::AbstractVector
+    )
+
+Compute the product of a vector, a matrix, and another vector in the form v̲ᵀ
+M̲̲ w̲.
+
+This function takes two vectors `v` and `w`, and a matrix `M`, and computes the
+product v̲ M̲̲ w̲. This function is added for consistency when calling multiple
+dispatch.
+
+# Arguments
+- `v::AbstractVector`: A `d` dimensional vector.
+- `M::AbstractMatrix`: A `d×d` matrix.
+- `w::AbstractVector`: A `d` dimensional vector.
+
+# Returns
+A scalar which is the result of the product v̲ M̲̲ w̲ for the corresponding
+vectors and matrix.
+
+# Notes
+This function uses the `LinearAlgebra.dot` function to perform the
+multiplication of the matrix `M` with the vector `w`. The resulting vector is
+then element-wise multiplied with the vector `v` and summed over the dimensions
+to obtain the final result. This function is added for consistency when calling
+multiple dispatch.
+"""
+function vec_mat_vec_batched(
+    v::AbstractVector,
+    M::AbstractMatrix,
+    w::AbstractVector
+)
+    return LinearAlgebra.dot(v, M, w)
+end # for
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    vec_mat_vec_batched(
         v::AbstractMatrix, 
         M::AbstractArray, 
         w::AbstractMatrix
@@ -419,8 +459,8 @@ manner using the `Flux.batched_vec` function.
   and `n` is the number of vectors.
 
 # Returns
-A `1×n` matrix where each element is the result of the product v̲ M̲̲ w̲ for the
-corresponding vectors and matrix.
+An `n` dimensional array where each element is the result of the product v̲ M̲̲
+w̲ for the corresponding vectors and matrix.
 
 # Notes
 This function uses the `Flux.batched_vec` function to perform the batched
@@ -434,7 +474,55 @@ function vec_mat_vec_batched(
     w::AbstractMatrix
 )
     # Compute v̲ M̲̲ w̲ in a broadcasted manner
-    return sum(v .* Flux.batched_vec(M, w), dims=1)
+    return vec(sum(v .* Flux.batched_vec(M, w), dims=1))
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    vec_mat_vec_loop(
+        v::AbstractVector, 
+        M::AbstractMatrix, 
+        w::AbstractVector
+    )
+
+Compute the product of a vector, a matrix, and another vector in the form v̲ᵀ
+M̲̲ w̲ using loops.
+
+This function takes two vectors `v` and `w`, and a matrix `M`, and computes the
+product v̲ M̲̲ w̲ using nested loops. This method might be slower than using
+batched operations, but it is needed when performing differentiation with
+`Zygote.jl` over `TaylorDiff.jl`.
+
+# Arguments
+- `v::AbstractVector`: A `d` dimensional vector.
+- `M::AbstractMatrix`: A `d×d` matrix.
+- `w::AbstractVector`: A `d` dimensional vector.
+
+# Returns
+A scalar which is the result of the product v̲ M̲̲ w̲ for the corresponding
+vectors and matrix.
+
+# Notes
+This function uses nested loops to perform the multiplication of the matrix `M`
+with the vector `w`. The resulting vector is then element-wise multiplied with
+the vector `v` and summed over the dimensions to obtain the final result. This
+method might be slower than using batched operations, but it is needed when
+performing differentiation with `Zygote.jl` over `TaylorDiff.jl`.
+"""
+function vec_mat_vec_loop(
+    v::AbstractVector,
+    M::AbstractMatrix,
+    w::AbstractVector
+)
+    # Compute v̲ M̲̲ w̲ in a loop
+    return sum(
+        begin
+            v[i] * M[i, j] * w[j]
+        end
+        for i in axes(v, 1)
+        for j in axes(w, 1)
+    )
 end # function
 
 # ------------------------------------------------------------------------------
@@ -1027,7 +1115,8 @@ ChainRulesCore.@ignore_derivatives unit_vector
 Compute the finite difference gradient of a function `f` at a point `x`.
 
 # Arguments
-- `f::Function`: The function for which the gradient is to be computed.
+- `f::Function`: The function for which the gradient is to be computed. this
+  function must return a scalar value.
 - `x::AbstractVector{T}`: The point at which the gradient is to be computed.
 
 # Optional Keyword Arguments
@@ -1105,9 +1194,12 @@ Compute the finite difference gradient of a function `f` at multiple points
 represented by the columns of `x`.
 
 # Arguments
-- `f::Function`: The function for which the gradient is to be computed.
-- `x::AbstractMatrix{T}`: The matrix where each column represents a point at
-  which the gradient is to be computed.
+- `f::Function`: The function for which the gradient is to be computed. This
+  must be a scalar function. However, when applied to a matrix, the function
+  should return a vector, where each element is the scalar output of the
+  function applied to each column of the matrix.
+- `x::AbstractMatrix`: A matrix where each column represents a point at which
+  the gradient is to be computed.
 
 # Optional Keyword Arguments
 - `fdtype::Symbol=:central`: The finite difference type. It can be either
@@ -1129,15 +1221,6 @@ depending on the `fdtype` argument:
 - Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
 
 where ε is the step size and eᵢ is the `i`-th unit vector.
-
-# Example
-```julia
-f(x) = sum(x.^2, dims=1)
-x = [1.0 2.0 3.0; 4.0 5.0 6.0]
-# Returns a matrix where each column is the gradient at the corresponding column
-# of `x`
-finite_difference_gradient(f, x, fdtype=:central))  
-```
 """
 function finite_difference_gradient(
     f::Function,
@@ -1200,7 +1283,8 @@ Compute the gradient of a function `f` at a point `x` using Taylor series
 differentiation.
 
 # Arguments
-- `f::Function`: The function for which the gradient is to be computed.
+- `f::Function`: The function for which the gradient is to be computed. This
+  must be a scalar function.
 - `x::AbstractVector`: The point at which the gradient is to be computed.
 
 # Returns
@@ -1212,14 +1296,6 @@ Taylor series differentiation. The gradient is a vector where the `i`-th element
 is the partial derivative of `f` with respect to the `i`-th element of `x`.
 
 The partial derivatives are computed using the TaylorDiff.derivative function.
-
-# Example
-```julia
-f(x) = sum(x.^2)
-x = [1.0, 2.0, 3.0]
-taylordiff_gradient(f, x)  
-# Returns the vector [2.0, 4.0, 6.0]
-```
 """
 function taylordiff_gradient(
     f::Function,
@@ -1230,6 +1306,56 @@ function taylordiff_gradient(
         TaylorDiff.derivative(f, x, unit_vector(x, i, eltype(x)), 1)
         for i in eachindex(x)
     ]
+
+    return grad |> Flux.gpu
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    taylordiff_gradient(
+        f::Function,
+        x::AbstractMatrix
+    )
+
+Compute the gradient of a function `f` at each column of `x` using Taylor series
+differentiation.
+
+# Arguments
+- `f::Function`: The function for which the gradient is to be computed. This
+  must be a scalar function. However, when applied to a matrix, the function
+  should return a vector, where each element is the scalar output of the
+  function applied to each column of the matrix.
+- `x::AbstractMatrix`: A matrix where each column represents a point at which
+  the gradient is to be computed.
+
+# Returns
+- A matrix where each column represents the gradient of `f` at the corresponding
+  column of `x`.
+
+# Description
+This function computes the gradient of a function `f` at each column of `x`
+using Taylor series differentiation. The gradient is a matrix where the `i`-th
+column is the gradient of `f` with respect to the `i`-th column of `x`.
+
+The gradients are computed using the TaylorDiff.derivative function, with each
+column of `x` treated as a separate point. The result is then moved to the GPU
+using `Flux.gpu`.
+"""
+function taylordiff_gradient(
+    f::Function,
+    x::AbstractMatrix;
+)
+    # Compute the gradient for each column of x
+    grad = permutedims(
+        reduce(
+            hcat,
+            begin
+                TaylorDiff.derivative(f, x, unit_vector(x, i, eltype(x)), 1)
+            end for i in axes(x, 1)
+        ),
+        [2, 1]
+    )
 
     return grad |> Flux.gpu
 end # function
