@@ -284,6 +284,42 @@ Flux.@functor RHVAE (vae, metric_chain,)
 # ------------------------------------------------------------------------------
 
 @doc raw"""
+    Flux.gpu(rhvae::RHVAE)
+
+Move the RHVAE model to the GPU.
+
+# Arguments
+- `rhvae::RHVAE`: The RHVAE model to be moved to the GPU.
+
+# Returns
+- A new RHVAE model where all the data has been moved to the GPU.
+
+# Description
+This function moves all the data of an RHVAE model to the GPU. This includes the
+VAE model, the metric chain, the centroids data, the centroids latent, the L
+matrix, and the M matrix.
+
+# Note
+This function is needed because the `@functor` macro only tags `vae` and
+`metric_chain` for moving to the GPU. Other data fields of the RHVAE model need
+to be manually moved to the GPU.
+"""
+function Flux.gpu(rhvae::RHVAE)
+    return RHVAE(
+        Flux.gpu(rhvae.vae),
+        Flux.gpu(rhvae.metric_chain),
+        Flux.gpu(rhvae.centroids_data),
+        Flux.gpu(rhvae.centroids_latent),
+        Flux.gpu(rhvae.L),
+        Flux.gpu(rhvae.M),
+        rhvae.T,
+        rhvae.λ,
+    )
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
     RHVAE(
         vae::VAE, 
         metric_chain::MetricChain, 
