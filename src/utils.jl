@@ -581,6 +581,15 @@ function vec_mat_vec_loop(
     ]
 end # function
 
+# function vec_mat_vec_loop(
+#     v::CUDA.CuVecOrMat,
+#     M::CUDA.CuArray,
+#     w::CUDA.CuVecOrMat
+# )
+#     # Sent arrays to CPU
+#     vec_mat_vec_loop(Flux.cpu(v), Flux.cpu(M), Flux.cpu(w)) |> Flux.gpu
+# end # function
+
 ## =============================================================================
 # Define centroids via k-means
 ## =============================================================================
