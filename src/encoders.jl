@@ -734,7 +734,7 @@ is computed using the formula for the log-prior of a Gaussian distribution.
 
 # Note
 Ensure the dimension of `z` matches the expected dimensionality of the latent
-space.
+# space.
 """
 function spherical_logprior(
     z::AbstractMatrix,
@@ -743,7 +743,7 @@ function spherical_logprior(
     logprior = -0.5f0 * sum(z .^ 2, dims=1) .-
                0.5f0 * size(z, 1) * log(2.0f0π)
 
-    return logprior
+    return vec(logprior)
 end # function
 
 # ------------------------------------------------------------------------------
