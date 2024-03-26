@@ -1733,14 +1733,12 @@ function decoder_loglikelihood(
     # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
-    loglikelihood = [
-        begin
-            -Flux.Losses.logitbinarycrossentropy(p[.., i], x[.., i]; agg=sum)
-        end
-        for i in axes(z, 2)
-    ] |> Flux.gpu
+    loglikelihood = -sum(
+        Flux.Losses.logitbinarycrossentropy(p, x; agg=identity),
+        dims=1:ndims(x)-1
+    )
 
-    return loglikelihood
+    return vec(loglikelihood)
 end
 
 # ------------------------------------------------------------------------------
@@ -1836,9 +1834,6 @@ under a Categorical distribution with probability given by the decoder.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   probability of the Categorical distribution.
 
-## Optional Keyword Arguments
-- `dims::Int=1`: The dimension along which to compute the log-likelihood.
-
 # Returns
 - `loglikelihood::T`: The computed log-likelihood of the observed data `x` given
   the decoder output.
@@ -1858,15 +1853,14 @@ function decoder_loglikelihood(
     x::AbstractArray,
     z::AbstractVector,
     decoder::CategoricalDecoder,
-    decoder_output::NamedTuple;
-    dims::Int=1,
+    decoder_output::NamedTuple,
 )
     # Extract the probability of the Categorical distribution from the decoder
     p = decoder_output.p
 
     # Compute log-likelihood. Note: The log-likelihood of a Categorical
     # decoder is given by the cross-entropy loss
-    loglikelihood = -Flux.Losses.logitcrossentropy(p, x; agg=sum, dims=dims)
+    loglikelihood = -Flux.Losses.logitcrossentropy(p, x; agg=sum, dims=1)
 
     return loglikelihood
 end
@@ -1898,9 +1892,6 @@ under a Categorical distribution with probability given by the decoder.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   probability of the Categorical distribution.
 
-## Optional Keyword Arguments
-- `dims::Int=1`: The dimension along which to compute the log-likelihood.
-
 # Returns
 - `loglikelihood::Vector`: The computed log-likelihoods of the observed data `x`
   given the decoder output.
@@ -1920,25 +1911,20 @@ function decoder_loglikelihood(
     x::AbstractArray,
     z::AbstractMatrix,
     decoder::CategoricalDecoder,
-    decoder_output::NamedTuple;
-    dims::Int=1,
+    decoder_output::NamedTuple,
 )
     # Extract the probability of the Bernoulli distribution from the decoder
     p = decoder_output.p
 
-    # Compute log-likelihood. Note: The log-likelihood of a Categorical
-    # decoder is given by the cross-entropy loss
-    loglikelihood = [
-        begin
-            -Flux.Losses.logitcrossentropy(
-                p[.., i], x[.., i]; agg=sum, dims=dims
-            )
-        end
-        for i in axes(z, 2)
-    ] |> Flux.gpu
+    # Compute the log-likelihood. Note: The log-likelihood of a Categorical of a
+    # categorical distribution is given by the negative of the cross-entropy.
+    loglikelihood = -sum(
+        Flux.Losses.logitcrossentropy(p, x; agg=identity),
+        dims=1:ndims(x)-1
+    )
 
-    return loglikelihood
-end
+    return vec(loglikelihood)
+end # function
 
 # ------------------------------------------------------------------------------
 
@@ -1970,9 +1956,6 @@ with probability given by the decoder.
 - `index::Int`: The index of the data point for which the log-likelihood is to
   be computed.
 
-## Optional Keyword Arguments
-- `dims::Int=1`: The dimension along which to compute the log-likelihood.
-
 # Returns
 - `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
   for the specified data point given the decoder output.
@@ -1994,8 +1977,7 @@ function decoder_loglikelihood(
     z::AbstractVector,
     decoder::CategoricalDecoder,
     decoder_output::NamedTuple,
-    index::Int;
-    dims::Int=1
+    index::Int,
 )
     # Extract the probability of the Bernoulli distribution from the decoder
     p = decoder_output.p[.., index]
@@ -2003,7 +1985,7 @@ function decoder_loglikelihood(
     # Compute log-likelihood. Note: The log-likelihood of a Categorical
     # decoder is given by the cross-entropy loss
     loglikelihood = -Flux.Losses.logitcrossentropy(
-        p, x[.., index]; agg=sum, dims=dims
+        p, x[.., index]; agg=sum, dims=1
     )
 
     return loglikelihood
@@ -2131,13 +2113,10 @@ function decoder_loglikelihood(
     μ = decoder_output.µ
 
     # Compute log-likelihood
-    loglikelihood = [
-        begin
-            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 / σ^2) -
-            0.5f0 * length(x[.., i]) * (2.0f0 * log(σ) + log(2.0f0π))
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
-    return loglikelihood
+    loglikelihood = -0.5f0 * sum((x - µ) .^ 2 / σ^2, dims=1:ndims(x)-1) .-
+                    0.5f0 * length(x[.., 1]) * (2.0f0 * log(σ) + log(2.0f0π))
+
+    return vec(loglikelihood)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -2329,15 +2308,11 @@ function decoder_loglikelihood(
     σ² = exp.(2logσ)
 
     # Compute log-likelihood
-    loglikelihood = [
-        begin
-            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 ./ σ²[.., i]) -
-            sum(logσ[.., i]) -
-            0.5f0 * length(x[.., i]) * log(2.0f0π)
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
+    loglikelihood = -0.5f0 * sum((x - µ) .^ 2 ./ σ², dims=1:ndims(x)-1) -
+                    sum(logσ, dims=1:ndims(x)-1) .-
+                    0.5f0 * length(x[.., 1]) * log(2.0f0π)
 
-    return loglikelihood
+    return vec(loglikelihood)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -2521,15 +2496,11 @@ function decoder_loglikelihood(
     μ, σ = decoder_output.µ, decoder_output.σ
 
     # Compute log-likelihood
-    loglikelihood = [
-        begin
-            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 ./ σ[.., i] .^ 2) -
-            sum(log, σ[.., i]) -
-            0.5f0 * length(x[.., i]) * log(2.0f0π)
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
+    loglikelihood = -0.5f0 * sum(((x - µ) ./ σ) .^ 2, dims=1:ndims(x)-1) -
+                    sum(log, σ, dims=1:ndims(x)-1) .-
+                    0.5f0 * length(x[.., 1]) * log(2.0f0π)
 
-    return loglikelihood
+    return vec(loglikelihood)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -2605,24 +2576,24 @@ end # function
         x::AbstractArray,
         z::AbstractVecOrMat,
         decoder::AbstractVariationalDecoder;
-        kwargs::NamedTuple
+        kwargs::Union{NamedTuple,Dict}=NamedTuple()
     )
 
 Computes the log-likelihood of the observed data `x` given the latent variable
 `z` under a distribution specified by the decoder.
 
 # Arguments
-- `x::AbstractArray`: The observed data for which the log-likelihood
-  is to be computed. The input data `x` can be an array of any dimension. The
-  last dimension is assumed to be the number of samples.
-- `z::AbstractVecOrMat`: The latent variable(s) used to generate the
-  decoder output.
+- `x::AbstractArray`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. The last
+  dimension is assumed to be the number of samples.
+- `z::AbstractVecOrMat`: The latent variable(s) used to generate the decoder
+  output.
 - `decoder::AbstractVariationalDecoder`: The decoder of the VAE, which is used
   to compute the parameters of the specified distribution.
 
 # Optional Keyword Arguments
-- `kwargs::NamedTuple`: Additional keyword arguments that are passed to the
-  specific log-likelihood function of the decoder.
+- `kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments that are passed
+  to the specific log-likelihood function of the decoder.
 
 # Returns
 - `loglikelihood::T`: The computed log-likelihood of the observed data `x` given
@@ -2642,7 +2613,7 @@ function decoder_loglikelihood(
     x::AbstractArray,
     z::AbstractVecOrMat,
     decoder::AbstractVariationalDecoder;
-    kwargs::NamedTuple=NamedTuple()
+    kwargs::Union{NamedTuple,Dict}=NamedTuple()
 )
     # Run z through the decoder
     decoder_output = decoder(z)
@@ -2659,7 +2630,7 @@ end # function
         z::AbstractVector,
         decoder::AbstractVariationalDecoder,
         index::Int;
-        kwargs::NamedTuple=NamedTuple()
+        kwargs::Union{NamedTuple,Dict}=NamedTuple()
     )
 
 Computes the log-likelihood of the observed data `x` for a single data point
@@ -2677,8 +2648,8 @@ specified by the decoder.
   be computed.
 
 # Optional Keyword Arguments
-- `kwargs::NamedTuple`: Additional keyword arguments that are passed to the
-  specific log-likelihood function of the decoder.
+- `kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments that are passed
+  to the specific log-likelihood function of the decoder.
 
 # Returns
 - `loglikelihood::Float32`: The computed log-likelihood of the observed data `x`
