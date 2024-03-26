@@ -2112,9 +2112,15 @@ function decoder_loglikelihood(
     # Extract the mean of the Gaussian distribution from the decoder output
     μ = decoder_output.µ
 
+    # Extract length of x with Zygote.ignore to avoid gradient tracking
+    length_x = Zygote.ignore() do
+        convert(eltype(x), length(x[.., 1]))
+    end
+
     # Compute log-likelihood
     loglikelihood = -0.5f0 * sum((x - µ) .^ 2 / σ^2, dims=1:ndims(x)-1) .-
-                    0.5f0 * length(x[.., 1]) * (2.0f0 * log(σ) + log(2.0f0π))
+                    0.5f0 * length_x *
+                    (2.0f0 * log(σ) + log(2.0f0π))
 
     return vec(loglikelihood)
 end # function
