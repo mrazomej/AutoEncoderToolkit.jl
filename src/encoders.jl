@@ -689,7 +689,7 @@ distribution with zero mean and standard deviation `σ`.
   Defaults to `1.0f0`.
 
 # Returns
-- `log_prior::T`: The computed log-prior of the latent variable `z`.
+- `logprior::T`: The computed log-prior of the latent variable `z`.
 
 # Description
 The function computes the log-prior of the latent variable `z` under a spherical
@@ -704,10 +704,10 @@ function spherical_logprior(
     z::AbstractVector,
 )
     # Compute log-prior
-    log_prior = -0.5f0 * sum(z .^ 2) -
-                0.5f0 * length(z) * log(2.0f0π)
+    logprior = -0.5f0 * sum(z .^ 2) -
+               0.5f0 * length(z) * log(2.0f0π)
 
-    return log_prior
+    return logprior
 end # function
 
 # ------------------------------------------------------------------------------
@@ -725,7 +725,7 @@ distribution with zero mean and standard deviation `σ`.
   distribution. Defaults to `1.0f0`.
 
 # Returns
-- `log_prior::T`: The computed log-prior(s) of the latent variable `z`.
+- `logprior::T`: The computed log-prior(s) of the latent variable `z`.
 
 # Description
 The function computes the log-prior of the latent variable `z` under a spherical
@@ -739,15 +739,11 @@ space.
 function spherical_logprior(
     z::AbstractMatrix,
 )
-    # Compute log-prior
-    log_prior = [
-        begin
-            -0.5f0 * sum(z[:, i] .^ 2) -
-            0.5f0 * length(z[:, i]) * log(2.0f0π)
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
+    # Compute logprior
+    logprior = -0.5f0 * sum(z .^ 2, dims=1) .-
+               0.5f0 * size(z, 1) * log(2.0f0π)
 
-    return log_prior
+    return logprior
 end # function
 
 # ------------------------------------------------------------------------------
@@ -855,14 +851,11 @@ function encoder_logposterior(
     σ² = exp.(2logσ)
 
     # Compute variational log-posterior
-    logposterior = [
-        begin
-            -0.5f0 * sum((z[:, i] - µ[:, i]) .^ 2 ./ σ²[:, i]) -
-            sum(logσ[:, i]) - 0.5f0 * size(z, 1) * log(2.0f0π)
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
+    logposterior = -0.5f0 * sum((z - µ) .^ 2 ./ σ², dims=1) -
+                   sum(logσ, dims=1) .-
+                   0.5f0 * size(z, 1) * log(2.0f0π)
 
-    return logposterior
+    return vec(logposterior)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -972,25 +965,10 @@ function encoder_kl(
     encoder_μ = encoder_output.μ
     encoder_logσ = encoder_output.logσ
 
-    # Check encoder_µ type
-    if typeof(encoder_µ) <: Vector
-        # Compute KL divergence
-        kl_div = 0.5f0 * sum(
-            @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
-               2.0f0 * encoder_logσ
-        )
-    else
-        kl_div = [
-            begin
-                0.5f0 * sum(
-                    @. (
-                        exp(2.0f0 * encoder_logσ[:, i]) +
-                        encoder_μ[:, i]^2 - 1.0f0
-                    ) - 2.0f0 * encoder_logσ[:, i]
-                )
-            end for i in axes(encoder_μ, 2)
-        ] |> Flux.gpu
-    end # if
+    kl_div = 0.5f0 * sum(
+        @. (exp(2.0f0 * encoder_logσ) + encoder_μ^2 - 1.0f0) -
+           2.0f0 * encoder_logσ; dims=1
+    )
 
-    return kl_div
+    return vec(kl_div)
 end # function
