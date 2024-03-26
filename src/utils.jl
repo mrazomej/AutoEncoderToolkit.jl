@@ -1049,7 +1049,7 @@ ChainRulesCore.@ignore_derivatives sample_MvNormalCanon
 ## =============================================================================
 
 @doc raw"""
-    unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
+    unit_vector(x::AbstractVector, i::Int)
 
 Create a unit vector of the same length as `x` with the `i`-th element set to 1.
 
@@ -1057,29 +1057,29 @@ Create a unit vector of the same length as `x` with the `i`-th element set to 1.
 - `x::AbstractVector`: The vector whose length is used to determine the
   dimension of the unit vector.
 - `i::Int`: The index of the element to be set to 1.
-- `T::Type=Float32`: The type of the elements in the vector. Defaults to
-  `Float32`.
 
 # Returns
-- A unit vector of type `T` and length equal to `x` with the `i`-th element set
-  to 1.
+- A unit vector of type `eltype(x)` and length equal to `x` with the `i`-th
+  element set to 1.
 
 # Description
 This function creates a unit vector of the same length as `x` with the `i`-th
-element set to 1. All other elements are set to 0. The type of the elements in
-the vector is `T`, which defaults to `Float32`.
+element set to 1. All other elements are set to 0.
 
 # Note
 This function is marked with the `@ignore_derivatives` macro from the
 `ChainRulesCore` package, which means that all AutoDiff backends will ignore any
 call to this function when computing gradients.
 """
-function unit_vector(x::AbstractVector, i::Int, T::Type=Float32)
-    return [j == i ? one(T) : zero(T) for j in 1:length(x)] |> Flux.gpu
+function unit_vector(x::AbstractVector, i::Int)
+    # Extract type of elements in the vector
+    T = eltype(x)
+    # Build unit vector
+    return [j == i ? one(T) : zero(T) for j in 1:length(x)]
 end # function
 
 @doc raw"""
-    unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
+    unit_vector(x::AbstractMatrix, i::Int)
 
 Create a unit vector of the same length as the number of rows in `x` with the
 `i`-th element set to 1.
@@ -1088,25 +1088,25 @@ Create a unit vector of the same length as the number of rows in `x` with the
 - `x::AbstractMatrix`: The matrix whose number of rows is used to determine the
   dimension of the unit vector.
 - `i::Int`: The index of the element to be set to 1.
-- `T::Type=Float32`: The type of the elements in the vector. Defaults to
-  `Float32`.
 
 # Returns
-- A unit vector of type `T` and length equal to the number of rows in `x` with
-  the `i`-th element set to 1.
+- A unit vector of type `eltype(x)` and length equal to the number of rows in
+  `x` with the `i`-th element set to 1.
 
 # Description
 This function creates a unit vector of the same length as the number of rows in
-`x` with the `i`-th element set to 1. All other elements are set to 0. The type
-of the elements in the vector is `T`, which defaults to `Float32`.
+`x` with the `i`-th element set to 1. All other elements are set to 0. 
 
 # Note
 This function is marked with the `@ignore_derivatives` macro from the
 `ChainRulesCore` package, which means that all AutoDiff backends will ignore any
 call to this function when computing gradients.
 """
-function unit_vector(x::AbstractMatrix, i::Int, T::Type=Float32)
-    return [j == i ? one(T) : zero(T) for j in axes(x, 1)] |> Flux.gpu
+function unit_vector(x::AbstractMatrix, i::Int)
+    # Extract type of elements in the vector
+    T = eltype(x)
+    # Build unit vector
+    return [j == i ? one(T) : zero(T) for j in axes(x, 1)]
 end # function
 
 # Set Chainrulescore to ignore the function when computing gradients
@@ -1115,30 +1115,103 @@ ChainRulesCore.@ignore_derivatives unit_vector
 # ------------------------------------------------------------------------------
 
 @doc raw"""
+    unit_vectors(x::AbstractVector)
+
+Create a vector of unit vectors based on the length of `x`.
+
+# Arguments
+- `x::AbstractVector`: The vector whose length is used to determine the
+  dimension of the unit vectors.
+
+# Returns
+- A vector of unit vectors. Each unit vector has the same length as `x` and has
+  a single `1` at the position corresponding to its index in the returned
+  vector, with all other elements set to `0`.
+
+# Description
+This function creates a vector of unit vectors based on the length of `x`. Each
+unit vector has the same length as `x` and has a single `1` at the position
+corresponding to its index in the returned vector, with all other elements set
+to `0`.
+
+# Note
+This function is marked with the `@ignore_derivatives` macro from the
+`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
+call to this function when computing gradients.
+"""
+function unit_vectors(x::AbstractVector)
+    return [unit_vector(x, i) for i in 1:length(x)] |> Flux.gpu
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        unit_vectors(x::AbstractMatrix)
+
+Create a matrix where each column is a unit vector of the same length as the
+number of rows in `x`.
+
+# Arguments
+- `x::AbstractMatrix`: The matrix whose number of rows is used to determine the
+  dimension of the unit vectors.
+
+# Returns
+- A matrix where each column is a unit vector. Each unit vector has a single `1`
+  at the position corresponding to its index in the column, with all other
+  elements set to `0`.
+
+# Description
+This function creates a matrix where each column is a unit vector of the same
+length as the number of rows in `x`. Each unit vector has a single `1` at the
+position corresponding to its index in the column, with all other elements set
+to `0`.
+
+# Note
+This function is marked with the `@ignore_derivatives` macro from the
+`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
+call to this function when computing gradients.
+"""
+function unit_vectors(x::AbstractMatrix)
+    vectors = [
+        reduce(hcat, fill(unit_vector(x, i), size(x, 2)))
+        for i in 1:size(x, 1)
+    ]
+    return vectors |> Flux.gpu
+end # function
+
+# Set Chainrulescore to ignore the function when computing gradients
+ChainRulesCore.@ignore_derivatives unit_vectors
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
     finite_difference_gradient(
         f::Function,
-        x::AbstractVector;
+        x::AbstractVecOrMat;
         fdtype::Symbol=:central
-    )where {T<:AbstractFloat}
+    )
 
 Compute the finite difference gradient of a function `f` at a point `x`.
 
 # Arguments
-- `f::Function`: The function for which the gradient is to be computed. this
+- `f::Function`: The function for which the gradient is to be computed. This
   function must return a scalar value.
-- `x::AbstractVector{T}`: The point at which the gradient is to be computed.
+- `x::AbstractVecOrMat`: The point at which the gradient is to be computed. Can
+  be a vector or a matrix. If a matrix, each column represents a point where the
+  function f is to be evaluated and the derivative computed.
 
 # Optional Keyword Arguments
 - `fdtype::Symbol=:central`: The finite difference type. It can be either
   `:forward` or `:central`. Defaults to `:central`.
 
 # Returns
-- A vector representing the gradient of `f` at `x`.
+- A vector or a matrix representing the gradient of `f` at `x`, depending on the
+  input type of `x`.
 
 # Description
 This function computes the finite difference gradient of a function `f` at a
-point `x`. The gradient is a vector where the `i`-th element is the partial
-derivative of `f` with respect to the `i`-th element of `x`.
+point `x`. The gradient is a vector or a matrix where the `i`-th element is the
+partial derivative of `f` with respect to the `i`-th element of `x`.
 
 The partial derivatives are computed using the forward or central difference
 formula, depending on the `fdtype` argument:
@@ -1147,6 +1220,8 @@ formula, depending on the `fdtype` argument:
 - Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
 
 where ε is the step size and eᵢ is the `i`-th unit vector.
+
+The function is compatible with GPU computations.
 
 # Example
 ```julia
@@ -1158,7 +1233,7 @@ finite_difference_gradient(f, x, fdtype=:central)
 """
 function finite_difference_gradient(
     f::Function,
-    x::AbstractVector;
+    x::AbstractVecOrMat;
     fdtype::Symbol=:central,
 )
     # Check that mode is either :forward or :central
@@ -1170,112 +1245,24 @@ function finite_difference_gradient(
     if fdtype == :forward
         # Define step size
         ε = √(eps(eltype(x)))
+        # Generate unit vectors times step size for each element of x
+        Δx = unit_vectors(x) .* ε
         # Compute the finite difference gradient for each element of x
-        grad = [
-            (f(x .+ ε * unit_vector(x, i, eltype(x))) - f(x)) / ε
-            for i in eachindex(x)
-        ]
+        grad = (f.(Ref(x) .+ Δx) .- f(x)) ./ ε
     else
         # Define step size
         ε = ∛(eps(eltype(x)))
+        # Generate unit vectors times step size for each element of x
+        Δx = unit_vectors(x) .* ε
         # Compute the finite difference gradient for each element of x
-        grad = [
-            (
-                f(x .+ ε * unit_vector(x, i, eltype(x))) -
-                f(x .- ε * unit_vector(x, i, eltype(x)))
-            ) / 2ε for i in eachindex(x)
-        ]
+        grad = (f.(Ref(x) .+ Δx) - f.(Ref(x) .- Δx)) ./ (2ε)
     end # if
 
-    return grad |> Flux.gpu
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    finite_difference_gradient(
-        f::Function,
-        x::AbstractMatrix;
-        fdtype::Symbol=:central
-    )
-
-Compute the finite difference gradient of a function `f` at multiple points
-represented by the columns of `x`.
-
-# Arguments
-- `f::Function`: The function for which the gradient is to be computed. This
-  must be a scalar function. However, when applied to a matrix, the function
-  should return a vector, where each element is the scalar output of the
-  function applied to each column of the matrix.
-- `x::AbstractMatrix`: A matrix where each column represents a point at which
-  the gradient is to be computed.
-
-# Optional Keyword Arguments
-- `fdtype::Symbol=:central`: The finite difference type. It can be either
-  `:forward` or `:central`. Defaults to `:central`.
-
-# Returns
-- A matrix where each column represents the gradient of `f` at the corresponding
-  column of `x`.
-
-# Description
-This function computes the finite difference gradient of a function `f` at
-multiple points. Each column of `x` represents a point, and the corresponding
-column in the output matrix represents the gradient at that point.
-
-The gradient is computed using the forward or central difference formula,
-depending on the `fdtype` argument:
-
-- Forward difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x)] / ε
-- Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
-
-where ε is the step size and eᵢ is the `i`-th unit vector.
-"""
-function finite_difference_gradient(
-    f::Function,
-    x::AbstractMatrix;
-    fdtype::Symbol=:central
-)
-    # Check that mode is either :forward or :central
-    if !(fdtype in (:forward, :central))
-        error("fdtype must be either :forward or :central")
-    end
-
-    # Check fdtype
-    if fdtype == :forward
-        # Define step size
-        ε = √(eps(eltype(x)))
-        # Compute the finite difference gradient for each column of x
-        grad = permutedims(
-            reduce(
-                hcat,
-                [
-                    (f(x .+ ε * unit_vector(x, i, eltype(x))) - f(x)) / ε
-                    for i in axes(x, 1)
-                ]
-            ),
-            [2, 1]
-        )
-    else
-        # Define step size
-        ε = ∛(eps(eltype(x)))
-        # Compute the finite difference gradient for each column of x
-        grad = permutedims(
-            reduce(
-                hcat,
-                [
-                    (
-                        f(x .+ ε * unit_vector(x, i, eltype(x))) -
-                        f(x .- ε * unit_vector(x, i, eltype(x)))
-                    ) / 2ε for i in axes(x, 1)
-                ]
-            ),
-            [2, 1]
-        )
+    if typeof(x) <: AbstractVector
+        return grad |> Flux.gpu
+    elseif typeof(x) <: AbstractMatrix
+        return permutedims(reduce(hcat, grad), [2, 1]) |> Flux.gpu
     end # if
-
-    # Return gradient updated to GPU
-    return grad |> Flux.gpu
 end # function
 
 # ==============================================================================
@@ -1311,10 +1298,7 @@ function taylordiff_gradient(
     x::AbstractVector;
 )
     # Compute the gradient for each element of x
-    grad = [
-        TaylorDiff.derivative(f, x, unit_vector(x, i, eltype(x)), 1)
-        for i in eachindex(x)
-    ]
+    grad = TaylorDiff.derivative.(Ref(f), Ref(x), unit_vectors(x), Ref(1))
 
     return grad |> Flux.gpu
 end # function
@@ -1359,9 +1343,9 @@ function taylordiff_gradient(
     grad = permutedims(
         reduce(
             hcat,
-            begin
-                TaylorDiff.derivative(f, x, unit_vector(x, i, eltype(x)), 1)
-            end for i in axes(x, 1)
+            TaylorDiff.derivative.(
+                Ref(f), Ref(x), unit_vectors(x[:, 1]), Ref(1)
+            )
         ),
         [2, 1]
     )
