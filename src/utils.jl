@@ -1265,6 +1265,40 @@ function finite_difference_gradient(
     end # if
 end # function
 
+function finite_difference_gradient(
+    f::Function,
+    x::CUDA.CuVecOrMat;
+    fdtype::Symbol=:central,
+)
+    # Check that mode is either :forward or :central
+    if !(fdtype in (:forward, :central))
+        error("fdtype must be either :forward or :central")
+    end # if
+
+    # Check fdtype
+    if fdtype == :forward
+        # Define step size
+        ε = √(eps(eltype(x)))
+        # Generate unit vectors times step size for each element of x
+        Δx = unit_vectors(x) .* ε
+        # Compute the finite difference gradient for each element of x
+        grad = (f.([x + δ for δ in Δx]) .- f(x)) ./ ε
+    else
+        # Define step size
+        ε = ∛(eps(eltype(x)))
+        # Generate unit vectors times step size for each element of x
+        Δx = unit_vectors(x) .* ε
+        # Compute the finite difference gradient for each element of x
+        grad = (f.([x + δ for δ in Δx]) - f.([x - δ for δ in Δx])) ./ (2ε)
+    end # if
+
+    if typeof(x) <: AbstractVector
+        return grad 
+    elseif typeof(x) <: AbstractMatrix
+        return permutedims(reduce(hcat, grad), [2, 1])
+    end # if
+end # function
+
 # ==============================================================================
 # Define TaylorDiff gradient function
 # ==============================================================================
@@ -1349,6 +1383,35 @@ function taylordiff_gradient(
         ),
         [2, 1]
     )
+
+    return grad |> Flux.gpu
+end # function
+
+function taylordiff_gradient(
+    f::Function,
+    x::CUDA.CuMatrix;
+)
+    # Compute the gradient for each column of x
+    grad = permutedims(
+        reduce(
+            hcat,
+            TaylorDiff.derivative.(
+                [(f, x, u, 1) for u in unit_vectors(x[:, 1])]...
+            )
+        ),
+        [2, 1]
+    )
+    # grad = CUDA.allowscalar() do 
+    #     permutedims(
+    #         reduce(
+    #             hcat,
+    #             begin
+    #                 TaylorDiff.derivative(f, x, unit_vector(x, i), 1)
+    #             end for i in axes(x, 1)
+    #         ),
+    #         [2, 1]
+    #     )
+    # end 
 
     return grad |> Flux.gpu
 end # function
