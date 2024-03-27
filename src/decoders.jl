@@ -1,5 +1,6 @@
 # Import ML libraries
 import Flux
+import TaylorDiff
 # Import library to use Ellipsis Notation
 using EllipsisNotation
 
@@ -1733,6 +1734,68 @@ function decoder_loglikelihood(
     # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
+    loglikelihood = -sum(
+        Flux.Losses.logitbinarycrossentropy(p, x; agg=identity),
+        dims=1:ndims(p)-1
+    )
+
+    return vec(loglikelihood)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    decoder_loglikelihood(
+        x::AbstractArray,
+        z::AbstractMatrix{TaylorDiff.TaylorScalar},
+        decoder::BernoulliDecoder,
+        decoder_output::NamedTuple
+    )
+
+Computes the log-likelihood of the observed data `x` given the decoder output
+under a Bernoulli distribution with probability given by the decoder.
+
+# Arguments
+- `x::AbstractArray`: The observed data for which the log-likelihood is to be
+  computed. The input data `x` can be an array of any dimension. The last
+  dimension is assumed to be the number of samples.
+- `z::AbstractMatrix{TaylorDiff.TaylorScalar}`: The corresponding latent space
+  representations used to generate the decoder output. This argument is not used
+  in the computation of the log-likelihood since the decoder output is already
+  provided. This is only used to know which method to call.
+- `decoder::BernoulliDecoder`: The decoder of the VAE, which is used to compute
+  the probability of the Bernoulli distribution.
+- `decoder_output::NamedTuple`: The output of the decoder, which includes the
+  probability of the Bernoulli distribution.
+
+# Returns
+- `loglikelihood::Vector`: The computed log-likelihoods of the observed data `x`
+  given the decoder output.
+
+# Description
+The function computes the log-likelihood of the observed data `x` given the
+decoder output under a Bernoulli distribution. The probability of the Bernoulli
+distribution is extracted from the `decoder_output`. The log-likelihood is
+computed using the formula for the log-likelihood of a Bernoulli distribution.
+
+# Note
+- Ensure the dimensions of `x` match the expected input dimensionality of the
+  `decoder`. 
+- This method is necessary when dealing with `Zygote.jl` over `TaylorDiff.jl`
+  automatic differentiation, where there seems to be a problem with vectorizing
+  the operations.
+"""
+function decoder_loglikelihood(
+    x::AbstractArray,
+    z::AbstractMatrix{TaylorDiff.TaylorScalar},
+    decoder::BernoulliDecoder,
+    decoder_output::NamedTuple;
+)
+    # Extract the probability of the Bernoulli distribution from the decoder
+    p = decoder_output.p
+    # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
+    # distribution is given as follows:
+    # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
     loglikelihood = [
         begin
             -Flux.Losses.logitbinarycrossentropy(p[.., i], x[.., i]; agg=sum)
@@ -1741,7 +1804,7 @@ function decoder_loglikelihood(
     ] |> Flux.gpu
 
     return loglikelihood
-end
+end # function
 
 # ------------------------------------------------------------------------------
 
@@ -1914,7 +1977,7 @@ Categorical distribution.
 
 # Note
 Ensure the dimensions of `x` match the expected input dimensionality of the
-`decoder`.
+`decoder`. 
 """
 function decoder_loglikelihood(
     x::AbstractArray,
@@ -1938,7 +2001,7 @@ function decoder_loglikelihood(
     ] |> Flux.gpu
 
     return loglikelihood
-end
+end # function
 
 # ------------------------------------------------------------------------------
 
@@ -2130,14 +2193,15 @@ function decoder_loglikelihood(
     # Extract the mean of the Gaussian distribution from the decoder output
     μ = decoder_output.µ
 
+    # Extract length of input
+    length_x = convert(eltype(µ), length(µ[.., 1]))
+
     # Compute log-likelihood
-    loglikelihood = [
-        begin
-            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 / σ^2) -
-            0.5f0 * length(x[.., i]) * (2.0f0 * log(σ) + log(2.0f0π))
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
-    return loglikelihood
+    loglikelihood = -0.5f0 * sum((x - µ) .^ 2 / σ^2, dims=1:ndims(x)-1) .-
+                    0.5f0 * length_x *
+                    (2.0f0 * log(σ) + log(2.0f0π))
+
+    return vec(loglikelihood)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -2328,16 +2392,15 @@ function decoder_loglikelihood(
     # Compute variance
     σ² = exp.(2logσ)
 
-    # Compute log-likelihood
-    loglikelihood = [
-        begin
-            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 ./ σ²[.., i]) -
-            sum(logσ[.., i]) -
-            0.5f0 * length(x[.., i]) * log(2.0f0π)
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
+    # Extract length of input
+    length_x = convert(eltype(µ), length(µ[.., 1]))
 
-    return loglikelihood
+    # Compute log-likelihood
+    loglikelihood = -0.5f0 * sum((x - µ) .^ 2 ./ σ², dims=1:ndims(x)-1) -
+                    sum(logσ, dims=1:ndims(x)-1) .-
+                    0.5f0 * length_x * log(2.0f0π)
+
+    return vec(loglikelihood)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -2520,16 +2583,15 @@ function decoder_loglikelihood(
     # Extract the mean and standard deviation of the Gaussian distribution
     μ, σ = decoder_output.µ, decoder_output.σ
 
-    # Compute log-likelihood
-    loglikelihood = [
-        begin
-            -0.5f0 * sum((x[.., i] - μ[.., i]) .^ 2 ./ σ[.., i] .^ 2) -
-            sum(log, σ[.., i]) -
-            0.5f0 * length(x[.., i]) * log(2.0f0π)
-        end for i in axes(z, 2)
-    ] |> Flux.gpu
+    # Extract length of input
+    length_x = convert(eltype(µ), length(µ[.., 1]))
 
-    return loglikelihood
+    # Compute log-likelihood
+    loglikelihood = -0.5f0 * sum(((x - µ) ./ σ) .^ 2, dims=1:ndims(x)-1) -
+                    sum(log, σ, dims=1:ndims(x)-1) .-
+                    0.5f0 * length_x * log(2.0f0π)
+
+    return vec(loglikelihood)
 end # function
 
 # ------------------------------------------------------------------------------
