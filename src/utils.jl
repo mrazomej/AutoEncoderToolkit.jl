@@ -1220,16 +1220,6 @@ formula, depending on the `fdtype` argument:
 - Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
 
 where ε is the step size and eᵢ is the `i`-th unit vector.
-
-The function is compatible with GPU computations.
-
-# Example
-```julia
-f(x) = sum(x.^2)
-x = [1.0, 2.0, 3.0]
-finite_difference_gradient(f, x, fdtype=:central)  
-# Returns the vector [2.0, 4.0, 6.0]
-```
 """
 function finite_difference_gradient(
     f::Function,
@@ -1259,12 +1249,54 @@ function finite_difference_gradient(
     end # if
 
     if typeof(x) <: AbstractVector
-        return grad |> Flux.gpu
+        return grad
     elseif typeof(x) <: AbstractMatrix
-        return permutedims(reduce(hcat, grad), [2, 1]) |> Flux.gpu
+        return permutedims(reduce(hcat, grad), [2, 1])
     end # if
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    finite_difference_gradient(
+        f::Function,
+        x::CUDA.CuVecOrMat;
+        fdtype::Symbol=:central
+    )
+
+Compute the finite difference gradient of a function `f` at a point `x` on GPUs.
+
+# Arguments
+- `f::Function`: The function for which the gradient is to be computed. This
+  function must return a scalar value.
+- `x::CUDA.CuVecOrMat`: The point at which the gradient is to be computed. Can
+  be a vector or a matrix. If a matrix, each column represents a point where the
+  function f is to be evaluated and the derivative computed.
+
+# Optional Keyword Arguments
+- `fdtype::Symbol=:central`: The finite difference type. It can be either
+  `:forward` or `:central`. Defaults to `:central`.
+
+# Returns
+- A vector or a matrix representing the gradient of `f` at `x`, depending on the
+  input type of `x`.
+
+# Description
+This function computes the finite difference gradient of a function `f` at a
+point `x` on GPUs. The gradient is a vector or a matrix where the `i`-th element
+is the partial derivative of `f` with respect to the `i`-th element of `x`.
+
+The partial derivatives are computed using the forward or central difference
+formula, depending on the `fdtype` argument:
+
+- Forward difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x)] / ε
+- Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
+
+where ε is the step size and eᵢ is the `i`-th unit vector.
+
+# Note
+This method is designed to work with GPUs.
+"""
 function finite_difference_gradient(
     f::Function,
     x::CUDA.CuVecOrMat;
@@ -1293,7 +1325,7 @@ function finite_difference_gradient(
     end # if
 
     if typeof(x) <: AbstractVector
-        return grad 
+        return grad
     elseif typeof(x) <: AbstractMatrix
         return permutedims(reduce(hcat, grad), [2, 1])
     end # if
@@ -1334,7 +1366,7 @@ function taylordiff_gradient(
     # Compute the gradient for each element of x
     grad = TaylorDiff.derivative.(Ref(f), Ref(x), unit_vectors(x), Ref(1))
 
-    return grad |> Flux.gpu
+    return grad
 end # function
 
 # ------------------------------------------------------------------------------
@@ -1384,7 +1416,7 @@ function taylordiff_gradient(
         [2, 1]
     )
 
-    return grad |> Flux.gpu
+    return grad
 end # function
 
 function taylordiff_gradient(
