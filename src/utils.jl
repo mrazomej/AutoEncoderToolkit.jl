@@ -515,6 +515,10 @@ function vec_mat_vec_loop(
     M::AbstractMatrix,
     w::AbstractVector
 )
+    # Check dimensions to see if the multiplication is possible
+    if size(v, 1) ≠ size(M, 1) || size(M, 2) ≠ size(w, 1)
+        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
+    end # if
     # Compute v̲ M̲̲ w̲ in a loop
     return sum(
         begin
@@ -562,9 +566,14 @@ is needed when performing differentiation with `Zygote.jl` over `TaylorDiff.jl`.
 """
 function vec_mat_vec_loop(
     v::AbstractMatrix,
-    M::AbstractArray,
+    M::AbstractArray{<:Any,3},
     w::AbstractMatrix
 )
+    # Check dimensions to see if the multiplication is possible
+    if size(v, 1) ≠ size(M, 1) || size(M, 2) != size(w, 1)
+        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
+    end # if
+
     # Compute v̲ M̲̲ w̲ in a loop
     [
         begin
@@ -1156,9 +1165,9 @@ number of rows in `x`.
   dimension of the unit vectors.
 
 # Returns
-- A matrix where each column is a unit vector. Each unit vector has a single `1`
-  at the position corresponding to its index in the column, with all other
-  elements set to `0`.
+- A vector of matrices where each entry is a matrix containing all unit vectors
+  for a single vector. Each unit vector has a single `1` at the position
+  corresponding to its index in the column, with all other elements set to `0`.
 
 # Description
 This function creates a matrix where each column is a unit vector of the same
@@ -1419,31 +1428,19 @@ function taylordiff_gradient(
     return grad
 end # function
 
-function taylordiff_gradient(
-    f::Function,
-    x::CUDA.CuMatrix;
-)
-    # Compute the gradient for each column of x
-    grad = permutedims(
-        reduce(
-            hcat,
-            TaylorDiff.derivative.(
-                [(f, x, u, 1) for u in unit_vectors(x[:, 1])]...
-            )
-        ),
-        [2, 1]
-    )
-    # grad = CUDA.allowscalar() do 
-    #     permutedims(
-    #         reduce(
-    #             hcat,
-    #             begin
-    #                 TaylorDiff.derivative(f, x, unit_vector(x, i), 1)
-    #             end for i in axes(x, 1)
-    #         ),
-    #         [2, 1]
-    #     )
-    # end 
-
-    return grad |> Flux.gpu
-end # function
+# function taylordiff_gradient(
+#     f::Function,
+#     x::CUDA.CuMatrix;
+# )
+#     # Compute the gradient for each column of x
+#     grad = permutedims(
+#         reduce(
+#             hcat,
+#             TaylorDiff.derivative.(
+#                 [(f, x, u, 1) for u in unit_vectors(x[:, 1])]...
+#             )
+#         ),
+#         [2, 1]
+#     )
+#     return grad
+# end # function
