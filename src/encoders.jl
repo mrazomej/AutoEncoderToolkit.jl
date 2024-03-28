@@ -662,7 +662,7 @@ function (encoder::JointEncoder)(
     # Map from last encoder layer to latent space mean
     µ = encoder.µ(h)
     # Map from last encoder layer to latent space log standard deviation
-    σ = encoder.logσ(h)
+    σ = encoder.σ(h)
 
     # Drop dimensions of size 1 from µ and σ
     µ = dropdims(µ, dims=tuple(findall(size(µ) .== 1)...))
