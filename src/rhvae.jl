@@ -1076,8 +1076,8 @@ function riemannian_logprior(
     vec_mat_vec::Function=vec_mat_vec_loop
 )
     if σ ≠ 1.0f0
-      # Multiply G⁻¹ by σ²
-      G⁻¹ = σ^2 .* G⁻¹
+        # Multiply G⁻¹ by σ²
+        G⁻¹ = σ^2 .* G⁻¹
     end # if
 
     # Compute ρᵀ G ρ
@@ -4036,14 +4036,14 @@ function riemannian_hamiltonian_elbo(
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
     log_p = _log_p̄(
-      x, rhvae, rhvae_outputs; 
-      prefactor=logp_prefactor, momentum_logprior=∇H_kwargs.momentum_logprior
+        x, rhvae, rhvae_outputs;
+        prefactor=logp_prefactor, momentum_logprior=∇H_kwargs.momentum_logprior
     )
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
     log_q = _log_q̄(
-      rhvae, rhvae_outputs, βₒ; 
-      prefactor=logq_prefactor, momentum_logprior=∇H_kwargs.momentum_logprior
+        rhvae, rhvae_outputs, βₒ;
+        prefactor=logq_prefactor, momentum_logprior=∇H_kwargs.momentum_logprior
     )
 
     if return_outputs
@@ -4650,7 +4650,7 @@ function loss(
     else
         # Compute ELBO
         return -riemannian_hamiltonian_elbo(
-            rhvae, metric_param, x_int, x_out;
+            rhvae, metric_param, x_in, x_out;
             K=K, ϵ=ϵ, βₒ=βₒ, steps=steps,
             ∇H=∇H, ∇H_kwargs=∇H_kwargs,
             G_inv=G_inv,
