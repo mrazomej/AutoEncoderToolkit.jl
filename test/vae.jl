@@ -332,22 +332,22 @@ end # @testset "loss function"
             )
 
             # Extract parameters
-            params_init = deepcopy(Flux.params(vae))
+            # params_init = deepcopy(Flux.params(vae))
 
             # Loop through a couple of epochs
             losses = Float32[]  # Track the loss
             for epoch = 1:n_epochs
                 Random.seed!(42)
                 # Test training function
-                VAEs.train!(vae, data, opt_state)
-                push!(losses, VAEs.loss(vae, data))
+                L = VAEs.train!(vae, data, opt_state; loss_return=true)
+                push!(losses, L)
             end
 
             # Check if loss is decreasing
             @test all(diff(losses) ≠ 0)
 
             # Extract modified parameters
-            params_end = deepcopy(Flux.params(vae))
+            # params_end = deepcopy(Flux.params(vae))
         end # for decoder in decoders
     end # @testset "without regularization"
 
