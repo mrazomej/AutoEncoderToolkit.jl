@@ -1,5 +1,5 @@
 ## ============= Utils module =============
-println("Testing VAEs module:\n")
+println("Testing utils module:\n")
 
 ## =============================================================================
 
