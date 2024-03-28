@@ -1594,6 +1594,204 @@ Flux.@functor CategoricalDecoder
 # ------------------------------------------------------------------------------
 
 @doc raw"""
+        CategoricalDecoder(
+            size_input, n_latent, decoder_neurons, decoder_activation, 
+            output_activation; init=Flux.glorot_uniform
+        )
+
+Constructs and initializes a `CategoricalDecoder` object designed for
+variational autoencoders (VAEs). This function sets up a decoder network that
+maps from a latent space to an output space.
+
+# Arguments
+- `size_input::AbstractVector{<:Int}`: Dimensionality of the output data (or the
+  data to be reconstructed) in the form of a vector where each element
+  represents the size of a dimension.
+- `n_latent::Int`: Dimensionality of the latent space.
+- `decoder_neurons::Vector{<:Int}`: Vector of layer sizes for the decoder
+  network, not including the input latent layer and the final output layer.
+- `decoder_activation::Vector{<:Function}`: Activation functions for each
+  decoder layer, not including the final output layer.
+- `output_activation::Function`: Activation function for the final output layer.
+
+## Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: Initialization function for the network
+  parameters.
+
+# Returns
+A `CategoricalDecoder` object with the specified architecture and initialized
+weights.
+
+# Description
+This function constructs a `CategoricalDecoder` object, setting up its decoder
+network based on the provided specifications. The architecture begins with a
+dense layer mapping from the latent space, goes through a sequence of middle
+layers if specified, and finally maps to the output space.
+
+The function ensures that there are appropriate activation functions provided
+for each layer in the `decoder_neurons` and checks for potential mismatches in
+length.
+
+The output layer uses the identity function as its activation function, and the
+output is reshaped to match the dimensions specified in `size_input`. The
+`output_activation` function is then applied over the first dimension of the
+reshaped output.
+
+# Note 
+Ensure that the lengths of decoder_neurons and decoder_activation match,
+excluding the output layer. Also, the output activation function should return
+values that can be interpreted as probabilities, as the decoder models the
+output data as a categorical distribution. 
+"""
+function CategoricalDecoder(
+    size_input::AbstractVector{<:Int},
+    n_latent::Int,
+    decoder_neurons::Vector{<:Int},
+    decoder_activation::Vector{<:Function},
+    output_activation::Function;
+    init::Function=Flux.glorot_uniform
+)
+    # Calculate n_input
+    n_input = prod(size_input)
+
+    # Check there's enough activation functions for all layers
+    if (length(decoder_activation) != length(decoder_neurons))
+        error("Each layer needs exactly one activation function")
+    end # if
+
+    # Initialize list with decoder layers
+    decoder = Array{Flux.Dense}(undef, length(decoder_neurons) + 1)
+
+    # Add first layer from latent space to decoder
+    decoder[1] = Flux.Dense(
+        n_latent => decoder_neurons[1], decoder_activation[1]; init=init
+    )
+
+    # Add last layer from decoder to output
+    decoder[end] = Flux.Dense(
+        decoder_neurons[end] => n_input, Flux.identity; init=init
+    )
+
+    # Check if there are multiple middle layers
+    if length(decoder_neurons) > 1
+        # Loop through middle layers
+        for i = 2:length(decoder_neurons)
+            # Set middle layers of decoder
+            decoder[i] = Flux.Dense(
+                decoder_neurons[i-1] => decoder_neurons[i],
+                decoder_activation[i];
+                init=init
+            )
+        end # for
+    end # if
+
+    # Initialize Categorical decoder
+    return CategoricalDecoder(
+        Flux.Chain(
+            decoder...,
+            Reshape(size_input...),
+            ActivationOverDims(output_activation, 1)
+        )
+    )
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    CategoricalDecoder(
+        n_input, n_latent, decoder_neurons, decoder_activation,
+        output_activation; init=Flux.glorot_uniform
+    )
+
+Constructs and initializes a `CategoricalDecoder` object designed for
+variational autoencoders (VAEs). This function sets up a decoder network that
+maps from a latent space to an output space.
+
+# Arguments
+- `size_input::AbstractVector{<:Int}`: Dimensionality of the output data (or
+  the data to be reconstructed).
+- `n_latent::Int`: Dimensionality of the latent space.
+- `decoder_neurons::Vector{<:Int}`: Vector of layer sizes for the decoder
+  network, not including the input latent layer and the final output layer.
+- `decoder_activation::Vector{<:Function}`: Activation functions for each
+  decoder layer, not including the final output layer.
+- `output_activation::Function`: Activation function for the final output layer.
+
+## Optional Keyword Arguments
+- `init::Function=Flux.glorot_uniform`: Initialization function for the network
+  parameters.
+
+# Returns
+A `CategoricalDecoder` object with the specified architecture and initialized
+weights.
+
+# Description
+This function constructs a `CategoricalDecoder` object, setting up its decoder
+network based on the provided specifications. The architecture begins with a
+dense layer mapping from the latent space, goes through a sequence of middle
+layers if specified, and finally maps to the output space.
+
+The function ensures that there are appropriate activation functions provided
+for each layer in the `decoder_neurons` and checks for potential mismatches in
+length.
+
+# Note 
+Ensure that the lengths of decoder_neurons and decoder_activation match,
+excluding the output layer. Also, the output activation function should return
+values that can be interpreted as probabilities, as the decoder models the
+output data as a categorical distribution. 
+"""
+function CategoricalDecoder(
+    n_input::Int,
+    n_latent::Int,
+    decoder_neurons::Vector{<:Int},
+    decoder_activation::Vector{<:Function},
+    output_activation::Function;
+    init::Function=Flux.glorot_uniform
+)
+    # Check there's enough activation functions for all layers
+    if (length(decoder_activation) != length(decoder_neurons))
+        error("Each layer needs exactly one activation function")
+    end # if
+
+    # Initialize list with decoder layers
+    decoder = Array{Flux.Dense}(undef, length(decoder_neurons) + 1)
+
+    # Add first layer from latent space to decoder
+    decoder[1] = Flux.Dense(
+        n_latent => decoder_neurons[1], decoder_activation[1]; init=init
+    )
+
+    # Add last layer from decoder to output
+    decoder[end] = Flux.Dense(
+        decoder_neurons[end] => n_input, Flux.identity; init=init
+    )
+
+    # Check if there are multiple middle layers
+    if length(decoder_neurons) > 1
+        # Loop through middle layers
+        for i = 2:length(decoder_neurons)
+            # Set middle layers of decoder
+            decoder[i] = Flux.Dense(
+                decoder_neurons[i-1] => decoder_neurons[i],
+                decoder_activation[i];
+                init=init
+            )
+        end # for
+    end # if
+
+    # Initialize Categorical decoder
+    return CategoricalDecoder(
+        Flux.Chain(
+            decoder...,
+            ActivationOverDims(output_activation, 1)
+        )
+    )
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
     (decoder::CategoricalDecoder)(z::AbstractArray)
 
 Maps the given latent representation `z` through the `CategoricalDecoder`
