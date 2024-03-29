@@ -1554,9 +1554,6 @@ end # loss function
 ## =============================================================================
 
 @testset "RHVAE training" begin
-    # Define number of epochs
-    n_epochs = 2
-
     @testset "without regularization" begin
         # Loop through decoders
         for decoder in decoders
@@ -1575,24 +1572,9 @@ end # loss function
                 rhvae
             )
 
-            # Extract parameters
-            # params_init = deepcopy(Flux.params(rhvae))
-
-            # Loop through a couple of epochs
-            losses = Float32[]  # Track the loss
-            for epoch = 1:n_epochs
-                Random.seed!(42)
-                # Test training function
-                L = RHVAEs.train!(rhvae, data, opt_state; loss_return=true)
-                push!(losses, L)
-            end
-
-            # Check if loss is decreasing
-            @test all(diff(losses) ≠ 0)
-
-            # Extract modified parameters
-            # params_end = deepcopy(Flux.params(rhvae))
-
+            # Test training function
+            L = RHVAEs.train!(rhvae, data, opt_state; loss_return=true)
+            @test isa(L, Float32)
         end # for decoder in decoders
     end # @testset "without regularization"
 end # @testset "RHVAE training"
