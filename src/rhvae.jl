@@ -1148,6 +1148,57 @@ function riemannian_logprior(
     return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) - 0.5f0 * ρᵀ_G_ρ
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior(
+        ρ::CUDA.CuVecOrMat,
+        G⁻¹::CUDA.CuArray,
+        logdetG::Union{CUDA.CuVector,<:Number};
+        σ::Number=1.0f0,
+        vec_mat_vec::Function=vec_mat_vec_tullio
+    )
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric for a single data point specified by `index`. This
+version of the function is optimized for CUDA arrays.
+
+# Arguments
+- `ρ::CUDA.CuVecOrMat`: The momentum vectors. Each column of `ρ` represents a
+  different data point.
+- `G⁻¹::CUDA.CuArray`: The inverse of the Riemannian metric tensor. Each column
+  of `G⁻¹` represents the inverse metric for a different data point.
+- `logdetG::Union{CUDA.CuVector,<:Number}`: The log determinants of the
+  Riemannian metric tensor. Each element of `logdetG` corresponds to a different
+  data point.
+
+# Optional Keyword Arguments
+- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
+  is used to scale the inverse metric tensor. Default is `1.0f0`.
+- `vec_mat_vec::Function=vec_mat_vec_tullio`: Function to compute the product of
+  a vector with a matrix with a vector. Default is `vec_mat_vec_tullio`, which
+  is optimized for CUDA arrays and uses Tullio.jl for computations.
+
+# Returns
+The log-prior of the Gaussian distribution with a covariance matrix given by the
+Riemannian metric for the specified data point.
+
+# Notes
+- Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
+  dimensionality of the RHVAE model.
+- This version of the function is optimized for CUDA arrays and uses Tullio.jl
+  for the `vec_mat_vec` computation.
+"""
+function riemannian_logprior(
+    ρ::CUDA.CuVecOrMat,
+    G⁻¹::CUDA.CuArray,
+    logdetG::Union{CUDA.CuVector,<:Number};
+    σ::Number=1.0f0,
+    vec_mat_vec::Function=vec_mat_vec_tullio
+)
+    riemannian_logprior(ρ, G⁻¹, logdetG, σ=σ, vec_mat_vec=vec_mat_vec)
+end # function
+
 # ==============================================================================
 # Hamiltonian computations
 # ==============================================================================
