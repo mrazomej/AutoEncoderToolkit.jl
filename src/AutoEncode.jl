@@ -58,11 +58,19 @@ autoencoders, such as Standard VAEs, InfoMaxVAEs, or Hamiltonian VAEs.
 """
 abstract type AbstractVariationalAutoEncoder <: AbstractAutoEncoder end
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# General encoder and decoder types
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
 # Import Encoder types
 include("encoders.jl")
 
 # Import Decoder types
 include("decoders.jl")
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Custom layers
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
 # Import custom layers
 include("layers.jl")
@@ -117,6 +125,14 @@ end # submodule
 using .InfoMaxVAEs: InfoMaxVAE
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+# Add MMDVAEs (alias InfoVAEs) module
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+module MMDVAEs
+include("mmdvae.jl")
+end # submodule
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include module to fit a Radial Basis Function (RBF) network
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -135,6 +151,7 @@ end # submodule
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include module for Riemannian Hamiltonian Variational Autoencoders (RHVAEs)
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
 module RHVAEs
 include("rhvae.jl")
 end # submodule
@@ -176,17 +193,5 @@ end # submodule
 
 # # Export AE structure
 # using .IRMAEs: IRMAE, SimpleIRMAE
-
-
-
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# Add MMDVAEs (alias InfoVAEs) module
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-
-# Note: This module uses the VAEs.VAE struct as the basis
-
-# module MMDVAEs
-# include("mmdvae.jl")
-# end # submodule
 
 end # module
