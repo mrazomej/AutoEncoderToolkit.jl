@@ -95,12 +95,9 @@ end # submodule
 # Add AEs module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-# module AEs
-# include("ae.jl")
-# end # submodule
-
-# # Export AE structure
-# using .AEs: AE, SimpleAE
+module AEs
+include("ae.jl")
+end # submodule
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Add VAEs module
