@@ -28,6 +28,7 @@ SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TaylorDiff = "b36ab563-344f-407b-a36a-4f200bebf99c"
 TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
+Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 
