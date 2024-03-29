@@ -1,13 +1,8 @@
-##
-println("Testing MMD-VAEs module:\n")
-##
-
-import Revise
-
 # Import AutoEncode.jl module to be tested
 import AutoEncode.MMDVAEs
 import AutoEncode.VAEs
-import AutoEncode.VAEs: vae_init
+import AutoEncode.regularization
+
 # Import Flux library
 import Flux
 
@@ -15,129 +10,214 @@ import Flux
 import Random
 import StatsBase
 import Distributions
+import Distances
 
 Random.seed!(42)
-##
 
-# Define number of inputs
-n_input = 3
-# Define number of synthetic data points
-n_data = 1_000
-# Define number of epochs
-n_epoch = 10_000
-# Define how often to compute error
-n_error = 100
-# Define batch size
-n_batch = 32
-# Define number of hidden layers
-n_hidden = 3
-# Define number of neurons in non-linear hidden layers
-n_neuron = 20
-# Define dimensionality of latent space
-latent_dim = 1
-# Define parameter scheduler
-epoch_change = [1, 10^4, 10^5, 5 * 10^5, 10^6]
-learning_rates = [10^-4, 10^-5, 10^-6, 10^-5.5, 10^-6];
+## =============================================================================
 
-##
+@testset "MMDVAE struct" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
 
-println("Generating synthetic data...")
+    # Define encoder and decoder
+    encoder = VAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = encoder * decoder
 
-# Define function
-f(x₁, x₂) = 10 * exp(-(x₁^2 + x₂^2))
+    # Initialize MMDVAE
+    mmdvae = MMDVAEs.MMDVAE(vae)
 
-# Defien radius
-radius = 3
+    @testset "Type checking" begin
+        @test typeof(mmdvae) <: MMDVAEs.MMDVAE{VAEs.VAE{VAEs.JointLogEncoder,VAEs.SimpleDecoder}}
+    end
 
-# Sample random radius
-r_rand = radius .* sqrt.(Random.rand(n_data))
+    @testset "Forward pass" begin
+        # Define batch of data
+        x = randn(Float32, data_dim, 10)
 
-# Sample random angles
-θ_rand = 2π .* Random.rand(n_data)
+        @testset "latent=false" begin
+            # Test forward pass
+            result = mmdvae(x; latent=false)
+            @test isa(result, NamedTuple)
+            @test all(isa.(values(result), AbstractMatrix{Float32}))
+        end # @testset "latent=false"
 
-# Convert form polar to cartesian coordinates
-x_rand = Float32.(r_rand .* cos.(θ_rand))
-y_rand = Float32.(r_rand .* sin.(θ_rand))
-# Feed numbers to function
-z_rand = f.(x_rand, y_rand)
+        @testset "latent=true" begin
+            # Test forward pass
+            result = mmdvae(x; latent=true)
+            @test isa(result, NamedTuple)
+            @test result.encoder isa NamedTuple
+            @test result.z isa AbstractMatrix{Float32}
+            @test result.decoder isa NamedTuple
+        end # @testset "latent=true"
+    end # @testset "Forward pass"
+end # @testset "MMDVAE struct"
 
-# Compile data into matrix
-data = Matrix(hcat(x_rand, y_rand, z_rand)')
+## =============================================================================
 
-# Fit model to standardize data to mean zero and standard deviation 1 on each
-# environment
-dt = StatsBase.fit(StatsBase.ZScoreTransform, data, dims=2)
+@testset "Kernel functions" begin
+    # Define input data
+    x = randn(Float32, 10, 10)
+    y = randn(Float32, 10, 20)
 
-# Center data to have mean zero and standard deviation one
-data = StatsBase.transform(dt, data);
+    @testset "gaussian_kernel" begin
+        result = MMDVAEs.gaussian_kernel(x, x)
+        @test isa(result, Matrix{Float32})
+        @test size(result) == (10, 10)
 
-##
+        result = MMDVAEs.gaussian_kernel(x, y)
+        @test isa(result, Matrix{Float32})
+        @test size(result) == (10, 20)
+    end # @testset "gaussian_kernel"
 
-# Define VAE architecture
+    @testset "mmd_div" begin
+        result = MMDVAEs.mmd_div(x, x)
+        @test isa(result, Float32)
 
-# Define latent space activation function
-latent_activation = Flux.identity
-# Define output layer activation function
-output_activation = Flux.identity
+        result = MMDVAEs.mmd_div(x, y)
+        @test isa(result, Float32)
+    end # @testset "mmd_div"
+end # @testset "Kernel functions"
 
-# Define encoder layer and activation functions
-encoder = repeat([n_neuron], n_hidden)
-encoder_activation = repeat([Flux.swish], n_hidden)
+## =============================================================================
 
-# Define decoder layer and activation function
-decoder = repeat([n_neuron], n_hidden)
-decoder_activation = repeat([Flux.swish], n_hidden)
+@testset "logP_mmd_ratio" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
 
-##
+    # Define encoder and decoder
+    encoder = VAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = VAEs.VAE(encoder, decoder)
 
-println("Testing MMD-VAE initialization and training...")
+    # Initialize MMDVAE
+    mmdvae = MMDVAEs.MMDVAE(vae)
 
-# Initialize autoencoder
-vae = vae_init(
-    n_input,
-    latent_dim,
-    latent_activation,
-    output_activation,
-    encoder,
-    encoder_activation,
-    decoder,
-    decoder_activation
-)
+    # Define batch of data
+    x = randn(Float32, data_dim, 10)
 
-##
+    result = MMDVAEs.logP_mmd_ratio(mmdvae, x)
+    @test isa(result, Float32)
+end # @testset "logP_mmd_ratio"
 
-# Test Gaussian Kernel function
-@test isa(MMDVAEs.gaussian_kernel(data, data), AbstractMatrix)
+## =============================================================================
 
-# Test logP_mmd_ratio function
-@test isa(MMDVAEs.logP_mmd_ratio(vae, data), AbstractFloat)
+@testset "loss functions" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
 
-##
+    # Define encoder and decoder
+    encoder = VAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = VAEs.VAE(encoder, decoder)
 
-# Test loss function
-@test isa(MMDVAEs.loss(vae, data), AbstractFloat)
+    # Initialize MMDVAE
+    mmdvae = MMDVAEs.MMDVAE(vae)
 
-##
+    # Define batch of data
+    x = randn(Float32, data_dim, 10)
 
-# Explicit setup of optimizer
-opt_state = Flux.Train.setup(
-    Flux.Optimisers.Adam(1E-1),
-    vae
-)
+    @testset "loss (same input and output)" begin
+        result = MMDVAEs.loss(mmdvae, x)
+        @test isa(result, Float32)
+    end # @testset "loss (same input and output)"
 
-# Extract parameters
-params_init = deepcopy(Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder))
+    @testset "loss (different input and output)" begin
+        x_out = randn(Float32, data_dim, 10)
+        result = MMDVAEs.loss(mmdvae, x, x_out)
+        @test isa(result, Float32)
+    end # @testset "loss (different input and output)"
+end # @testset "loss functions"
 
-# Loop through a couple of epochs
-for epoch = 1:10
-    # Test training function
-    MMDVAEs.train!(vae, data, opt_state)
-end # for
+## =============================================================================
 
-# Extract modified parameters
-params_end = deepcopy(Flux.params(vae.encoder, vae.µ, vae.logσ, vae.decoder))
+@testset "MMDVAE training" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
 
-@test all(params_init .!= params_end)
+    # Define encoder and decoder
+    encoder = VAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = VAEs.VAE(encoder, decoder)
 
-println("Passed tests for MMDVAEs module!\n")
-##
+    # Initialize MMDVAE
+    mmdvae = MMDVAEs.MMDVAE(vae)
+
+    # Define batch of data
+    x = randn(Float32, data_dim, 10)
+
+    # Explicit setup of optimizer
+    opt = Flux.Train.setup(Flux.Optimisers.Adam(), mmdvae)
+
+    @testset "with same input and output" begin
+        L = MMDVAEs.train!(mmdvae, x, opt; loss_return=true)
+        @test isa(L, Float32)
+    end # @testset "with same input and output"
+
+    @testset "with different input and output" begin
+        x_out = randn(Float32, data_dim, 10)
+        L = MMDVAEs.train!(mmdvae, x, x_out, opt; loss_return=true)
+        @test isa(L, Float32)
+    end # @testset "with different input and output"
+end # @testset "MMDVAE training"
