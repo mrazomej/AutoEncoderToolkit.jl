@@ -1,177 +1,284 @@
-##
-println("Testing InfoMaxVAEs module:\n")
-##
-
 # Import AutoEncode.jl module to be tested
 import AutoEncode.InfoMaxVAEs
+import AutoEncode.VAEs
+import AutoEncode.regularization
+
 # Import Flux library
 import Flux
 
 # Import basic math
 import Random
 import StatsBase
+import Distributions
 
 Random.seed!(42)
 
 ## =============================================================================
 
-# Define number of inputs
-n_input = 3
-# Define number of synthetic data points
-n_data = 50
-# Define number of hidden layers
-n_hidden = 2
-# Define number of neurons in non-linear hidden layers
-n_neuron = 10
-# Define dimensionality of latent space
-n_latent = 2
+@testset "MutualInfoChain struct" begin
+    # Define input size
+    size_input = 10
+    # Define number of latent dimensions
+    n_latent = 2
+    # Define number of hidden layers
+    n_hidden = 2
+    # Define number of neurons in non-linear hidden layers
+    n_neuron = 10
+
+    # Define latent space activation function
+    output_activation = Flux.identity
+
+    # Define encoder layer and activation functions
+    mlp_neurons = repeat([n_neuron], n_hidden)
+    mlp_activation = repeat([Flux.relu], n_hidden)
+
+    # Initialize MutualInfoChain
+    mi_chain = InfoMaxVAEs.MutualInfoChain(
+        size_input,
+        n_latent,
+        mlp_neurons,
+        mlp_activation,
+        output_activation,
+    )
+
+    @testset "Type checking" begin
+        @test typeof(mi_chain) == InfoMaxVAEs.MutualInfoChain
+    end
+
+    @testset "Forward pass" begin
+        # Define batch of data
+        x = randn(Float32, size_input, 10)
+        # Define batch of latent variables
+        z = randn(Float32, n_latent, 10)
+
+        # Test forward pass
+        result = mi_chain(x, z)
+        # Check output type
+        @test isa(result, Vector{Float32})
+        # Check otuput length
+        @test length(result) == 10
+    end # @testset "Forward pass"
+end # @testset "MutualInfoChain struct"
 
 ## =============================================================================
 
-println("Generating synthetic data...")
+@testset "InfoMaxVAE struct" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
 
-# Define function
-f(x₁, x₂) = 10 * exp(-(x₁^2 + x₂^2))
+    # Define encoder and decoder
+    encoder = InfoMaxVAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = InfoMaxVAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = encoder * decoder
 
-# Defien radius
-radius = 3
+    # Define MutualInfoChain
+    mi_chain = InfoMaxVAEs.MutualInfoChain(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
 
-# Sample random radius
-r_rand = radius .* sqrt.(Random.rand(n_data))
+    # Initialize InfoMaxVAE
+    infomaxvae = InfoMaxVAEs.InfoMaxVAE(vae, mi_chain)
 
-# Sample random angles
-θ_rand = 2π .* Random.rand(n_data)
+    @testset "Type checking" begin
+        @test typeof(infomaxvae) <: InfoMaxVAEs.InfoMaxVAE{
+            VAEs.VAE{AutoEncode.JointLogEncoder,AutoEncode.SimpleDecoder}
+        }
+    end
 
-# Convert form polar to cartesian coordinates
-x_rand = Float32.(r_rand .* cos.(θ_rand))
-y_rand = Float32.(r_rand .* sin.(θ_rand))
-# Feed numbers to function
-z_rand = f.(x_rand, y_rand)
+    @testset "Forward pass" begin
+        # Define batch of data
+        x = randn(Float32, data_dim, 10)
 
-# Compile data into matrix
-data = Matrix(hcat(x_rand, y_rand, z_rand)')
+        @testset "latent=false" begin
+            # Test forward pass
+            result = infomaxvae(x; latent=false)
+            @test isa(result, NamedTuple)
+            @test all(isa.(values(result), AbstractMatrix{Float32}))
+        end # @testset "latent=false"
 
-# Fit model to standardize data to mean zero and standard deviation 1 on each
-# environment
-dt = StatsBase.fit(StatsBase.ZScoreTransform, data, dims=2)
-
-# Center data to have mean zero and standard deviation one
-data = StatsBase.transform(dt, data);
-
-## =============================================================================
-
-println("Testing InfoMaxVAE = JointLogEncoder + SimpleDecoder")
-
-# Define latent space activation function
-latent_activation = Flux.identity
-# Define output layer activation function
-output_activation = Flux.identity
-
-# Define encoder layer and activation functions
-encoder_neurons = repeat([n_neuron], n_hidden)
-encoder_activation = repeat([Flux.swish], n_hidden)
-
-# Define decoder layer and activation function
-decoder_neurons = repeat([n_neuron], n_hidden)
-decoder_activation = repeat([Flux.swish], n_hidden)
-
-# Define MLP layer and activation function
-mlp_neurons = repeat([n_neuron], n_hidden)
-mlp_activation = repeat([Flux.swish], n_hidden)
-
-# Define MLP output activation function
-mlp_output_activation = Flux.identity
-
-# Initialize encoder
-encoder = InfoMaxVAEs.JointLogEncoder(
-    n_input,
-    n_latent,
-    encoder_neurons,
-    encoder_activation,
-    latent_activation
-)
-
-# Initialize decoder
-decoder = InfoMaxVAEs.SimpleDecoder(
-    n_input,
-    n_latent,
-    decoder_neurons,
-    decoder_activation,
-    output_activation
-)
-
-# Initialize MLP
-mlp = InfoMaxVAEs.MLP(
-    n_input,
-    n_latent,
-    mlp_neurons,
-    mlp_activation,
-    mlp_output_activation
-)
-
-infomaxvae = InfoMaxVAEs.InfoMaxVAE(
-    InfoMaxVAEs.VAE(encoder, decoder),
-    mlp
-)
-
-# Test if it returns the right type
-@test isa(infomaxvae, InfoMaxVAEs.InfoMaxVAE)
-
-##
-
-# Test that reconstruction works
-@test isa(infomaxvae(data; latent=false), AbstractVecOrMat)
-
-#  Test loss functions
-@test isa(
-    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data),
-    AbstractFloat
-)
-
-@test isa(
-    InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data, data),
-    AbstractFloat
-)
+        @testset "latent=true" begin
+            # Test forward pass
+            result = infomaxvae(x; latent=true)
+            @test isa(result, NamedTuple)
+            @test result.vae isa NamedTuple
+            @test result.mi isa Float32
+        end # @testset "latent=true"
+    end # @testset "Forward pass"
+end # @testset "InfoMaxVAE struct"
 
 ## =============================================================================
 
-# Extract parameters
-params_init = deepcopy(collect(Flux.params(infomaxvae)))
+@testset "Variational Mutual Information" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
 
-# Explicit setup of optimizer
-vae_opt = Flux.Train.setup(
-    Flux.Optimisers.Adam(1E-1),
-    infomaxvae.vae
-)
+    # Define encoder and decoder
+    encoder = VAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = VAEs.VAE(encoder, decoder)
 
-mlp_opt = Flux.Train.setup(
-    Flux.Optimisers.Adam(1E-1),
-    infomaxvae.mlp
-)
+    # Define MutualInfoChain
+    mi_chain = InfoMaxVAEs.MutualInfoChain(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
 
-# Loop through a couple of epochs
-losses = Float32[]  # Track the loss
-# Loop through a couple of epochs
-for epoch = 1:10
-    # Test training function
-    InfoMaxVAEs.train!(infomaxvae, data, vae_opt, mlp_opt)
+    # Initialize InfoMaxVAE
+    infomaxvae = InfoMaxVAEs.InfoMaxVAE(vae, mi_chain)
 
-    # Compute average loss
-    push!(losses, InfoMaxVAEs.loss(infomaxvae.vae, infomaxvae.mlp, data))
-end # for
+    # Define batch of data
+    x = randn(Float32, data_dim, 10)
+    # Define batch of latent variables
+    z = randn(Float32, latent_dim, 10)
+    # Define shuffled batch of latent variables
+    z_shuffle = InfoMaxVAEs.shuffle_latent(z)
 
-# Check if loss is decreasing
-@test all(diff(losses) ≠ 0)
+    @testset "variational_mutual_info" begin
+        result = InfoMaxVAEs.variational_mutual_info(
+            mi_chain, x, z, z_shuffle
+        )
+        @test isa(result, Float32)
 
-# Extract modified parameters
-params_end = deepcopy(collect(Flux.params(infomaxvae)))
+        result = InfoMaxVAEs.variational_mutual_info(
+            infomaxvae, x, z, z_shuffle
+        )
+        @test isa(result, Float32)
 
-# Check that parameters have significantly changed
-threshold = 1e-5
-# Check if any parameter has changed significantly
-@test all([
-    all(abs.(x .- y) .> threshold) for (x, y) in zip(params_init, params_end)
-])
+        result = InfoMaxVAEs.variational_mutual_info(infomaxvae, x)
+        @test isa(result, Float32)
+    end # @testset "variational_mutual_info"
+end # @testset "Variational Mutual Information"
 
-println("Passed tests for InfoMaxVAEs module!\n")
-##
+## =============================================================================
+
+@testset "Loss functions" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
+
+    # Define encoder and decoder
+    encoder = VAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = VAEs.VAE(encoder, decoder)
+
+    # Define MutualInfoChain
+    mi_chain = InfoMaxVAEs.MutualInfoChain(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+
+    # Initialize InfoMaxVAE
+    infomaxvae = InfoMaxVAEs.InfoMaxVAE(vae, mi_chain)
+
+    # Define batch of data
+    x = randn(Float32, data_dim, 10)
+
+    @testset "infomaxloss" begin
+        result = InfoMaxVAEs.infomaxloss(vae, mi_chain, x)
+        @test isa(result, Float32)
+
+        result = InfoMaxVAEs.infomaxloss(vae, mi_chain, x, x)
+        @test isa(result, Float32)
+    end # @testset "infomaxloss"
+
+    @testset "miloss" begin
+        result = InfoMaxVAEs.miloss(vae, mi_chain, x)
+        @test isa(result, Float32)
+    end # @testset "miloss"
+end # @testset "Loss functions"
+
+## =============================================================================
+
+@testset "InfoMaxVAE training" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
+
+    # Define encoder and decoder
+    encoder = VAEs.JointLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = VAEs.VAE(encoder, decoder)
+
+    # Define MutualInfoChain
+    mi_chain = InfoMaxVAEs.MutualInfoChain(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+
+    # Initialize InfoMaxVAE
+    infomaxvae = InfoMaxVAEs.InfoMaxVAE(vae, mi_chain)
+
+    # Define batch of data
+    x = randn(Float32, data_dim, 10)
+
+    # Explicit setup of optimizers
+    opt_infomaxvae = Flux.Train.setup(Flux.Optimisers.Adam(), infomaxvae)
+
+    @testset "with same input and output" begin
+        L = InfoMaxVAEs.train!(infomaxvae, x, opt_infomaxvae; loss_return=true)
+        @test L isa Tuple{<:Number,<:Number}
+    end # @testset "with same input and output"
+
+    @testset "with different input and output" begin
+        x_out = randn(Float32, data_dim, 10)
+        L = InfoMaxVAEs.train!(
+            infomaxvae, x, x_out, opt_infomaxvae; loss_return=true
+        )
+        @test L isa Tuple{<:Number,<:Number}
+    end # @testset "with different input and output"
+end # @testset "InfoMaxVAE training"
