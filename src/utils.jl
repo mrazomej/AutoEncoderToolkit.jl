@@ -27,6 +27,9 @@ import Random
 # Import library for basic math
 import LinearAlgebra
 
+# Import Tullio.jl for efficient tensor operations
+using Tullio
+
 # Export functions
 export shuffle_data, cycle_anneal, locality_sampler, vec_to_ltri,
     centroids_kmeans
@@ -575,7 +578,7 @@ function vec_mat_vec_loop(
     end # if
 
     # Compute v̲ M̲̲ w̲ in a loop
-    [
+    return [
         begin
             sum(
                 begin
@@ -590,14 +593,90 @@ function vec_mat_vec_loop(
     ]
 end # function
 
-# function vec_mat_vec_loop(
-#     v::CUDA.CuVecOrMat,
-#     M::CUDA.CuArray,
-#     w::CUDA.CuVecOrMat
-# )
-#     # Sent arrays to CPU
-#     vec_mat_vec_loop(Flux.cpu(v), Flux.cpu(M), Flux.cpu(w)) |> Flux.gpu
-# end # function
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    vec_mat_vec_tullio(v::AbstractVector, M::AbstractMatrix, w::AbstractVector)
+
+Compute the product of a vector, a matrix, and another vector in the form v̲ᵀ
+M̲̲ w̲ using Tullio.jl.
+
+This function takes two vectors `v` and `w`, and a matrix `M`, and computes the
+product v̲ᵀ M̲̲ w̲ using the Tullio macro.
+
+# Arguments
+- `v::AbstractVector`: A `m` dimensional vector.
+- `M::AbstractMatrix`: A `m×n` matrix.
+- `w::AbstractVector`: A `n` dimensional vector.
+
+# Returns
+A scalar which is the result of the product v̲ᵀ M̲̲ w̲ for the corresponding
+vectors and matrix.
+
+# Notes
+This function uses the Tullio macro to perform the multiplication of the matrix
+`M` with the vector `w` and the dot product with the vector `v`. The Tullio
+macro generates efficient loops under the hood, making the computation faster
+than using explicit loops.
+"""
+function vec_mat_vec_tullio(
+    v::AbstractVector, M::AbstractMatrix, w::AbstractVector
+)
+    # Check dimensions to see if the multiplication is possible
+    if size(v, 1) ≠ size(M, 1) || size(M, 2) != size(w, 1)
+        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
+    end # if
+
+    # Perform the computation using the Tullio macro
+    @tullio r := v[i] * M[i, j] * w[j]
+
+    # Return the result
+    return r
+end
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    vec_mat_vec_tullio(v::AbstractMatrix, M::AbstractArray, w::AbstractMatrix)
+
+Compute the product of vectors and matrices in the form v̲ᵀ M̲̲ w̲ using
+Tullio.jl.
+
+This function takes two matrices `v` and `w`, and a 3D array `M`, and computes
+the product v̲ᵀ M̲̲ w̲ using the Tullio macro.
+
+# Arguments
+- `v::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
+  and `n` is the number of vectors.
+- `M::AbstractArray`: A `d×d×n` array, where `d` is the dimension of the
+  matrices and `n` is the number of matrices.
+- `w::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
+  and `n` is the number of vectors.
+
+# Returns
+A `n` array where each element is the result of the product v̲ᵀ M̲̲ w̲ for
+the corresponding vectors and matrix.
+
+# Notes
+This function uses the Tullio macro to perform the multiplication of the
+matrices in `M` with the vectors in `w` and the dot product with the vectors in
+`v`. The Tullio macro generates efficient loops under the hood, making the
+computation faster than using explicit loops.
+"""
+function vec_mat_vec_tullio(
+    v::AbstractMatrix, M::AbstractArray{<:Any,3}, w::AbstractMatrix
+)
+    # Check dimensions to see if the multiplication is possible
+    if size(v, 1) ≠ size(M, 1) || size(M, 2) != size(w, 1)
+        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
+    end # if
+
+    # Perform the computation using the Tullio macro
+    @tullio r[k] := v[i, k] * M[i, j, k] * w[j, k]
+
+    # Return the result as a 1D vector
+    return r
+end
 
 ## =============================================================================
 # Define centroids via k-means

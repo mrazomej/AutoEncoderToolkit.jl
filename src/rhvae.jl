@@ -48,7 +48,7 @@ using ..VAEs: reparameterize
 # Import functions
 using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
     slogdet, taylordiff_gradient, vec_mat_vec_loop,
-    vec_mat_vec_batched, vec_mat_vec_tullio
+    vec_mat_vec_batched, vec_mat_vec_batched
 
 using ..HVAEs: quadratic_tempering, null_tempering
 
@@ -986,7 +986,7 @@ end # function
         G⁻¹::AbstractMatrix,
         logdetG::Number;
         σ::Number=1.0f0,
-        vec_mat_vec::Function=vec_mat_vec_tullio
+        vec_mat_vec::Function=vec_mat_vec_loop
     )
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
@@ -1000,8 +1000,8 @@ by the Riemannian metric.
 # Optional Keyword Arguments
 - `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
   is used to scale the inverse metric tensor. Default is `1.0f0`.
-- `vec_mat_vec::Function=vec_mat_vec_tullio`: Function to compute the product of a
-  vector with a matrix with a vector. Default is `vec_mat_vec_tullio`, but also
+- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
+  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
   accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
   to compute Hamiltonian gradients. The latter works better on GPUs.
 
@@ -1018,7 +1018,7 @@ function riemannian_logprior(
     G⁻¹::AbstractMatrix,
     logdetG::Number;
     σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_tullio
+    vec_mat_vec::Function=vec_mat_vec_loop
 )
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹
@@ -1038,7 +1038,7 @@ end # function
         G⁻¹::AbstractArray,
         logdetG::AbstractVector;
         σ::Number=1.0f0,
-        vec_mat_vec::Function=vec_mat_vec_tullio
+        vec_mat_vec::Function=vec_mat_vec_loop
     )
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
@@ -1055,8 +1055,8 @@ by the Riemannian metric.
 # Optional Keyword Arguments
 - `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
   is used to scale the inverse metric tensor. Default is `1.0f0`.
-- `vec_mat_vec::Function=vec_mat_vec_tullio`: Function to compute the product of a
-  vector with a matrix with a vector. Default is `vec_mat_vec_tullio`, but also
+- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
+  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
   accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
   to compute Hamiltonian gradients. The latter works better on GPUs.
 
@@ -1073,7 +1073,7 @@ function riemannian_logprior(
     G⁻¹::AbstractArray,
     logdetG::AbstractVector;
     σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_tullio
+    vec_mat_vec::Function=vec_mat_vec_loop
 )
     if σ ≠ 1.0f0
         # Multiply G⁻¹ by σ²
@@ -1097,7 +1097,7 @@ end # function
         logdetG::AbstractVector,
         index::Int;
         σ::Number=1.0f0,
-        vec_mat_vec::Function=vec_mat_vec_tullio
+        vec_mat_vec::Function=vec_mat_vec_loop
     )
 
 Compute the log-prior of a Gaussian distribution with a covariance matrix given
@@ -1116,8 +1116,8 @@ by the Riemannian metric for a single data point specified by `index`.
 # Optional Keyword Arguments
 - `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
   is used to scale the inverse metric tensor. Default is `1.0f0`.
-- `vec_mat_vec::Function=vec_mat_vec_tullio`: Function to compute the product of a
-  vector with a matrix with a vector. Default is `vec_mat_vec_tullio`, but also
+- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
+  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
   accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
   to compute Hamiltonian gradients. The latter works better on GPUs.
 
@@ -1136,7 +1136,7 @@ function riemannian_logprior(
     logdetG::AbstractVector,
     index::Int;
     σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_tullio
+    vec_mat_vec::Function=vec_mat_vec_loop
 )
     # Multiply G⁻¹ by σ²
     G⁻¹ = σ^2 .* G⁻¹[.., index]
@@ -2177,9 +2177,7 @@ function ∇hamiltonian_TaylorDiff(
     var::Symbol;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=(args...) -> riemannian_logprior(
-        args...; vec_mat_vec=vec_mat_vec_loop
-    ),
+    momentum_logprior::Function=riemannian_logprior,
 )
     # Check that var is a valid variable
     if var ∉ (:z, :ρ)
@@ -2289,9 +2287,7 @@ function ∇hamiltonian_TaylorDiff(
     var::Symbol;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=(args...) -> riemannian_logprior(
-        args...; vec_mat_vec=vec_mat_vec_loop
-    ),
+    momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
 )
     # Check that var is a valid variable
