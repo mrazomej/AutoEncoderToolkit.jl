@@ -1024,18 +1024,29 @@ function slogdet(
 ) where {T<:Number}
     # Compute the Cholesky decomposition of each slice of A. 
     chol = [
-        begin
-            LinearAlgebra.cholesky(x; check=check).L
-        end for x in eachslice(A, dims=3)
+        x.L for x in LinearAlgebra.cholesky.(eachslice(A, dims=3), check=check)
     ]
 
     # compute the log determinant of each slice of A as the sum of the log of
     # the diagonal elements of the Cholesky decomposition
-    return [
-        begin
-            2 * sum(log.(LinearAlgebra.diag(c)))
-        end for c in chol
-    ] |> Flux.gpu
+    logdetA = @. 2 * sum(log, LinearAlgebra.diag(chol)) 
+
+    return logdetA
+end # function
+
+function slogdet(
+    A::CUDA.CuArray{T,3}; check::Bool=false
+) where {T<:Number}
+    # Compute the Cholesky decomposition of each slice of A. 
+    chol = [
+        x.L for x in LinearAlgebra.cholesky.(eachslice(A, dims=3), check=check)
+    ]
+
+    # compute the log determinant of each slice of A as the sum of the log of
+    # the diagonal elements of the Cholesky decomposition
+    logdetA = @. 2 * sum(log, LinearAlgebra.diag(chol)) 
+
+    return logdetA |> Flux.gpu
 end # function
 
 ## =============================================================================
@@ -1059,7 +1070,7 @@ function sample_MvNormalCanon(
     Σ⁻¹::AbstractMatrix
 )
     # Invert the precision matrix
-    Σ = LinearAlgebra.inv(Σ⁻¹ |> Flux.cpu)
+    Σ = LinearAlgebra.inv(Σ⁻¹)
 
     # Cholesky decomposition of the covariance matrix
     chol = LinearAlgebra.cholesky(Σ, check=false)
@@ -1075,7 +1086,30 @@ function sample_MvNormalCanon(
     r = randn(T, size(Σ⁻¹, 1))
 
     # Return sample multiplied by the Cholesky decomposition
-    return chol.L * r |> Flux.gpu
+    return chol.L * r
+end # function
+
+function sample_MvNormalCanon(
+    Σ⁻¹::CUDA.CuMatrix
+)
+    # Invert the precision matrix
+    Σ = LinearAlgebra.inv(Σ⁻¹)
+
+    # Cholesky decomposition of the covariance matrix
+    chol = LinearAlgebra.cholesky(Σ, check=false)
+
+    # Define sample type
+    if !(eltype(Σ⁻¹) <: AbstractFloat)
+        T = Float32
+    else
+        T = eltype(Σ⁻¹)
+    end # if
+
+    # Sample from standard normal distribution
+    r = CUDA.randn(T, size(Σ⁻¹, 1))
+
+    # Return sample multiplied by the Cholesky decomposition
+    return chol.L * r
 end # function
 
 # ------------------------------------------------------------------------------
@@ -1103,7 +1137,7 @@ function sample_MvNormalCanon(
     n_sample = size(Σ⁻¹, 3)
 
     # Invert the precision matrix
-    Σ = LinearAlgebra.inv.(eachslice(Σ⁻¹ |> Flux.cpu, dims=3))
+    Σ = LinearAlgebra.inv.(eachslice(Σ⁻¹, dims=3))
 
     # Cholesky decomposition of the covariance matrix
     chol = reduce(
@@ -1126,8 +1160,40 @@ function sample_MvNormalCanon(
     r = randn(T, dim, n_sample)
 
     # Return sample multiplied by the Cholesky decomposition
-    return Flux.batched_vec(chol, r) |> Flux.gpu
+    return Flux.batched_vec(chol, r)
 end # function
+
+function sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{<:Number,3})
+    # Extract dimensions
+    dim = size(Σ⁻¹, 1)
+    # Extract number of samples
+    n_sample = size(Σ⁻¹, 3)
+
+    # Invert the precision matrix
+    Σ = last(CUDA.CUBLAS.matinv_batched(collect(eachslice(Σ⁻¹, dims=3))))
+
+    # Cholesky decomposition of the covariance matrix
+    chol = reduce(
+        (x, y) -> cat(x, y, dims=3),
+        [ 
+            x.L 
+            for x in LinearAlgebra.cholesky.(Σ, check=false)
+        ]
+    )
+
+    # Define sample type
+    if !(eltype(Σ⁻¹) <: AbstractFloat)
+        T = Float32
+    else
+        T = eltype(Σ⁻¹)
+    end # if
+
+    # Sample from standard normal distribution
+    r = CUDA.randn(T, dim, n_sample)
+
+    # Return sample multiplied by the Cholesky decomposition
+    return Flux.batched_vec(chol, r)
+end
 
 # Set ChainRulesCore to ignore the function when computing gradients
 ChainRulesCore.@ignore_derivatives sample_MvNormalCanon
@@ -1228,6 +1294,10 @@ This function is marked with the `@ignore_derivatives` macro from the
 call to this function when computing gradients.
 """
 function unit_vectors(x::AbstractVector)
+    return [unit_vector(x, i) for i in 1:length(x)]
+end # function
+
+function unit_vectors(x::CUDA.CuArray)
     return [unit_vector(x, i) for i in 1:length(x)] |> Flux.gpu
 end # function
 
@@ -1260,6 +1330,14 @@ This function is marked with the `@ignore_derivatives` macro from the
 call to this function when computing gradients.
 """
 function unit_vectors(x::AbstractMatrix)
+    vectors = [
+        reduce(hcat, fill(unit_vector(x, i), size(x, 2)))
+        for i in 1:size(x, 1)
+    ]
+    return vectors
+end # function
+
+function unit_vectors(x::CUDA.CuMatrix)
     vectors = [
         reduce(hcat, fill(unit_vector(x, i), size(x, 2)))
         for i in 1:size(x, 1)

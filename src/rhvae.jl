@@ -48,7 +48,7 @@ using ..VAEs: reparameterize
 # Import functions
 using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
     slogdet, taylordiff_gradient, vec_mat_vec_loop,
-    vec_mat_vec_batched, vec_mat_vec_batched
+    vec_mat_vec_batched, vec_mat_vec_tullio
 
 using ..HVAEs: quadratic_tempering, null_tempering
 
@@ -1194,9 +1194,9 @@ function riemannian_logprior(
     G⁻¹::CUDA.CuArray,
     logdetG::Union{CUDA.CuVector,<:Number};
     σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_tullio
+    vec_mat_vec::Function=vec_mat_vec_batched
 )
-    riemannian_logprior(ρ, G⁻¹, logdetG, σ=σ, vec_mat_vec=vec_mat_vec)
+    riemannian_logprior(ρ, G⁻¹, logdetG; σ=σ, vec_mat_vec=vec_mat_vec)
 end # function
 
 # ==============================================================================
