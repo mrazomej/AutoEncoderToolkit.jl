@@ -268,7 +268,7 @@ info_max_vae = InfoMaxVAE(VAE(encoder, decoder), mi)
 > on Information Theory (ISIT) 2729–2734 (IEEE, 2020).
 > doi:10.1109/ISIT44484.2020.9174424.
 """
-mutable struct InfoMaxVAE{
+struct InfoMaxVAE{
     V<:VAE{<:AbstractVariationalEncoder,<:AbstractVariationalDecoder}
 } <: AbstractVariationalAutoEncoder
     vae::V
