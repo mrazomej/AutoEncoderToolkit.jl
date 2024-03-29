@@ -82,7 +82,7 @@ include("utils.jl")
 end # submodule
 
 # Temporary fix for some TaylorDiff limitations
-include("diffgeo/primitives.jl")
+# include("diffgeo/primitives.jl")
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Add AEs module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -109,12 +109,12 @@ using .VAEs: VAE
 # Add InfoMaxVAEs module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-# module InfoMaxVAEs
-# include("infomaxvae.jl")
-# end # submodule
+module InfoMaxVAEs
+include("infomaxvae.jl")
+end # submodule
 
-# # Export AE structure
-# using .InfoMaxVAEs: InfoMaxVAE
+# Export InfoMaxVAE structure
+using .InfoMaxVAEs: InfoMaxVAE
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Include module to fit a Radial Basis Function (RBF) network
