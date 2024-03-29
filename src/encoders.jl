@@ -130,8 +130,8 @@ Default encoder function for deterministic autoencoders. The `encoder` network
 is used to map the input data directly into the latent space representation.
 
 # Fields
-- `encoder::Flux.Chain`: The primary neural network used to process input data
-  and map it into a latent space representation.
+- `encoder::Union{Flux.Chain,Flux.Dense}`: The primary neural network used to
+  process input data and map it into a latent space representation.
 
 # Example
 ```julia
@@ -139,7 +139,7 @@ enc = Encoder(Flux.Chain(Dense(784, 400, relu), Dense(400, 20)))
 ```
 """
 struct Encoder <: AbstractDeterministicEncoder
-    encoder::Flux.Chain
+    encoder::Union{Flux.Chain,Flux.Dense}
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
@@ -257,7 +257,7 @@ z = enc(some_input)
 Ensure that the input x matches the expected dimensionality of the encoder's
 input layer.
 """
-function (encoder::Encoder)(x::AbstractVecOrMat)
+function (encoder::Encoder)(x::AbstractArray)
     # Run input through the encoder network to obtain the encoded representation
     return encoder.encoder(x)
 end # function

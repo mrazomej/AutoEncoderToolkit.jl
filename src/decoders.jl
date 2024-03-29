@@ -227,7 +227,7 @@ function Decoder(
 end # function
 
 @doc raw"""
-    (decoder::Decoder)(z::AbstractVecOrMat)
+    (decoder::Decoder)(z::AbstractArray)
 
 Forward propagate the encoded representation `z` through the `Decoder` to obtain
 the reconstructed input data.
