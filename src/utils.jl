@@ -27,9 +27,6 @@ import Random
 # Import library for basic math
 import LinearAlgebra
 
-# Import Tullio.jl for efficient tensor operations
-using Tullio
-
 # Export functions
 export shuffle_data, cycle_anneal, locality_sampler, vec_to_ltri,
     centroids_kmeans
@@ -593,91 +590,6 @@ function vec_mat_vec_loop(
     ]
 end # function
 
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    vec_mat_vec_tullio(v::AbstractVector, M::AbstractMatrix, w::AbstractVector)
-
-Compute the product of a vector, a matrix, and another vector in the form v̲ᵀ
-M̲̲ w̲ using Tullio.jl.
-
-This function takes two vectors `v` and `w`, and a matrix `M`, and computes the
-product v̲ᵀ M̲̲ w̲ using the Tullio macro.
-
-# Arguments
-- `v::AbstractVector`: A `m` dimensional vector.
-- `M::AbstractMatrix`: A `m×n` matrix.
-- `w::AbstractVector`: A `n` dimensional vector.
-
-# Returns
-A scalar which is the result of the product v̲ᵀ M̲̲ w̲ for the corresponding
-vectors and matrix.
-
-# Notes
-This function uses the Tullio macro to perform the multiplication of the matrix
-`M` with the vector `w` and the dot product with the vector `v`. The Tullio
-macro generates efficient loops under the hood, making the computation faster
-than using explicit loops.
-"""
-function vec_mat_vec_tullio(
-    v::AbstractVector, M::AbstractMatrix, w::AbstractVector
-)
-    # Check dimensions to see if the multiplication is possible
-    if size(v, 1) ≠ size(M, 1) || size(M, 2) != size(w, 1)
-        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
-    end # if
-
-    # Perform the computation using the Tullio macro
-    @tullio r := v[i] * M[i, j] * w[j]
-
-    # Return the result
-    return r
-end
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    vec_mat_vec_tullio(v::AbstractMatrix, M::AbstractArray, w::AbstractMatrix)
-
-Compute the product of vectors and matrices in the form v̲ᵀ M̲̲ w̲ using
-Tullio.jl.
-
-This function takes two matrices `v` and `w`, and a 3D array `M`, and computes
-the product v̲ᵀ M̲̲ w̲ using the Tullio macro.
-
-# Arguments
-- `v::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
-  and `n` is the number of vectors.
-- `M::AbstractArray`: A `d×d×n` array, where `d` is the dimension of the
-  matrices and `n` is the number of matrices.
-- `w::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
-  and `n` is the number of vectors.
-
-# Returns
-A `n` array where each element is the result of the product v̲ᵀ M̲̲ w̲ for
-the corresponding vectors and matrix.
-
-# Notes
-This function uses the Tullio macro to perform the multiplication of the
-matrices in `M` with the vectors in `w` and the dot product with the vectors in
-`v`. The Tullio macro generates efficient loops under the hood, making the
-computation faster than using explicit loops.
-"""
-function vec_mat_vec_tullio(
-    v::AbstractMatrix, M::AbstractArray{<:Any,3}, w::AbstractMatrix
-)
-    # Check dimensions to see if the multiplication is possible
-    if size(v, 1) ≠ size(M, 1) || size(M, 2) != size(w, 1)
-        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
-    end # if
-
-    # Perform the computation using the Tullio macro
-    @tullio r[k] := v[i, k] * M[i, j, k] * w[j, k]
-
-    # Return the result as a 1D vector
-    return r
-end
-
 ## =============================================================================
 # Define centroids via k-means
 ## =============================================================================
@@ -959,13 +871,6 @@ triangular matrix from the Cholesky decomposition.
 The input matrix `A` must be a positive-definite matrix, i.e., it must be
 symmetric and all its eigenvalues must be positive. If `check` is set to `true`,
 the function will throw an error if `A` is not positive-definite.
-
-# Example
-```julia
-A = rand(3, 3)
-A = A * A'  # make A positive-definite
-println(slogdet(A))
-```
 """
 function slogdet(
     A::AbstractMatrix{T}; check::Bool=false
@@ -980,14 +885,59 @@ end # function
 # ------------------------------------------------------------------------------
 
 """
-    slogdet(A::AbstractArray{T,3}; check::Bool=false) where {T<:Number}
+    slogdet(A::AbstractArray{<:Number,3}; check::Bool=false)
 
 Compute the log determinant of each 2D slice along the third dimension of a 3D
 array `A`, where each 2D slice is a positive-definite matrix.
 
 # Arguments
-- `A::AbstractArray{T,3}`: A 3D array whose 2D slices along the third dimension
-  are positive-definite matrices whose log determinants are to be computed.
+- `A::AbstractArray{<:Number,3}`: A 3D array whose 2D slices along the third
+  dimension are positive-definite matrices whose log determinants are to be
+  computed.
+- `check::Bool=false`: A flag that determines whether to check if each 2D slice
+  of the input array `A` is positive-definite. Defaults to `false`.
+
+# Returns
+- A 1D array containing the log determinant of each 2D slice of `A`.
+
+# Description
+This function computes the log determinant of each 2D slice along the third
+dimension of a 3D array `A`. It first computes the Cholesky decomposition of
+each 2D slice, and then calculates the log determinant as twice the sum of the
+log of the diagonal elements of the lower triangular matrix from the Cholesky
+decomposition.
+
+# Conditions
+Each 2D slice of the input array `A` along the third dimension must be a
+positive-definite matrix, i.e., it must be symmetric and all its eigenvalues
+must be positive. If `check` is set to `true`, the function will throw an error
+if any 2D slice is not positive-definite.
+"""
+function slogdet(
+    A::AbstractArray{T,3}; check::Bool=false
+) where {T<:Number}
+    # Compute the Cholesky decomposition of each slice of A. 
+    chol = [
+        x.L for x in LinearAlgebra.cholesky.(eachslice(A, dims=3), check=check)
+    ]
+
+    # compute the log determinant of each slice of A as the sum of the log of
+    # the diagonal elements of the Cholesky decomposition
+    logdetA = @. 2 * sum(log, LinearAlgebra.diag(chol))
+
+    return logdetA
+end # function
+
+"""
+    slogdet(A::AbstractArray{<:Number,3}; check::Bool=false)
+
+Compute the log determinant of each 2D slice along the third dimension of a 3D
+array `A`, where each 2D slice is a positive-definite matrix.
+
+# Arguments
+- `A::CUDA.CuArray{<:Number,3}`: A 3D array whose 2D slices along the third
+  dimension are positive-definite matrices whose log determinants are to be
+  computed.
 - `check::Bool=false`: A flag that determines whether to check if each 2D slice
   of the input array `A` is positive-definite. Defaults to `false`.
 
@@ -1008,32 +958,9 @@ must be positive. If `check` is set to `true`, the function will throw an error
 if any 2D slice is not positive-definite.
 
 # Note
-This function uses a list comprehension to compute the Cholesky decomposition on
-each slice. Therefore, the function is not performed on the GPU. This might
-change in the future if a batched Cholesky decomposition is implemented.
-
-# Example
-```julia
-A = rand(3, 3, 3)
-A = A .* A'  # make each 2D slice of A positive-definite
-println(slogdet(A))
-```
+All operations are performed on the GPU, but since the log determinant is a
+scalar, this list of scalars needs to be re-uploaded to the GPU.
 """
-function slogdet(
-    A::AbstractArray{T,3}; check::Bool=false
-) where {T<:Number}
-    # Compute the Cholesky decomposition of each slice of A. 
-    chol = [
-        x.L for x in LinearAlgebra.cholesky.(eachslice(A, dims=3), check=check)
-    ]
-
-    # compute the log determinant of each slice of A as the sum of the log of
-    # the diagonal elements of the Cholesky decomposition
-    logdetA = @. 2 * sum(log, LinearAlgebra.diag(chol)) 
-
-    return logdetA
-end # function
-
 function slogdet(
     A::CUDA.CuArray{T,3}; check::Bool=false
 ) where {T<:Number}
@@ -1044,7 +971,7 @@ function slogdet(
 
     # compute the log determinant of each slice of A as the sum of the log of
     # the diagonal elements of the Cholesky decomposition
-    logdetA = @. 2 * sum(log, LinearAlgebra.diag(chol)) 
+    logdetA = @. 2 * sum(log, LinearAlgebra.diag(chol))
 
     return logdetA |> Flux.gpu
 end # function
@@ -1089,6 +1016,19 @@ function sample_MvNormalCanon(
     return chol.L * r
 end # function
 
+@doc raw"""
+    sample_MvNormalCanon(Σ⁻¹::CUDA.CuMatrix{T}) where {T<:Number}
+
+Draw a random sample from a multivariate normal distribution in canonical form.
+
+# Arguments
+- `Σ⁻¹::CUDA.CuMatrix{T}`: The precision matrix (inverse of the covariance
+  matrix) of the multivariate normal distribution.
+
+# Returns
+- A random sample drawn from the multivariate normal distribution specified by
+  the input precision matrix.
+"""
 function sample_MvNormalCanon(
     Σ⁻¹::CUDA.CuMatrix
 )
@@ -1163,6 +1103,24 @@ function sample_MvNormalCanon(
     return Flux.batched_vec(chol, r)
 end # function
 
+@doc raw"""
+    sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{T,3}) where {T<:Number}
+
+Draw a random sample from a multivariate normal distribution in canonical form.
+
+# Arguments
+- `Σ⁻¹::CUDA.CuArray{T,3}`: The precision matrix (inverse of the covariance
+  matrix) of the multivariate normal distribution. Each slice of the 3D tensor
+  corresponds to one precision matrix.
+
+# Returns
+- A random sample drawn from the multivariate normal distributions specified by
+  the input precision matrices.
+
+# Note
+All computations are performed on the GPU. The inverse matrix is computed using
+`CUBLAS.matinv_batched` from the `CUDA.jl` package.
+"""
 function sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{<:Number,3})
     # Extract dimensions
     dim = size(Σ⁻¹, 1)
@@ -1175,8 +1133,8 @@ function sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{<:Number,3})
     # Cholesky decomposition of the covariance matrix
     chol = reduce(
         (x, y) -> cat(x, y, dims=3),
-        [ 
-            x.L 
+        [
+            x.L
             for x in LinearAlgebra.cholesky.(Σ, check=false)
         ]
     )
@@ -1297,7 +1255,32 @@ function unit_vectors(x::AbstractVector)
     return [unit_vector(x, i) for i in 1:length(x)]
 end # function
 
-function unit_vectors(x::CUDA.CuArray)
+@doc raw"""
+    unit_vectors(x::CUDA.CuVector)
+
+Create a vector of unit vectors based on the length of `x`.
+
+# Arguments
+- `x::CUDA.CuVector`: The vector whose length is used to determine the dimension
+  of the unit vectors.
+
+# Returns
+- A vector of unit vectors. Each unit vector has the same length as `x` and has
+  a single `1` at the position corresponding to its index in the returned
+  vector, with all other elements set to `0`.
+
+# Description
+This function creates a vector of unit vectors based on the length of `x`. Each
+unit vector has the same length as `x` and has a single `1` at the position
+corresponding to its index in the returned vector, with all other elements set
+to `0`.
+
+# Note
+This function is marked with the `@ignore_derivatives` macro from the
+`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
+call to this function when computing gradients.
+"""
+function unit_vectors(x::CUDA.CuVector)
     return [unit_vector(x, i) for i in 1:length(x)] |> Flux.gpu
 end # function
 
@@ -1337,6 +1320,32 @@ function unit_vectors(x::AbstractMatrix)
     return vectors
 end # function
 
+@doc raw"""
+        unit_vectors(x::CUDA.CuMatrix)
+
+Create a matrix where each column is a unit vector of the same length as the
+number of rows in `x`.
+
+# Arguments
+- `x::CUDA.CuMatrix`: The matrix whose number of rows is used to determine the
+  dimension of the unit vectors.
+
+# Returns
+- A vector of matrices where each entry is a matrix containing all unit vectors
+  for a single vector. Each unit vector has a single `1` at the position
+  corresponding to its index in the column, with all other elements set to `0`.
+
+# Description
+This function creates a matrix where each column is a unit vector of the same
+length as the number of rows in `x`. Each unit vector has a single `1` at the
+position corresponding to its index in the column, with all other elements set
+to `0`.
+
+# Note
+This function is marked with the `@ignore_derivatives` macro from the
+`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
+call to this function when computing gradients.
+"""
 function unit_vectors(x::CUDA.CuMatrix)
     vectors = [
         reduce(hcat, fill(unit_vector(x, i), size(x, 2)))

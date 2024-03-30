@@ -1152,6 +1152,58 @@ end # function
 
 @doc raw"""
     riemannian_logprior(
+        ρ::CUDA.CuVector,
+        G⁻¹::CUDA.CuMatrix,
+        logdetG::Number;
+        σ::Number=1.0f0,
+        vec_mat_vec::Function=vec_mat_vec_batched
+    )
+
+Compute the log-prior of a Gaussian distribution with a covariance matrix given
+by the Riemannian metric.
+
+# Arguments
+- `ρ::CUDA.CuVector`: The momentum vector.
+- `G⁻¹::CUDA.CuMatrix`: The inverse of the Riemannian metric tensor.
+- `logdetG::Number`: The log determinant of the Riemannian metric tensor.
+
+# Optional Keyword Arguments
+- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
+  is used to scale the inverse metric tensor. Default is `1.0f0`.
+- `vec_mat_vec::Function=vec_mat_vec_batched`: Function to compute the product
+  of a vector with a matrix with a vector. Default is `vec_mat_vec_batched`.
+
+# Returns
+The log-prior of the Gaussian distribution with a covariance matrix given by the
+Riemannian metric.
+
+# Notes
+- Ensure that the dimensions of `ρ` match the dimensions of the latent space of
+  the RHVAE model.
+"""
+function riemannian_logprior(
+    ρ::CUDA.CuVector,
+    G⁻¹::CUDA.CuMatrix,
+    logdetG::Number;
+    σ::Number=1.0f0,
+    vec_mat_vec::Function=vec_mat_vec_loop
+)
+    if σ ≠ 1.0f0
+        # Multiply G⁻¹ by σ²
+        G⁻¹ = σ^2 .* G⁻¹
+    end # if
+
+    # Compute ρᵀ G ρ
+    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
+
+    # Return the log-prior
+    return -0.5f0 * (size(G⁻¹, 1) * log(2.0f0π) + logdetG) - (0.5f0 * ρᵀ_G_ρ)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior(
         ρ::CUDA.CuVecOrMat,
         G⁻¹::CUDA.CuArray,
         logdetG::Union{CUDA.CuVector,<:Number};
@@ -1190,13 +1242,24 @@ Riemannian metric for the specified data point.
   for the `vec_mat_vec` computation.
 """
 function riemannian_logprior(
-    ρ::CUDA.CuVecOrMat,
+    ρ::CUDA.CuMatrix,
     G⁻¹::CUDA.CuArray,
-    logdetG::Union{CUDA.CuVector,<:Number};
+    logdetG::CUDA.CuVector;
     σ::Number=1.0f0,
     vec_mat_vec::Function=vec_mat_vec_batched
 )
-    riemannian_logprior(ρ, G⁻¹, logdetG; σ=σ, vec_mat_vec=vec_mat_vec)
+    # Check if σ ≠ 1.0f0
+    if σ ≠ 1.0f0
+        # Multiply G⁻¹ by σ²
+        G⁻¹ = σ^2 .* G⁻¹
+    end # if
+
+    # Compute ρᵀ G ρ
+    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
+
+    # Return the log-prior
+    return -0.5f0 .* (size(G⁻¹, 1) * log(2.0f0π) .+ logdetG) .-
+           (0.5f0 .* ρᵀ_G_ρ)
 end # function
 
 # ==============================================================================
