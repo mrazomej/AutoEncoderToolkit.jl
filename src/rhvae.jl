@@ -48,7 +48,7 @@ using ..VAEs: reparameterize
 # Import functions
 using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
     slogdet, taylordiff_gradient, vec_mat_vec_loop,
-    vec_mat_vec_batched, vec_mat_vec_tullio
+    vec_mat_vec_batched
 
 using ..HVAEs: quadratic_tempering, null_tempering
 
@@ -2627,11 +2627,11 @@ A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` wit
 respect to variable `var`.
 """
 function ∇hamiltonian(
-    x::CUDA.CuArray,
-    z::CUDA.CuVecOrMat,
-    ρ::CUDA.CuVecOrMat,
-    G⁻¹::CUDA.CuArray,
-    logdetG::Union{<:Number,CUDA.CuVector},
+    x::Union{CUDA.CuArray,SubArray{T,N,P} where {T,N,P<:CUDA.CuArray}},
+    z::AbstractVecOrMat,
+    ρ::AbstractVecOrMat,
+    G⁻¹::AbstractArray,
+    logdetG::Union{<:Number,AbstractVector},
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple,
     var::Symbol;
@@ -2806,9 +2806,9 @@ A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` wit
 respect to variable `var`.
 """
 function ∇hamiltonian(
-    x::CUDA.CuArray,
-    z::CUDA.CuVecOrMat,
-    ρ::CUDA.CuVecOrMat,
+    x::Union{CUDA.CuArray,SubArray{T,N,P} where {T,N,P<:CUDA.CuArray}},
+    z::AbstractVecOrMat,
+    ρ::AbstractVecOrMat,
     rhvae::RHVAE,
     var::Symbol;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
@@ -3792,7 +3792,7 @@ function general_leapfrog_tempering_step(
     tempering_schedule::Function=quadratic_tempering,
 )
     # Sample γₒ ~ N(0, Gₒ⁻¹). 
-    γₒ = sample_MvNormalCanon(Gₒ⁻¹)
+    γₒ = ChainRulesCore.@ignore_derivatives sample_MvNormalCanon(Gₒ⁻¹)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
@@ -3936,7 +3936,7 @@ function general_leapfrog_tempering_step(
     logdetGₒ = -slogdet(Gₒ⁻¹)
 
     # Sample γₒ ~ N(0, Gₒ⁻¹).
-    γₒ = sample_MvNormalCanon(Gₒ⁻¹)
+    γₒ = ChainRulesCore.@ignore_derivatives sample_MvNormalCanon(Gₒ⁻¹)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
@@ -5268,7 +5268,7 @@ train!(rhvae, x, opt; verbose=true)
 """
 function train!(
     rhvae::RHVAE,
-    x::CUDA.CuArray,
+    x::Union{CUDA.CuArray,SubArray{T,N,P} where {T,N,P<:CUDA.CuArray}},
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
