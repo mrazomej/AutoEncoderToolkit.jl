@@ -413,28 +413,6 @@ end
         # Check that the result is not Inf
         @test all(!isinf, result)
     end
-
-    @testset "with index argument" begin
-        # Compute G⁻¹ 
-        Ginv = RHVAEs.G_inv(z_mat, exrhvae)
-        # Compute logdetG
-        logdetG = utils.slogdet(Ginv)
-        # Compute Riemannian log-prior giving all parameters explicitly
-        result = RHVAEs.riemannian_logprior(
-            ρ_vec,
-            Ginv,
-            logdetG,
-            1
-        )
-
-        # Check that the result is a scalar
-        @test isa(result, Float32)
-        # Check that the result is not NaN
-        @test !isnan(result)
-        # Check that the result is not Inf
-        @test !isinf(result)
-
-    end
 end
 
 ## =============================================================================

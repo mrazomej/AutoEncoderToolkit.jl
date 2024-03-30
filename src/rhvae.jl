@@ -47,8 +47,8 @@ using ..VAEs: reparameterize
 
 # Import functions
 using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
-    slogdet, taylordiff_gradient, vec_mat_vec_loop,
-    vec_mat_vec_batched
+    slogdet, taylordiff_gradient, vec_mat_vec_loop, vec_mat_vec_batched,
+    storage_type
 
 using ..HVAEs: quadratic_tempering, null_tempering
 
@@ -524,10 +524,12 @@ function update_metric!(
 end # function
 
 # ------------------------------------------------------------------------------
+# Inverse Metric Tensor computation
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     G_inv(
-        z::AbstractVector,
+        z::AbstractVecOrMat,
         centroids_latent::AbstractMatrix,
         M::AbstractArray{<:Number,3},
         T::Number,
@@ -541,91 +543,26 @@ This function takes a point `z` in the latent space, the `centroids_latent` of
 the RHVAE instance, a 3D array `M` representing the metric tensor, a temperature
 `T`, and a regularization factor `λ`, and computes the inverse of the metric
 tensor G at that point. The computation is based on the centroids and the
-temperature, as well as a regularization term. The inverse metric is computed as
-follows:
+temperature, as well as a regularization term. The inverse metric is computed as follows:
 
-G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
+G⁻¹(z) = ∑ᵢ₌₁ⁿ L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
 
-where each column of `centroids_latent` are the cᵢ.
+where L_ψᵢ is computed by the `MetricChain`, T is the temperature, λ is a
+regularization factor, and each column of `centroids_latent` are the cᵢ.
 
 # Arguments
-- `z::AbstractVector`: The point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If a matrix, each column
+  represents a point in the latent space.
 - `centroids_latent::AbstractMatrix`: The centroids in the latent space.
-- `M::AbstractArray{<:Number,3}`: The 3D array representing the metric tensor.
+- `M::AbstractArray{<:Number,3}`: The 3D array containing the symmetric matrices
+  used to compute the inverse metric tensor.
 - `T::N`: The temperature.
 - `λ::N`: The regularization factor.
 
 # Returns
-A matrix representing the inverse of the metric tensor G at the point `z`.
-
-# Notes
-The computation involves the squared Euclidean distance between z and each
-centroid, the exponential of the negative of these distances divided by the
-square of the temperature, and a regularization term proportional to the
-identity matrix. The result is a matrix of the same size as the latent space.
-"""
-function G_inv(
-    z::AbstractVector,
-    centroids_latent::AbstractMatrix,
-    M::AbstractArray,
-    T::Number,
-    λ::Number,
-)
-    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
-    # - We use the reshape function to broadcast the operation over the third
-    # dimension of M.
-    # - The Zygote.dropgrad function is used to prevent the gradient from being
-    # computed with respect to T.
-    LLexp = M .*
-            reshape(
-        exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
-        1, 1, :
-    )
-
-    # Compute the regularization term.
-    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(length(z)) .* λ))
-
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
-    # - We divide the result by the number of centroids. This is NOT done in the
-    # original implementation, but without it, the metric tensor scales with the
-    # number of centroids.
-    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) + Λ
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    G_inv(
-        z::CuArray{<:Number,1},
-        centroids_latent::CuArray{<:Number,2},
-        M::CuArray{<:Number,3},
-        T::Number,
-        λ::Number,
-    )
-
-Compute the inverse of the metric tensor G for a given point in the latent space
-using CUDA arrays.
-
-This function takes a point `z` in the latent space, the `centroids_latent` of
-the RHVAE instance, a 3D array `M` representing the metric tensor, a temperature
-`T`, and a regularization factor `λ`, and computes the inverse of the metric
-tensor G at that point. The computation is based on the centroids and the
-temperature, as well as a regularization term. The inverse metric is computed as
-follows:
-
-G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
-
-where each column of `centroids_latent` are the cᵢ.
-
-# Arguments
-- `z::CuArray{<:Number,1}`: The point in the latent space.
-- `centroids_latent::CuArray{<:Number,2}`: The centroids in the latent space.
-- `M::CuArray{<:Number,3}`: The 3D array representing the metric tensor.
-- `T::N`: The temperature.
-- `λ::N`: The regularization factor.
-
-# Returns
-A matrix representing the inverse of the metric tensor G at the point `z`.
+A matrix or 3D array representing the inverse of the metric tensor G at the
+point `z`. If a 3D array, each slice represents the inverse metric tensor at a
+different point in the latent space.
 
 # Notes
 The computation involves the squared Euclidean distance between z and each
@@ -633,214 +570,17 @@ centroid, the exponential of the negative of these distances divided by the
 square of the temperature, and a regularization term proportional to the
 identity matrix. The result is a matrix of the same size as the latent space.
 
-This function is designed to work with CUDA arrays for GPU-accelerated
-computations.
+# GPU support
+This function supports CPU and GPU arrays.
 """
 function G_inv(
-    z::CuArray{<:Number,1},
-    centroids_latent::CuArray{<:Number,2},
-    M::CuArray{<:Number,3},
-    T::Number,
-    λ::Number,
-)
-    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
-    # - We use the reshape function to broadcast the operation over the third
-    # dimension of M.
-    # - The Zygote.dropgrad function is used to prevent the gradient from being
-    # computed with respect to T.
-    LLexp = M .*
-            reshape(
-        exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
-        1, 1, :
-    )
-
-    # Compute the regularization term.
-    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
-
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. NOTE:
-    # - We divide the result by the number of centroids. This is NOT done in the
-    #   original implementation, but without it, the metric tensor scales with
-    #   the number of centroids.
-    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) + Λ
-end # function
-
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    G_inv(
-        z::AbstractMatrix,
-        centroids_latent::AbstractMatrix,
-        M::AbstractArray{<:Number,3},
-        T::Number,
-        λ::Number,
-    )
-
-Compute the inverse of the metric tensor G for each column in the matrix `z`.
-
-This function takes a matrix `z` where each column represents a point in the
-latent space, the `centroids_latent` of the RHVAE instance, a 3D array `M`
-representing the metric tensor, a temperature `T`, and a regularization factor
-`λ`, and computes the inverse of the metric tensor G at each point. The
-computation is based on the centroids and the temperature, as well as a
-regularization term. The inverse metric is computed as follows:
-
-G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
-
-where each column of `centroids_latent` are the cᵢ.
-
-All operations in this function are broadcasted over the appropriate dimensions
-to avoid the need for explicit loops.
-
-# Arguments
-- `z::AbstractMatrix`: The matrix where each column is a point in the latent
-  space.
-- `centroids_latent::AbstractMatrix`: The centroids in the latent space.
-- `M::AbstractArray{<:Number,3}`: The 3D array representing the metric tensor.
-- `T::N`: The temperature.
-- `λ::N`: The regularization factor.
-
-# Returns
-A 3D array where each slice along the third dimension represents the inverse of
-the metric tensor G at the corresponding column of `z`.
-
-# Notes
-The computation involves the squared Euclidean distance between each column of
-`z` and each centroid, the exponential of the negative of these distances
-divided by the square of the temperature, and a regularization term proportional
-to the identity matrix. The result is a 3D array where each slice along the
-third dimension is a matrix of the same size as the latent space.
-"""
-function G_inv(
-    z::AbstractMatrix,
+    z::AbstractVecOrMat,
     centroids_latent::AbstractMatrix,
     M::AbstractArray,
     T::Number,
     λ::Number,
 )
-    # Find number of centroids
-    n_centroid = size(centroids_latent, 2)
-    # Find number of samples
-    n_sample = size(z, 2)
-
-    # Reshape arrays to broadcast subtraction
-    z = reshape(z, size(z, 1), 1, n_sample)
-    centroids_latent = reshape(
-        centroids_latent, size(centroids_latent, 1), n_centroid, 1
-    )
-
-    # Compute exp(-‖z - cᵢ‖₂² / T²). Notes:
-    # - We bradcast the operation by reshaping the input arrays.
-    # - We use Zygot.dropgrad to prevent the gradient from being computed for T.
-    # - The result is a 3D array of size (1, n_centroid, n_sample).
-    exp_term = exp.(-sum(
-        (z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2),
-        dims=1
-    ))
-
-    # Reshape exp_term to broadcast multiplication
-    exp_term = reshape(exp_term, 1, 1, n_centroid, n_sample)
-
-    # Perform the multiplication
-    LLexp = M .* exp_term
-
-    # Compute the regularization term.
-    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(size(z, 1)) .* λ))
-
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
-    # - We divide the result by the number of centroids. This is NOT done in the
-    # original implementation, but without it, the metric tensor scales with the
-    # number of centroids.
-    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) .+ Λ
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    G_inv(
-        z::CuMatrix,
-        centroids_latent::CuMatrix,
-        M::CuArray{<:Number,3},
-        T::Number,
-        λ::Number,
-    )
-
-Compute the inverse of the metric tensor G for each column in the matrix `z`.
-
-This function takes a matrix `z` where each column represents a point in the
-latent space, the `centroids_latent` of the RHVAE instance, a 3D array `M`
-representing the metric tensor, a temperature `T`, and a regularization factor
-`λ`, and computes the inverse of the metric tensor G at each point. The
-computation is based on the centroids and the temperature, as well as a
-regularization term. The inverse metric is computed as follows:
-
-G⁻¹(z) = ∑ᵢ₌₁ⁿ M[:, :, i] * exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
-
-where each column of `centroids_latent` are the cᵢ.
-
-All operations in this function are broadcasted over the appropriate dimensions
-to avoid the need for explicit loops.
-
-# Arguments
-- `z::CuMatrix`: The matrix where each column is a point in the latent
-  space.
-- `centroids_latent::CuMatrix`: The centroids in the latent space.
-- `M::CuArray{<:Number,3}`: The 3D array representing the metric tensor.
-- `T::N`: The temperature.
-- `λ::N`: The regularization factor.
-
-# Returns
-A 3D array where each slice along the third dimension represents the inverse of
-the metric tensor G at the corresponding column of `z`.
-
-# Notes
-The computation involves the squared Euclidean distance between each column of
-`z` and each centroid, the exponential of the negative of these distances
-divided by the square of the temperature, and a regularization term proportional
-to the identity matrix. The result is a 3D array where each slice along the
-third dimension is a matrix of the same size as the latent space.
-"""
-function G_inv(
-    z::CuMatrix,
-    centroids_latent::CuMatrix,
-    M::CuArray{<:Number,3},
-    T::Number,
-    λ::Number,
-)
-    # Find number of centroids
-    n_centroid = size(centroids_latent, 2)
-    # Find number of samples
-    n_sample = size(z, 2)
-
-    # Reshape arrays to broadcast subtraction
-    z = reshape(z, size(z, 1), 1, n_sample)
-    centroids_latent = reshape(
-        centroids_latent, size(centroids_latent, 1), n_centroid, 1
-    )
-
-    # Compute exp(-‖z - cᵢ‖₂² / T²). Notes:
-    # - We bradcast the operation by reshaping the input arrays.
-    # - We use Zygot.dropgrad to prevent the gradient from being computed for T.
-    # - The result is a 3D array of size (1, n_centroid, n_sample).
-    exp_term = exp.(-sum(
-        (z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2),
-        dims=1
-    ))
-
-    # Reshape exp_term to broadcast multiplication
-    exp_term = reshape(exp_term, 1, 1, n_centroid, n_sample)
-
-    # Perform the multiplication
-    LLexp = M .* exp_term
-
-    # Compute the regularization term.
-    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(size(z, 1)) .* λ)))
-
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
-    # - We divide the result by the number of centroids. This is NOT done in the
-    # original implementation, but without it, the metric tensor scales with the
-    # number of centroids.
-    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) .+ Λ
+    return _G_inv(storage_type(z), z, centroids_latent, M, T, λ)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -897,19 +637,224 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    metric_tensor(
+    G_inv(
         z::AbstractVector,
+        centroids_latent::AbstractMatrix,
+        M::AbstractArray{<:Number,3},
+        T::Number,
+        λ::Number,
+    )
+
+AbstractVector version of the G_inv function.
+"""
+function _G_inv(
+    ::Type,
+    z::AbstractVector,
+    centroids_latent::AbstractMatrix,
+    M::AbstractArray,
+    T::Number,
+    λ::Number,
+)
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
+    # - We use the reshape function to broadcast the operation over the third
+    # dimension of M.
+    # - The Zygote.dropgrad function is used to prevent the gradient from being
+    # computed with respect to T.
+    LLexp = M .*
+            reshape(
+        exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
+        1, 1, :
+    )
+
+    # Compute the regularization term.
+    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(length(z)) .* λ))
+
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    # original implementation, but without it, the metric tensor scales with the
+    # number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) + Λ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    G_inv(
+        z::AbstractMatrix,
+        centroids_latent::AbstractMatrix,
+        M::AbstractArray{<:Number,3},
+        T::Number,
+        λ::Number,
+    )
+
+GPU AbstractVector version of the G_inv function.
+"""
+function _G_inv(
+    ::Type{N},
+    z::AbstractVector,
+    centroids_latent::AbstractMatrix,
+    M::AbstractArray{<:Any,3},
+    T::Number,
+    λ::Number,
+) where {N<:CUDA.CuArray}
+    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
+    # - We use the reshape function to broadcast the operation over the third
+    # dimension of M.
+    # - The Zygote.dropgrad function is used to prevent the gradient from being
+    # computed with respect to T.
+    LLexp = M .*
+            reshape(
+        exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
+        1, 1, :
+    )
+
+    # Compute the regularization term.
+    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
+
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. NOTE:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    #   original implementation, but without it, the metric tensor scales with
+    #   the number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) + Λ
+end # function
+
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    G_inv(
+        z::AbstractMatrix,
+        centroids_latent::AbstractMatrix,
+        M::AbstractArray{<:Number,3},
+        T::Number,
+        λ::Number,
+    )
+
+CPU AbstractMatrix version of the G_inv function.
+"""
+function _G_inv(
+    ::Type,
+    z::AbstractMatrix,
+    centroids_latent::AbstractMatrix,
+    M::AbstractArray,
+    T::Number,
+    λ::Number,
+)
+    # Find number of centroids
+    n_centroid = size(centroids_latent, 2)
+    # Find number of samples
+    n_sample = size(z, 2)
+
+    # Reshape arrays to broadcast subtraction
+    z = reshape(z, size(z, 1), 1, n_sample)
+    centroids_latent = reshape(
+        centroids_latent, size(centroids_latent, 1), n_centroid, 1
+    )
+
+    # Compute exp(-‖z - cᵢ‖₂² / T²). Notes:
+    # - We bradcast the operation by reshaping the input arrays.
+    # - We use Zygot.dropgrad to prevent the gradient from being computed for T.
+    # - The result is a 3D array of size (1, n_centroid, n_sample).
+    exp_term = exp.(-sum(
+        (z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2),
+        dims=1
+    ))
+
+    # Reshape exp_term to broadcast multiplication
+    exp_term = reshape(exp_term, 1, 1, n_centroid, n_sample)
+
+    # Perform the multiplication
+    LLexp = M .* exp_term
+
+    # Compute the regularization term.
+    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(size(z, 1)) .* λ))
+
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    # original implementation, but without it, the metric tensor scales with the
+    # number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) .+ Λ
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    G_inv( 
+        z::AbstractMatrix,
+        centroids_latent::AbstractMatrix,
+        M::AbstractArray{<:Any,3},
+        T::Number,
+        λ::Number,
+    )
+
+GPU AbstractMatrix version of the G_inv function.
+"""
+function _G_inv(
+    ::Type{N},
+    z::AbstractMatrix,
+    centroids_latent::AbstractMatrix,
+    M::AbstractArray{<:Any,3},
+    T::Number,
+    λ::Number,
+) where {N<:CUDA.CuArray}
+    # Find number of centroids
+    n_centroid = size(centroids_latent, 2)
+    # Find number of samples
+    n_sample = size(z, 2)
+
+    # Reshape arrays to broadcast subtraction
+    z = reshape(z, size(z, 1), 1, n_sample)
+    centroids_latent = reshape(
+        centroids_latent, size(centroids_latent, 1), n_centroid, 1
+    )
+
+    # Compute exp(-‖z - cᵢ‖₂² / T²). Notes:
+    # - We bradcast the operation by reshaping the input arrays.
+    # - We use Zygot.dropgrad to prevent the gradient from being computed for T.
+    # - The result is a 3D array of size (1, n_centroid, n_sample).
+    exp_term = exp.(-sum(
+        (z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2),
+        dims=1
+    ))
+
+    # Reshape exp_term to broadcast multiplication
+    exp_term = reshape(exp_term, 1, 1, n_centroid, n_sample)
+
+    # Perform the multiplication
+    LLexp = M .* exp_term
+
+    # Compute the regularization term.
+    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(size(z, 1)) .* λ)))
+
+    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
+    # - We divide the result by the number of centroids. This is NOT done in the
+    # original implementation, but without it, the metric tensor scales with the
+    # number of centroids.
+    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) .+ Λ
+end # function
+
+# ------------------------------------------------------------------------------
+# Metric Tensor computation
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    metric_tensor(
+        z::AbstractVecOrMat,
         metric_param::Union{RHVAE,NamedTuple},
     )
 
-Compute the metric tensor G for a given point in the latent space.
+Compute the metric tensor G for a given point in the latent space. This function
+is a wrapper that determines the type of the input `z` and calls the appropriate
+specialized function `_metric_tensor` to perform the actual computation.
 
-This function takes a `RHVAE` instance and a point `z` in the latent space, and
+This function takes a `RHVAE` instance or a named tuple containing the fields
+`centroids_latent`, `M`, `T`, and `λ`, and a point `z` in the latent space, and
 computes the metric tensor G at that point. The computation is based on the
 inverse of the metric tensor G, which is computed by the `G_inv` function.
 
 # Arguments
-- `z::AbstractVector`: The point in the latent space.
+- `z::AbstractVecOrMat`: The point in the latent space. If a matrix, each column
+  represents a point in the latent space.
 - `metric_param::Union{RHVAE,NamedTuple}`: Either an `RHVAE` instance or a named
   tuple containing the fields `centroids_latent`, `M`, `T`, and `λ`.
 
@@ -919,8 +864,29 @@ A matrix representing the metric tensor G at the point `z`.
 # Notes
 The computation involves the inverse of the metric tensor G at the point z. The
 result is a matrix of the same size as the latent space.
+
+# GPU Support
+This function supports CPU and GPU arrays.
 """
 function metric_tensor(
+    z::AbstractVecOrMat,
+    metric_param::Union{RHVAE,NamedTuple},
+)
+    return _metric_tensor(storage_type(z), z, metric_param)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    metric_tensor(
+        z::AbstractVector,
+        metric_param::Union{RHVAE,NamedTuple},
+    )
+
+AbstractVector version of the metric_tensor function.
+"""
+function _metric_tensor(
+    ::Type,
     z::AbstractVector,
     metric_param::Union{RHVAE,NamedTuple},
 )
@@ -937,28 +903,10 @@ end # function
         metric_param::Union{RHVAE,NamedTuple},
     )
 
-Compute the metric tensor G for each point in a set of points in the latent
-space.
-
-This function takes a `RHVAE` instance or a named tuple and a matrix `z` of
-points in the latent space, and computes the metric tensor G at each point. The
-computation is based on the inverse of the metric tensor G, which is computed by
-the `G_inv` function.
-
-# Arguments
-- `z::AbstractMatrix`: The matrix of points in the latent space.
-- `metric_param::Union{RHVAE,NamedTuple}`: Either an `RHVAE` instance or a named
-  tuple containing the fields `centroids_latent`, `M`, `T`, and `λ`.
-
-# Returns
-A 3D array where each slice represents the metric tensor G at a point in `z`.
-
-# Notes
-The computation involves the inverse of the metric tensor G at each point in
-`z`. The result is a 3D array where each slice is a matrix of the same size as
-the latent space.
+CPU AbstractMatrix version of the metric_tensor function.
 """
-function metric_tensor(
+function _metric_tensor(
+    ::Type,
     z::AbstractMatrix,
     metric_param::Union{RHVAE,NamedTuple},
 )
@@ -972,6 +920,31 @@ function metric_tensor(
     )
 end # function
 
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    metric_tensor(
+        z::AbstractMatrix,
+        metric_param::Union{RHVAE,NamedTuple},
+    )
+
+GPU AbstractMatrix version of the metric_tensor function.
+"""
+function _metric_tensor(
+    ::Type{T},
+    z::AbstractMatrix,
+    metric_param::Union{RHVAE,NamedTuple},
+) where {T<:CUDA.CuArray}
+    # Compute the inverse of the metric tensor G at each point in z.
+    G⁻¹ = G_inv(z, metric_param)
+
+    # Invert each slice of G⁻¹
+    G = reduce(
+        (x, y) -> cat(x, y, dims=3),
+        last(CUDA.CUBLAS.matinv_batched(collect(eachslice(G⁻¹, dims=3))))
+    )
+end # function
+
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Generalized Hamiltonian Dynamics
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -982,10 +955,9 @@ end # function
 
 @doc raw"""
     riemannian_logprior(
-        ρ::AbstractVector,
-        G⁻¹::AbstractMatrix,
-        logdetG::Number;
-        σ::Number=1.0f0,
+        ρ::AbstractVecOrMat,
+        G⁻¹::AbstractArray,
+        logdetG::Union{Number,AbstractVector};
         vec_mat_vec::Function=vec_mat_vec_loop
     )
 
@@ -993,13 +965,15 @@ Compute the log-prior of a Gaussian distribution with a covariance matrix given
 by the Riemannian metric.
 
 # Arguments
-- `ρ::AbstractVector`: The momentum vector.
-- `G⁻¹::AbstractMatrix`: The inverse of the Riemannian metric tensor.
-- `logdetG::Number`: The log determinant of the Riemannian metric tensor.
+- `ρ::AbstractVecOrMat`: The momentum variable of the Hamiltonian system. If a
+  matrix, each column represents a momentum variable.
+- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. If a 3D
+  array, each slice represents the inverse metric tensor at a different point in
+  the latent space.
+- `logdetG::Union{Number,AbstractVector}`: The log determinant of the Riemannian
+  metric tensor. If a vector, each element represents the log determinant at a different point in the latent space.
 
 # Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-  is used to scale the inverse metric tensor. Default is `1.0f0`.
 - `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
   vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
   accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
@@ -1012,17 +986,53 @@ Riemannian metric.
 # Notes
 - Ensure that the dimensions of `ρ` match the dimensions of the latent space of
   the RHVAE model.
+
+# GPU Support
+This function supports CPU and GPU arrays.
 """
 function riemannian_logprior(
+    ρ::AbstractVecOrMat,
+    G⁻¹::AbstractArray,
+    logdetG::Union{Number,AbstractVector};
+    vec_mat_vec::Union{Function,Nothing}=nothing
+)
+    # Obtain ρ storage type
+    stρ = storage_type(ρ)
+
+    # Check if input is in GPU and select the appropriate vec_mat_vec function
+    # if not provided
+    if (stρ <: CUDA.CuArray) && (vec_mat_vec === nothing)
+        # For GPU arrays, use vec_mat_vec_batched
+        vec_mat_vec = vec_mat_vec_batched
+    elseif vec_mat_vec === nothing
+        # For CPU arrays, use vec_mat_vec_loop
+        vec_mat_vec = vec_mat_vec_loop
+    end # if
+
+    return _riemannian_logprior(
+        storage_type(ρ), ρ, G⁻¹, logdetG, vec_mat_vec
+    )
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    riemannian_logprior(
+        ρ::AbstractVector,
+        G⁻¹::AbstractMatrix,
+        logdetG::Number;
+        vec_mat_vec::Function,
+    )
+
+CPU AbstractVector version of the riemannian_logprior function.
+"""
+function _riemannian_logprior(
+    ::Type,
     ρ::AbstractVector,
     G⁻¹::AbstractMatrix,
-    logdetG::Number;
-    σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_loop
+    logdetG::Number,
+    vec_mat_vec::Function,
 )
-    # Multiply G⁻¹ by σ²
-    G⁻¹ = σ^2 .* G⁻¹
-
     # Compute ρᵀ G ρ
     ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
 
@@ -1034,52 +1044,21 @@ end # function
 
 @doc raw"""
     riemannian_logprior(
-        ρ::AbstractMatrix,
-        G⁻¹::AbstractArray,
-        logdetG::AbstractVector;
-        σ::Number=1.0f0,
-        vec_mat_vec::Function=vec_mat_vec_loop
+        ρ::AbstractVector,
+        G⁻¹::AbstractMatrix,
+        logdetG::Number,
+        vec_mat_vec::Function,
     )
 
-Compute the log-prior of a Gaussian distribution with a covariance matrix given
-by the Riemannian metric.
-
-# Arguments
-- `ρ::AbstractMatrix`: The momentum variables. Each column of `ρ` represents a
-  different data point.
-- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each 3D
-  slice of `G⁻¹` represents the inverse metric for a different data point.
-- `logdetG::AbstractVector`: The log determinant of the Riemannian metric
-  tensor. Each element of `logdetG` corresponds to a different data point.
-
-# Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-  is used to scale the inverse metric tensor. Default is `1.0f0`.
-- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
-  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
-  accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
-  to compute Hamiltonian gradients. The latter works better on GPUs.
-
-# Returns
-The log-prior of the Gaussian distribution with a covariance matrix given by the
-Riemannian metric.
-
-# Notes
-- Ensure that the dimensions of `ρ` match the dimensions of the latent space of
-  the RHVAE model.
+CPU AbstractMatrix version of the riemannian_logprior function.
 """
-function riemannian_logprior(
+function _riemannian_logprior(
+    ::Type,
     ρ::AbstractMatrix,
     G⁻¹::AbstractArray,
-    logdetG::AbstractVector;
-    σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_loop
+    logdetG::AbstractVector,
+    vec_mat_vec::Function,
 )
-    if σ ≠ 1.0f0
-        # Multiply G⁻¹ by σ²
-        G⁻¹ = σ^2 .* G⁻¹
-    end # if
-
     # Compute ρᵀ G ρ
     ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
 
@@ -1092,107 +1071,21 @@ end # function
 
 @doc raw"""
     riemannian_logprior(
-        ρ::AbstractMatrix,
-        G⁻¹::AbstractArray,
-        logdetG::AbstractVector,
-        index::Int;
-        σ::Number=1.0f0,
-        vec_mat_vec::Function=vec_mat_vec_loop
+        ρ::AbstractVector,
+        G⁻¹::AbstractMatrix,
+        logdetG::Number,
+        vec_mat_vec::Function
     )
 
-Compute the log-prior of a Gaussian distribution with a covariance matrix given
-by the Riemannian metric for a single data point specified by `index`.
-
-# Arguments
-- `ρ::AbstractMatrix`: The momentum vectors. Each column of `ρ` represents a
-  different data point.
-- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
-  of `G⁻¹` represents the inverse metric for a different data point.
-- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
-  tensor. Each element of `logdetG` corresponds to a different data point.
-- `index::Int`: The index of the data point for which the log-prior is to be
-  computed.
-
-# Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-  is used to scale the inverse metric tensor. Default is `1.0f0`.
-- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
-  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
-  accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
-  to compute Hamiltonian gradients. The latter works better on GPUs.
-
-# Returns
-The log-prior of the Gaussian distribution with a covariance matrix given by the
-Riemannian metric for the specified data point.
-
-# Notes
-- Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
-  dimensionality of the RHVAE model. Also, ensure that `index` is a valid index
-  for the data points in `ρ` and `G⁻¹`.
+GPU AbstractVector version of the riemannian_logprior function.
 """
-function riemannian_logprior(
+function _riemannian_logprior(
+    ::Type{N},
     ρ::AbstractVector,
-    G⁻¹::AbstractArray,
-    logdetG::AbstractVector,
-    index::Int;
-    σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_loop
-)
-    # Multiply G⁻¹ by σ²
-    G⁻¹ = σ^2 .* G⁻¹[.., index]
-
-    # Compute ρᵀ G ρ
-    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
-
-    # Return the log-prior
-    return -0.5f0 * (length(ρ) * log(2.0f0π) + logdetG[index]) - 0.5f0 * ρᵀ_G_ρ
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    riemannian_logprior(
-        ρ::CUDA.CuVector,
-        G⁻¹::CUDA.CuMatrix,
-        logdetG::Number;
-        σ::Number=1.0f0,
-        vec_mat_vec::Function=vec_mat_vec_batched
-    )
-
-Compute the log-prior of a Gaussian distribution with a covariance matrix given
-by the Riemannian metric.
-
-# Arguments
-- `ρ::CUDA.CuVector`: The momentum vector.
-- `G⁻¹::CUDA.CuMatrix`: The inverse of the Riemannian metric tensor.
-- `logdetG::Number`: The log determinant of the Riemannian metric tensor.
-
-# Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-  is used to scale the inverse metric tensor. Default is `1.0f0`.
-- `vec_mat_vec::Function=vec_mat_vec_batched`: Function to compute the product
-  of a vector with a matrix with a vector. Default is `vec_mat_vec_batched`.
-
-# Returns
-The log-prior of the Gaussian distribution with a covariance matrix given by the
-Riemannian metric.
-
-# Notes
-- Ensure that the dimensions of `ρ` match the dimensions of the latent space of
-  the RHVAE model.
-"""
-function riemannian_logprior(
-    ρ::CUDA.CuVector,
-    G⁻¹::CUDA.CuMatrix,
-    logdetG::Number;
-    σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_loop
-)
-    if σ ≠ 1.0f0
-        # Multiply G⁻¹ by σ²
-        G⁻¹ = σ^2 .* G⁻¹
-    end # if
-
+    G⁻¹::AbstractMatrix,
+    logdetG::Number,
+    vec_mat_vec::Function
+) where {N<:CUDA.CuArray}
     # Compute ρᵀ G ρ
     ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
 
@@ -1204,56 +1097,21 @@ end # function
 
 @doc raw"""
     riemannian_logprior(
-        ρ::CUDA.CuVecOrMat,
-        G⁻¹::CUDA.CuArray,
-        logdetG::Union{CUDA.CuVector,<:Number};
-        σ::Number=1.0f0,
-        vec_mat_vec::Function=vec_mat_vec_tullio
+        ρ::AbstractVector,
+        G⁻¹::AbstractMatrix,
+        logdetG::Number,
+        vec_mat_vec::Function,
     )
 
-Compute the log-prior of a Gaussian distribution with a covariance matrix given
-by the Riemannian metric for a single data point specified by `index`. This
-version of the function is optimized for CUDA arrays.
-
-# Arguments
-- `ρ::CUDA.CuVecOrMat`: The momentum vectors. Each column of `ρ` represents a
-  different data point.
-- `G⁻¹::CUDA.CuArray`: The inverse of the Riemannian metric tensor. Each column
-  of `G⁻¹` represents the inverse metric for a different data point.
-- `logdetG::Union{CUDA.CuVector,<:Number}`: The log determinants of the
-  Riemannian metric tensor. Each element of `logdetG` corresponds to a different
-  data point.
-
-# Optional Keyword Arguments
-- `σ::Number=1.0f0`: The standard deviation of the Gaussian distribution. This
-  is used to scale the inverse metric tensor. Default is `1.0f0`.
-- `vec_mat_vec::Function=vec_mat_vec_tullio`: Function to compute the product of
-  a vector with a matrix with a vector. Default is `vec_mat_vec_tullio`, which
-  is optimized for CUDA arrays and uses Tullio.jl for computations.
-
-# Returns
-The log-prior of the Gaussian distribution with a covariance matrix given by the
-Riemannian metric for the specified data point.
-
-# Notes
-- Ensure that the dimensions of `ρ` and `G⁻¹` match the expected input
-  dimensionality of the RHVAE model.
-- This version of the function is optimized for CUDA arrays and uses Tullio.jl
-  for the `vec_mat_vec` computation.
+GPU AbstractMatrix version of the riemannian_logprior function.
 """
-function riemannian_logprior(
-    ρ::CUDA.CuMatrix,
-    G⁻¹::CUDA.CuArray,
-    logdetG::CUDA.CuVector;
-    σ::Number=1.0f0,
-    vec_mat_vec::Function=vec_mat_vec_batched
-)
-    # Check if σ ≠ 1.0f0
-    if σ ≠ 1.0f0
-        # Multiply G⁻¹ by σ²
-        G⁻¹ = σ^2 .* G⁻¹
-    end # if
-
+function _riemannian_logprior(
+    ::Type{N},
+    ρ::AbstractMatrix,
+    G⁻¹::AbstractArray,
+    logdetG::AbstractVector,
+    vec_mat_vec::Function,
+) where {N<:CUDA.CuArray}
     # Compute ρᵀ G ρ
     ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
 
@@ -1369,121 +1227,6 @@ function hamiltonian(
 
     # 2. Kinetic energy K(ρ) = -log p(ρ)
     κ = -momentum_logprior(ρ, G⁻¹, logdetG)
-
-    # Return Hamiltonian
-    return U + κ
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    hamiltonian(
-        x::AbstractArray,
-        z::AbstractMatrix,
-        ρ::AbstractMatrix,
-        G⁻¹::AbstractArray,
-        logdetG::AbstractVector,
-        decoder::AbstractVariationalDecoder,
-        decoder_output::NamedTuple,
-        index::Int;
-        reconstruction_loglikelihood::Function=decoder_loglikelihood,
-        position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior,
-    )
-
-Compute the Hamiltonian for a single data point specified by `index`.
-
-This function takes a data array `x`, a latent space matrix `z`, a momentum
-matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`, a `decoder` of
-type `AbstractVariationalDecoder`, a `decoder_output` NamedTuple, and an `index`
-specifying the data point, and computes the Hamiltonian. The computation is
-based on the log-likelihood of the decoder, the log-prior of the latent space,
-and the inverse of the metric tensor G at the point `z`.
-
-The Hamiltonian is computed as follows:
-
-Hₓ(z, ρ) = Uₓ(z) + κ(ρ),
-
-where Uₓ(z) is the potential energy, and κ(ρ) is the kinetic energy. The
-potential energy is defined as follows:
-
-Uₓ(z) = -log p(x|z) - log p(z),
-
-where p(x|z) is the log-likelihood of the decoder and p(z) is the log-prior in
-latent space. The kinetic energy is defined as follows:
-
-κ(ρ) = -log p(ρ),
-
-where p(ρ) is the log-prior of the momentum.
-
-# Arguments
-- `x::AbstractArray`: The data array. Each column of `x` represents a different
-  data point.
-- `z::AbstractMatrix`: The latent space matrix. Each column of `z` represents
-  the latent space for a different data point.
-- `ρ::AbstractMatrix`: The momentum matrix. Each column of `ρ` represents the
-  momentum for a different data point.
-- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. Each column
-  of `G⁻¹` represents the inverse metric for a different data point.
-- `logdetG::AbstractVector`: The log determinants of the Riemannian metric
-  tensor. Each element of `logdetG` corresponds to a different data point.
-- `decoder::AbstractVariationalDecoder`: The decoder instance.
-- `decoder_output::NamedTuple`: The output of the decoder.
-- `index::Int`: The index of the data point for which the Hamiltonian is to be
-  computed.
-
-# Optional Keyword Arguments
-- `reconstruction_loglikelihood::Function`: The function to compute the
-  log-likelihood of the decoder reconstruction. Default is
-  `decoder_loglikelihood`. This function must take as input the decoder, the
-  data array `x`, the latent space matrix `z`, the `decoder_output`, and the
-  `index`.
-- `position_logprior::Function`: The function to compute the log-prior of the
-  latent space position. Default is `spherical_logprior`. This function must
-  take as input the latent space matrix `z` and the `index`.
-- `momentum_logprior::Function`: The function to compute the log-prior of the
-  momentum. Default is `riemannian_logprior`. This function must take as input
-  the momentum matrix `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`,
-  the log determinants of the Riemannian metric tensor `logdetG`, and the
-  `index`.
-
-# Returns
-A scalar representing the Hamiltonian for the specified data point.
-
-# Note
-The inverse of the Riemannian metric tensor `G⁻¹` and the log determinants of
-the Riemannian metric tensor `logdetG` are assumed to be computed elsewhere. The
-user must ensure that the provided `G⁻¹` and `logdetG` correspond to the given
-`z` value.
-"""
-function hamiltonian(
-    x::AbstractArray,
-    z::AbstractVector,
-    ρ::AbstractVector,
-    G⁻¹::AbstractArray,
-    logdetG::AbstractVector,
-    decoder::AbstractVariationalDecoder,
-    decoder_output::NamedTuple,
-    index::Int;
-    reconstruction_loglikelihood::Function=decoder_loglikelihood,
-    position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior,
-)
-    # 1. Potential energy U(z|x) = -log p(x|z) - log p(z)
-
-    # Compute log-likelihood
-    loglikelihood_x_given_z = reconstruction_loglikelihood(
-        x, z, decoder, decoder_output, index
-    )
-
-    # Compute log-prior
-    logprior_z = position_logprior(z)
-
-    # Define potential energy
-    U = -loglikelihood_x_given_z - logprior_z
-
-    # 2. Kinetic energy K(ρ) = -log p(ρ)
-    κ = -momentum_logprior(ρ, G⁻¹, logdetG, index)
 
     # Return Hamiltonian
     return U + κ
@@ -2519,8 +2262,8 @@ the point `z`.
 - `momentum_logprior::Function`: The function to compute the log-prior of the
   momentum. Default is `riemannian_logprior`. This function must take as input
   the momentum `ρ` and `G⁻¹`.
-- `adtype::Symbol=:TaylorDiff`: The type of automatic differentiation method to
-  use. Must be :finite, :ForwardDiff, or :TaylorDiff. Default is :TaylorDiff.
+- `adtype::Union{Symbol,Nothing}`=:TaylorDiff`: The type of automatic
+  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or `nothing`. Default is nothing, therefore, for GPU arrays, finite differences are used, and for CPU arrays, TaylorDiff is used.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
@@ -2540,111 +2283,24 @@ function ∇hamiltonian(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
-    adtype::Symbol=:TaylorDiff,
+    adtype::Union{Symbol,Nothing}=nothing,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇Hrhvae)
+    # Obtain x storage type
+    stx = storage_type(x)
+
+    # Check if no automatic differentiation method is specified
+    if (stx <: CUDA.CuArray) && (adtype === nothing)
+        # If no automatic differentiation method is specified, use finite
+        # differences for CUDA arrays
+        adtype = :finite
+    elseif adtype === nothing
+        # If no automatic differentiation method is specified, use TaylorDiff
+        adtype = :TaylorDiff
+    elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hrhvae))
+        # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
-    end # if
-
-    # Compute gradient with respect to var
-    return ∇Hrhvae[adtype](
-        x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, var;
-        reconstruction_loglikelihood=reconstruction_loglikelihood,
-        position_logprior=position_logprior,
-        momentum_logprior=momentum_logprior,
-        adkwargs...
-    )
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    ∇hamiltonian(
-        x::CUDA.CuArray,
-        z::CUDA.CuVecOrMat,
-        ρ::CUDA.CuVecOrMat,
-        G⁻¹::CUDA.CuArray,
-        logdetG::Union{<:Number,CUDA.CuVector},
-        decoder::AbstractVariationalDecoder,
-        decoder_output::NamedTuple,
-        var::Symbol;
-        reconstruction_loglikelihood::Function=decoder_loglikelihood,
-        position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior,
-        adtype::Symbol=:finite,
-        adkwargs::Union{NamedTuple,Dict}=Dict(),
-    )
-
-Compute the gradient of the Hamiltonian with respect to a given variable using a
-specified automatic differentiation method on CUDA arrays.
-
-This function takes a point `x` in the data space, a point `z` in the latent
-space, a momentum `ρ`, the inverse of the Riemannian metric tensor `G⁻¹`, a
-`decoder` of type `AbstractVariationalDecoder`, a `decoder_output` NamedTuple,
-and a variable `var` (:z or :ρ), and computes the gradient of the Hamiltonian
-with respect to `var` using the specified automatic differentiation method. The
-computation is based on the log-likelihood of the decoder, the log-prior of the
-latent space, and `G⁻¹`.
-
-# Arguments
-- `x::CUDA.CuArray`: The point in the data space. This does not necessarily need
-  to be a vector. Array inputs are supported. The last dimension is assumed to
-  have each of the data points.
-- `z::CUDA.CuVecOrMat`: The point in the latent space. If matrix, each column
-  represents a point in the latent space.
-- `ρ::CUDA.CuVecOrMat`: The momentum. If matrix, each column represents a
-  momentum vector.
-- `G⁻¹::CUDA.CuArray`: The inverse of the Riemannian metric tensor.  If 3D
-  array, each slice along the third dimension represents the inverse of the
-  metric tensor at the corresponding column of `z`.
-- `logdetG::Union{<:Number,CUDA.CuVector}`: The log determinant of the
-  Riemannian metric tensor. If vector, each element represents the log
-  determinant of the metric tensor at the corresponding column of `z`.
-- `decoder::AbstractVariationalDecoder`: The decoder instance.
-- `decoder_output::NamedTuple`: The output of the decoder.  - `var::Symbol`: The
-    variable with respect to which the gradient is computed. Must be :z or :ρ.
-
-# Optional Keyword Arguments
-- `reconstruction_loglikelihood::Function`: The function to compute the
-  log-likelihood of the decoder reconstruction. Default is
-  `decoder_loglikelihood`. This function must take as input the decoder, the
-  point `x` in the data space, and the `decoder_output`.
-- `position_logprior::Function`: The function to compute the log-prior of the
-  latent space position. Default is `spherical_logprior`. This function must
-  take as input the point `z` in the latent space.
-- `momentum_logprior::Function`: The function to compute the log-prior of the
-  momentum. Default is `riemannian_logprior`. This function must take as input
-  the momentum `ρ` and `G⁻¹`.
-- `adtype::Symbol=:finite`: The type of automatic differentiation method to use.
-  Must be :finite, :ForwardDiff, or :TaylorDiff. Default is :finite.
-- `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
-  pass to the automatic differentiation method.
-
-# Returns
-A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
-respect to variable `var`.
-"""
-function ∇hamiltonian(
-    x::Union{CUDA.CuArray,SubArray{T,N,P} where {T,N,P<:CUDA.CuArray}},
-    z::AbstractVecOrMat,
-    ρ::AbstractVecOrMat,
-    G⁻¹::AbstractArray,
-    logdetG::Union{<:Number,AbstractVector},
-    decoder::AbstractVariationalDecoder,
-    decoder_output::NamedTuple,
-    var::Symbol;
-    reconstruction_loglikelihood::Function=decoder_loglikelihood,
-    position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior,
-    adtype::Symbol=:finite,
-    adkwargs::Union{NamedTuple,Dict}=Dict(),
-)
-    # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇Hrhvae)
-        error("adtype must be one of $(keys(∇Hrhvae))")
-    end # if
+    end
 
     # Compute gradient with respect to var
     return ∇Hrhvae[adtype](
@@ -2707,8 +2363,8 @@ log-likelihood of the decoder, the log-prior of the latent space, and `G_inv`.
   the momentum `ρ` and `G_inv`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor.  Default is `G_inv`.
-- `adtype::Symbol=:TaylorDiff`: The type of automatic differentiation method to
-  use. Must be :finite, :ForwardDiff, or :TaylorDiff. Default is :TaylorDiff.
+- `adtype::Union{Symbol,Nothing}`=:TaylorDiff`: The type of automatic
+  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or `nothing`. Default is nothing, therefore, for GPU arrays, finite differences are used, and for CPU arrays, TaylorDiff is used.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
@@ -2726,102 +2382,24 @@ function ∇hamiltonian(
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
-    adtype::Symbol=:TaylorDiff,
+    adtype::Union{Symbol,Nothing}=nothing,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇Hrhvae)
+    # Obtain x storage type
+    stx = storage_type(x)
+
+    # Check if no automatic differentiation method is specified
+    if (stx <: CUDA.CuArray) && (adtype === nothing)
+        # If no automatic differentiation method is specified, use finite
+        # differences for CUDA arrays
+        adtype = :finite
+    elseif adtype === nothing
+        # If no automatic differentiation method is specified, use TaylorDiff
+        adtype = :TaylorDiff
+    elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hrhvae))
+        # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
-    end # if
-
-    # Compute gradient with respect to var
-    return ∇Hrhvae[adtype](
-        x, z, ρ, rhvae, var;
-        reconstruction_loglikelihood=reconstruction_loglikelihood,
-        position_logprior=position_logprior,
-        momentum_logprior=momentum_logprior,
-        G_inv=G_inv,
-        adkwargs...
-    )
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    ∇hamiltonian(
-        x::CUDA.CuArray,
-        z::CUDA.CuVecOrMat,
-        ρ::CUDA.CuVecOrMat,
-        rhvae::RHVAE,
-        var::Symbol;
-        reconstruction_loglikelihood::Function=decoder_loglikelihood,
-        position_logprior::Function=spherical_logprior,
-        momentum_logprior::Function=riemannian_logprior,
-        G_inv::Function=G_inv,
-        adtype::Symbol=:finite,
-        adkwargs::Union{NamedTuple,Dict}=Dict(),
-    )
-
-Compute the gradient of the Hamiltonian with respect to a given variable using a
-specified automatic differentiation method.
-
-This function takes a point `x` in the data space, a point `z` in the latent
-space, a momentum `ρ`, an instance of `RHVAE`, and a variable `var` (:z or :ρ),
-and computes the gradient of the Hamiltonian with respect to `var` using the
-specified automatic differentiation method. The computation is based on the
-log-likelihood of the decoder, the log-prior of the latent space, and `G_inv`.
-
-# Arguments
-- `x::CUDA.CuArray`: The point in the data space. This does not necessarily need
-  to be a vector. Array inputs are supported. The last dimension is assumed to
-  have each of the data points.
-- `z::CUDA.CuVecOrMat`: The point in the latent space. If matrix, each column
-  represents a point in the latent space.
-- `ρ::CUDA.CuVecOrMat`: The momentum. If matrix, each column represents a
-  momentum vector.
-- `rhvae::RHVAE`: An instance of the RHVAE model.
-- `var::Symbol`: The variable with respect to which the gradient is computed.
-  Must be :z or :ρ.
-
-# Optional Keyword Arguments
-- `reconstruction_loglikelihood::Function`: The function to compute the
-  log-likelihood of the decoder reconstruction. Default is
-  `decoder_loglikelihood`. This function must take as input the decoder, the
-  point `x` in the data space, and the `decoder_output`.
-- `position_logprior::Function`: The function to compute the log-prior of the
-  latent space position. Default is `spherical_logprior`. This function must
-  take as input the point `z` in the latent space.
-- `momentum_logprior::Function`: The function to compute the log-prior of the
-  momentum. Default is `riemannian_logprior`. This function must take as input
-  the momentum `ρ` and `G_inv`.
-- `G_inv::Function`: The function to compute the inverse of the Riemannian
-  metric tensor.  Default is `G_inv`.
-- `adtype::Symbol=:finite`: The type of automatic differentiation method to use.
-  Must be :finite, :ForwardDiff, or :TaylorDiff. Default is :finite.
-- `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
-  pass to the automatic differentiation method.
-
-# Returns
-A vector representing the gradient of the Hamiltonian at the point `(z, ρ)` with
-respect to variable `var`.
-"""
-function ∇hamiltonian(
-    x::Union{CUDA.CuArray,SubArray{T,N,P} where {T,N,P<:CUDA.CuArray}},
-    z::AbstractVecOrMat,
-    ρ::AbstractVecOrMat,
-    rhvae::RHVAE,
-    var::Symbol;
-    reconstruction_loglikelihood::Function=decoder_loglikelihood,
-    position_logprior::Function=spherical_logprior,
-    momentum_logprior::Function=riemannian_logprior,
-    G_inv::Function=G_inv,
-    adtype::Symbol=:finite,
-    adkwargs::Union{NamedTuple,Dict}=Dict(),
-)
-    # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇Hrhvae)
-        error("adtype must be one of $(keys(∇Hrhvae))")
-    end # if
+    end
 
     # Compute gradient with respect to var
     return ∇Hrhvae[adtype](
@@ -5199,83 +4777,6 @@ function train!(
     loss_return::Bool=false,
 )
     # Compute VAE gradient
-    L, ∇L = Flux.withgradient(rhvae) do rhvae_model
-        loss_function(rhvae_model, x; loss_kwargs...)
-    end # do block
-
-    # Update parameters
-    Flux.Optimisers.update!(opt, rhvae, ∇L[1])
-
-    # Update metric
-    update_metric!(rhvae)
-
-    # Check if loss should be returned
-    if loss_return
-        return L
-    end # if
-
-    # Check if loss should be printed
-    if verbose
-        println("Loss: ", L)
-    end # if
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    train!(
-        rhvae::RHVAE,
-        x::CUDA.CuArray,
-        opt::NamedTuple;
-        loss_function::Function=loss,
-        loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-        verbose::Bool=false,
-        loss_return::Bool=false,
-    )
-
-Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
-
-# Arguments
-- `rhvae::RHVAE`: The RHVAE model to be trained.
-- `x::CUDA.CuArray`: The training data.
-- `opt::NamedTuple`: The optimizer to be used for training.
-
-# Optional Keyword Arguments
-- `loss_function::Function=loss`: The loss function to be used for training.
-  Defaults to the `loss` function.
-- `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
-  loss function.
-- `verbose::Bool=false`: If `true`, the loss will be printed at each iteration.
-- `loss_return::Bool=false`: If `true`, the loss will be returned at each
-  iteration.
-
-# Description
-This function trains the RHVAE model on a CUDA array `x` using the specified
-optimizer `opt`. The training process involves computing the gradient of the
-loss function with respect to the model parameters, and then updating the model
-parameters using the optimizer.
-
-The gradient computation is performed on the GPU and requires the use of
-`CUDA.allowscalar` to ensure that backpropagation can work with CUDA arrays.
-
-# Example
-```julia
-rhvae = RHVAE(...)
-x = CUDA.cu(rand(Float32, 100, 100))
-opt = (lr=0.01,)
-train!(rhvae, x, opt; verbose=true)
-```
-"""
-function train!(
-    rhvae::RHVAE,
-    x::Union{CUDA.CuArray,SubArray{T,N,P} where {T,N,P<:CUDA.CuArray}},
-    opt::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    verbose::Bool=false,
-    loss_return::Bool=false,
-)
-    # Compute VAE gradient
     L, ∇L = CUDA.allowscalar() do
         Flux.withgradient(rhvae) do rhvae_model
             loss_function(rhvae_model, x; loss_kwargs...)
@@ -5288,7 +4789,7 @@ function train!(
     # Update metric
     update_metric!(rhvae)
 
-    # Check if loss should be printed
+    # Check if loss should be returned
     if loss_return
         return L
     end # if
@@ -5347,87 +4848,6 @@ function train!(
     rhvae::RHVAE,
     x_in::AbstractArray,
     x_out::AbstractArray,
-    opt::NamedTuple;
-    loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-    verbose::Bool=false,
-    loss_return::Bool=false,
-)
-    # Compute VAE gradient
-    L, ∇L = Flux.withgradient(rhvae) do rhvae_model
-        loss_function(rhvae_model, x_in, x_out; loss_kwargs...)
-    end # do block
-
-    # Update parameters
-    Flux.Optimisers.update!(opt, rhvae, ∇L[1])
-
-    # Update metric
-    update_metric!(rhvae)
-
-    # Check if loss should be returned
-    if loss_return
-        return L
-    end # if
-
-    # Check if loss should be printed
-    if verbose
-        println("Loss: ", L)
-    end # if
-end # function
-
-# ------------------------------------------------------------------------------
-
-"""
-    train!(
-        rhvae::RHVAE,
-        x_in::CUDA.CuArray,
-        x_out::CUDA.CuArray,
-        opt::NamedTuple;
-        loss_function::Function=loss,
-        loss_kwargs::Union{NamedTuple,Dict}=Dict(),
-        verbose::Bool=false,
-        loss_return::Bool=false,
-    )
-
-Train the RHVAE model on a CUDA array `x` using the specified optimizer `opt`.
-
-# Arguments
-- `rhvae::RHVAE`: The RHVAE model to be trained.
-- `x_in::CUDA.CuArray`: Input data to the RHVAE encoder. The last dimension is
-  taken as having each of the samples in a batch.
-- `x_out::CUDA.CuArray`: Target data to compute the reconstruction error. The
-  last dimension is taken as having each of the samples in a batch.
-- `opt::NamedTuple`: The optimizer to be used for training.
-
-# Optional Keyword Arguments
-- `loss_function::Function=loss`: The loss function to be used for training.
-  Defaults to the `loss` function.
-- `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
-  loss function.
-- `verbose::Bool=false`: If `true`, the loss will be printed at each iteration.
-- `loss_return::Bool=false`: If `true`, the loss will be returned.
-
-# Description
-This function trains the RHVAE model on a CUDA array `x` using the specified
-optimizer `opt`. The training process involves computing the gradient of the
-loss function with respect to the model parameters, and then updating the model
-parameters using the optimizer.
-
-The gradient computation is performed on the GPU and requires the use of
-`CUDA.allowscalar` to ensure that backpropagation can work with CUDA arrays.
-
-# Example
-```julia
-rhvae = RHVAE(...)
-x = CUDA.cu(rand(Float32, 100, 100))
-opt = (lr=0.01,)
-train!(rhvae, x, opt; verbose=true)
-```
-"""
-function train!(
-    rhvae::RHVAE,
-    x_in::CUDA.CuArray,
-    x_out::CUDA.CuArray,
     opt::NamedTuple;
     loss_function::Function=loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
