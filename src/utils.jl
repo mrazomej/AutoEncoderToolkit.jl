@@ -34,6 +34,32 @@ export shuffle_data, cycle_anneal, locality_sampler, vec_to_ltri,
 ## =============================================================================
 
 @doc raw"""
+    storage_type(A::AbstractArray)
+
+Determine the storage type of an array.
+
+This function recursively checks the parent of the array until it finds the base
+storage type. This is useful for determining whether an array or its subarrays
+are stored on the CPU or GPU.
+
+# Arguments
+- `A::AbstractArray`: The array whose storage type is to be determined.
+
+# Returns
+The type of the array that is the base storage of `A`.
+"""
+function storage_type(A::AbstractArray)
+    # Get the parent of the array
+    P = parent(A)
+    # If the type of the array is the same as the type of its parent,
+    # return the type of the array. Otherwise, recursively call storage_type
+    # on the parent.
+    typeof(A) === typeof(P) ? typeof(A) : storage_type(P)
+end
+
+## =============================================================================
+
+@doc raw"""
     `step_scheduler(epoch, epoch_change, learning_rates)`
 
 Simple function to define different learning rates at specified epochs.
@@ -233,39 +259,56 @@ end # function
 ## =============================================================================
 
 @doc raw"""
-        vec_to_ltri{T}(diag::AbstractVector{T}, lower::AbstractVector{T})
+        vec_to_ltri(diag::AbstractVecOrMat, lower::AbstractVecOrMat)
 
-Convert two one-dimensional vectors into a lower triangular matrix.
+Convert two one-dimensional vectors or matrices into a lower triangular matrix
+or a 3D tensor.
 
 # Arguments
-- `diag::AbstractVector{T}`: The input vector to be converted into the diagonal
-    of the matrix.
-- `lower::AbstractVector{T}`: The input vector to be converted into the lower
-    triangular part of the matrix. The length of this vector should be a
-    triangular number (i.e., the sum of the first `n` natural numbers for some
-    `n`).
+- `diag::AbstractVecOrMat`: The input vector or matrix to be converted into the
+  diagonal of the matrix. If it's a matrix, each column is considered as a
+  separate vector.
+- `lower::AbstractVecOrMat`: The input vector or matrix to be converted into the
+  lower triangular part of the matrix. The length of this vector or the number
+  of rows in this matrix should be a triangular number (i.e., the sum of the
+  first `n` natural numbers for some `n`). If it's a matrix, each column is
+  considered the lower part of a separate lower triangular matrix.
 
 # Returns
-- A lower triangular matrix constructed from `diag` and `lower`.
+- A lower triangular matrix or a 3D tensor where each slice is a lower
+  triangular matrix constructed from `diag` and `lower`.
 
 # Description
-This function constructs a lower triangular matrix from two input vectors,
-`diag` and `lower`. The `diag` vector provides the diagonal elements of the
-matrix, while the `lower` vector provides the elements below the diagonal. The
-function uses a comprehension to construct the matrix, with the `lower_index`
-function calculating the appropriate index in the `lower` vector for each
-element below the diagonal.
+This function constructs a lower triangular matrix or a 3D tensor from two input
+vectors or matrices, `diag` and `lower`. The `diag` vector or matrix provides
+the diagonal elements of the matrix, while the `lower` vector or matrix provides
+the elements below the diagonal. The function uses a comprehension to construct
+the matrix or tensor, with the `lower_index` function calculating the
+appropriate index in the `lower` vector or matrix for each element below the
+diagonal.
 
-# Example
-```julia
-diag = [1, 2, 3]
-lower = [4, 5, 6]
-vec_to_ltri(diag, lower)  # Returns a 3x3 lower triangular matrix
-```
+# GPU Support
+The function supports both CPU and GPU arrays. For GPU arrays, the data is first
+transferred to the CPU, the lower triangular matrix or tensor is constructed,
+and then it is transferred back to the GPU.
 """
 function vec_to_ltri(
-    diag::AbstractVector{T}, lower::AbstractVector{T},
-) where {T<:Number}
+    diag::AbstractVecOrMat, lower::AbstractVecOrMat,
+)
+    _vec_to_ltri(storage_type(diag), diag, lower)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    vec_to_ltri(diag::AbstractMatrix{T}, lower::AbstractMatrix{T})
+
+AbstractVector implementation of `vec_to_ltri`.
+"""
+function _vec_to_ltri(
+    ::Type, diag::AbstractVector, lower::AbstractVector,
+)
+
     # Define dimensionality of the matrix
     n = length(diag)
 
@@ -279,7 +322,7 @@ function vec_to_ltri(
         [
             i == j ? diag[i] :
             i > j ? lower[lower_index(i, j)] :
-            zero(T) for i in 1:n, j in 1:n
+            zero(eltype(diag)) for i in 1:n, j in 1:n
         ],
         n, n
     )
@@ -288,43 +331,13 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    vec_to_ltri(
-        diag::AbstractMatrix{T}, lower::AbstractMatrix{T}
-    ) where {T<:Number}
+    vec_to_ltri(diag::AbstractMatrix{T}, lower::AbstractMatrix{T})
 
-Construct a set of lower triangular matrices from a matrix of diagonal elements
-and a matrix of lower triangular elements, each column representing a sample.
-
-# Arguments
-- `diag::AbstractMatrix{T}`: A matrix of `T` where each column contains the
-    diagonal elements of the matrix for a specific sample.
-- `lower::AbstractMatrix{T}`: A matrix of `T` where each column contains the
-    elements of the lower triangle of the matrix for a specific sample.
-
-# Returns
-- A 3D array of type `T` where each slice along the third dimension is a lower
-    triangular matrix with the diagonal and lower triangular elements populated
-    from `diag` and `lower` respectively.
-
-# Description
-This function constructs a set of lower triangular matrices from two input
-matrices, `diag` and `lower`. The `diag` matrix provides the diagonal elements
-of the matrices, while the `lower` matrix provides the elements below the
-diagonal. The function uses a comprehension to construct the matrices, with the
-`lower_index` function calculating the appropriate index in the `lower` matrix
-for each element below the diagonal.
-
-# Note
-The function assumes that the `diag` and `lower` matrices have the correct
-dimensions for the matrices to be constructed. Specifically, `diag` and `lower`
-should have `n` rows and `m` columns, where `n` is the dimension of the matrix
-and `m` is the number of samples. The `lower` matrix should have `n*(n-1)/2`
-non-zero elements per column, corresponding to the lower triangular part of the
-matrix.
+AbstractMatrix implementation of `vec_to_ltri`.
 """
-function vec_to_ltri(
-    diag::AbstractMatrix{T}, lower::AbstractMatrix{T}
-) where {T<:Number}
+function _vec_to_ltri(
+    ::Type, diag::AbstractMatrix, lower::AbstractMatrix
+)
     # Extract matrix dimensions and number of samples
     n, cols = size(diag)
 
@@ -344,7 +357,7 @@ function vec_to_ltri(
         [
             i == j ? diag[i, k] :
             i > j ? lower[lower_index(k, i, j)] :
-            zero(T) for i in 1:n, j in 1:n, k in 1:cols
+            zero(eltype(diag)) for i in 1:n, j in 1:n, k in 1:cols
         ],
         n, n, cols
     )
@@ -353,44 +366,17 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    vec_to_ltri(
-        diag::CUDA.CuVecOrMat{T}, lower::CUDA.CuVecOrMat{T}
-    ) where {T<:Number}
+    vec_to_ltri(diag::AbstractVecOrMat, lower::AbstractVecOrMat)
 
-Construct a set of lower triangular matrices from a matrix of diagonal elements
-and a matrix of lower triangular elements, each column representing a sample.
-
-# Arguments
-- `diag::CUDA.CuVecOrMat{T}`: A matrix of `T` where each column contains the
-    diagonal elements of the matrix for a specific sample.
-- `lower::CUDA.CuVecOrMat{T}`: A matrix of `T` where each column contains the
-    elements of the lower triangle of the matrix for a specific sample.
-
-# Returns
-- A 3D array of type `T` where each slice along the third dimension is a lower
-    triangular matrix with the diagonal and lower triangular elements populated
-    from `diag` and `lower` respectively.
-
-# Description
-This function constructs a set of lower triangular matrices from two input
-matrices, `diag` and `lower`. The `diag` matrix provides the diagonal elements
-of the matrices, while the `lower` matrix provides the elements below the
-diagonal. The function uses a comprehension to construct the matrices, with the
-`lower_index` function calculating the appropriate index in the `lower` matrix
-for each element below the diagonal.
-
-# Note
-The function assumes that the `diag` and `lower` matrices have the correct
-dimensions for the matrices to be constructed. Specifically, `diag` and `lower`
-should have `n` rows and `m` columns, where `n` is the dimension of the matrix
-and `m` is the number of samples. The `lower` matrix should have `n*(n-1)/2`
-non-zero elements per column, corresponding to the lower triangular part of the
-matrix.
+GPU implementation of `vec_to_ltri`.
 """
-function vec_to_ltri(
-    diag::CUDA.CuVecOrMat{T}, lower::CUDA.CuVecOrMat{T}
-) where {T<:Number}
-    return CUDA.cu(vec_to_ltri(diag |> Flux.cpu, lower |> Flux.cpu))
+function _vec_to_ltri(
+    ::Type{T}, diag::AbstractVecOrMat, lower::AbstractVecOrMat
+) where {T<:CUDA.CuArray}
+    # transfer data to CPU
+    diag, lower = diag |> Flux.cpu, lower |> Flux.cpu
+    # convert to lower triangular matrix
+    return _vec_to_ltri(typeof(diag), diag, lower) |> Flux.gpu
 end # function
 
 ## =============================================================================
@@ -847,34 +833,51 @@ end # function
 # Computing the log determinant of a matrix via Cholesky decomposition.
 # =============================================================================
 
-"""
-    slogdet(A::AbstractMatrix{T}; check::Bool=false) where {T<:Number}
+@doc raw"""
+    slogdet(A::AbstractArray{T}; check::Bool=false) where {T<:Number}
 
-Compute the log determinant of a positive-definite matrix `A`.
+Compute the log determinant of a positive-definite matrix `A` or a 3D array of
+such matrices.
 
 # Arguments
-- `A::AbstractMatrix{T}`: A positive-definite matrix whose log determinant is to
-  be computed.
+- `A::AbstractArray{T}`: A positive-definite matrix or a 3D array of
+  positive-definite matrices whose log determinant is to be computed.  
 - `check::Bool=false`: A flag that determines whether to check if the input
-  matrix `A` is positive-definite. Defaults to `false`.
+  matrix `A` is positive-definite. Defaults to `false` due to numerical instability.
 
 # Returns
-- The log determinant of `A`.
+- The log determinant of `A`. If `A` is a 3D array, returns a 1D array of log
+  determinants, one for each slice along the third dimension of `A`.
 
 # Description
-This function computes the log determinant of a positive-definite matrix `A`. It
-first computes the Cholesky decomposition of `A`, and then calculates the log
-determinant as twice the sum of the log of the diagonal elements of the lower
-triangular matrix from the Cholesky decomposition.
+This function computes the log determinant of a positive-definite matrix `A` or
+a 3D array of such matrices. It first computes the Cholesky decomposition of
+`A`, and then calculates the log determinant as twice the sum of the log of the
+diagonal elements of the lower triangular matrix from the Cholesky
+decomposition.
 
 # Conditions
 The input matrix `A` must be a positive-definite matrix, i.e., it must be
 symmetric and all its eigenvalues must be positive. If `check` is set to `true`,
 the function will throw an error if `A` is not positive-definite.
+
+# GPU Support
+The function supports both CPU and GPU arrays. 
 """
-function slogdet(
-    A::AbstractMatrix{T}; check::Bool=false
-) where {T<:Number}
+function slogdet(A::AbstractArray; check::Bool=false)
+    _slogdet(storage_type(A), A; check=check)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    slogdet(A::AbstractArray; check::Bool=false)
+
+AbstractMatrix implementation of `slogdet`.
+"""
+function _slogdet(
+    ::Type, A::AbstractMatrix; check::Bool=false
+)
     # Compute the Cholesky decomposition of A. 
     chol = LinearAlgebra.cholesky(A; check=check)
     # compute the log determinant of A as the sum of the log of the diagonal
@@ -884,38 +887,14 @@ end # function
 
 # ------------------------------------------------------------------------------
 
-"""
+@doc raw"""
     slogdet(A::AbstractArray{<:Number,3}; check::Bool=false)
 
-Compute the log determinant of each 2D slice along the third dimension of a 3D
-array `A`, where each 2D slice is a positive-definite matrix.
-
-# Arguments
-- `A::AbstractArray{<:Number,3}`: A 3D array whose 2D slices along the third
-  dimension are positive-definite matrices whose log determinants are to be
-  computed.
-- `check::Bool=false`: A flag that determines whether to check if each 2D slice
-  of the input array `A` is positive-definite. Defaults to `false`.
-
-# Returns
-- A 1D array containing the log determinant of each 2D slice of `A`.
-
-# Description
-This function computes the log determinant of each 2D slice along the third
-dimension of a 3D array `A`. It first computes the Cholesky decomposition of
-each 2D slice, and then calculates the log determinant as twice the sum of the
-log of the diagonal elements of the lower triangular matrix from the Cholesky
-decomposition.
-
-# Conditions
-Each 2D slice of the input array `A` along the third dimension must be a
-positive-definite matrix, i.e., it must be symmetric and all its eigenvalues
-must be positive. If `check` is set to `true`, the function will throw an error
-if any 2D slice is not positive-definite.
+AbstractArray implementation of `slogdet`.
 """
-function slogdet(
-    A::AbstractArray{T,3}; check::Bool=false
-) where {T<:Number}
+function _slogdet(
+    ::Type, A::AbstractArray{<:Any,3}; check::Bool=false
+)
     # Compute the Cholesky decomposition of each slice of A. 
     chol = [
         x.L for x in LinearAlgebra.cholesky.(eachslice(A, dims=3), check=check)
@@ -928,42 +907,14 @@ function slogdet(
     return logdetA
 end # function
 
+@doc raw"""
+    slogdet(A::CUDA.CuArray; check::Bool=false)
+
+GPU AbstractArray implementation of `slogdet`.
 """
-    slogdet(A::AbstractArray{<:Number,3}; check::Bool=false)
-
-Compute the log determinant of each 2D slice along the third dimension of a 3D
-array `A`, where each 2D slice is a positive-definite matrix.
-
-# Arguments
-- `A::CUDA.CuArray{<:Number,3}`: A 3D array whose 2D slices along the third
-  dimension are positive-definite matrices whose log determinants are to be
-  computed.
-- `check::Bool=false`: A flag that determines whether to check if each 2D slice
-  of the input array `A` is positive-definite. Defaults to `false`.
-
-# Returns
-- A 1D array containing the log determinant of each 2D slice of `A`.
-
-# Description
-This function computes the log determinant of each 2D slice along the third
-dimension of a 3D array `A`. It first computes the Cholesky decomposition of
-each 2D slice, and then calculates the log determinant as twice the sum of the
-log of the diagonal elements of the lower triangular matrix from the Cholesky
-decomposition.
-
-# Conditions
-Each 2D slice of the input array `A` along the third dimension must be a
-positive-definite matrix, i.e., it must be symmetric and all its eigenvalues
-must be positive. If `check` is set to `true`, the function will throw an error
-if any 2D slice is not positive-definite.
-
-# Note
-All operations are performed on the GPU, but since the log determinant is a
-scalar, this list of scalars needs to be re-uploaded to the GPU.
-"""
-function slogdet(
-    A::CUDA.CuArray{T,3}; check::Bool=false
-) where {T<:Number}
+function _slogdet(
+    ::Type{T}, A::AbstractArray{<:Any,3}; check::Bool=false
+) where {T<:CUDA.CuArray}
     # Compute the Cholesky decomposition of each slice of A. 
     chol = [
         x.L for x in LinearAlgebra.cholesky.(eachslice(A, dims=3), check=check)
@@ -973,6 +924,8 @@ function slogdet(
     # the diagonal elements of the Cholesky decomposition
     logdetA = @. 2 * sum(log, LinearAlgebra.diag(chol))
 
+    # Reupload to GPU since the output of each operation is a single scalar
+    # returned to the CPU.
     return logdetA |> Flux.gpu
 end # function
 
@@ -981,20 +934,47 @@ end # function
 ## =============================================================================
 
 @doc raw"""
-    sample_MvNormalCanon(Σ⁻¹::AbstractMatrix{T}) where {T<:Number}
+    sample_MvNormalCanon(Σ⁻¹::AbstractArray{T}) where {T<:Number}
 
 Draw a random sample from a multivariate normal distribution in canonical form.
 
 # Arguments
-- `Σ⁻¹::AbstractMatrix{T}`: The precision matrix (inverse of the covariance
-  matrix) of the multivariate normal distribution.
+- `Σ⁻¹::AbstractArray{T}`: The precision matrix (inverse of the covariance
+  matrix) of the multivariate normal distribution. This can be a 2D array
+  (matrix) or a 3D array.
 
 # Returns
 - A random sample drawn from the multivariate normal distribution specified by
-  the input precision matrix.
+  the input precision matrix. If `Σ⁻¹` is a 3D array, returns a 2D array of
+  samples, one for each slice along the third dimension of `Σ⁻¹`.
+
+# Description
+This function draws a random sample from a multivariate normal distribution
+specified by a precision matrix `Σ⁻¹`. The precision matrix can be a 2D array
+(matrix) or a 3D array. If `Σ⁻¹` is a 3D array, the function draws a sample for
+each slice along the third dimension of `Σ⁻¹`.
+
+The function first inverts the precision matrix to obtain the covariance matrix,
+then performs a Cholesky decomposition of the covariance matrix. It then draws a
+sample from a standard normal distribution and multiplies it by the lower
+triangular matrix from the Cholesky decomposition to obtain the final sample.
+
+# GPU Support
+The function supports both CPU and GPU arrays.
 """
-function sample_MvNormalCanon(
-    Σ⁻¹::AbstractMatrix
+function sample_MvNormalCanon(Σ⁻¹::AbstractArray)
+    return _sample_MvNormalCanon(storage_type(Σ⁻¹), Σ⁻¹)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    sample_MvNormalCanon(Σ⁻¹::AbstractMatrix)
+
+AbstractMatrix implementation of `sample_MvNormalCanon`.
+"""
+function _sample_MvNormalCanon(
+    ::Type, Σ⁻¹::AbstractMatrix
 )
     # Invert the precision matrix
     Σ = LinearAlgebra.inv(Σ⁻¹)
@@ -1004,34 +984,28 @@ function sample_MvNormalCanon(
 
     # Define sample type
     if !(eltype(Σ⁻¹) <: AbstractFloat)
-        T = Float32
+        N = Float32
     else
-        T = eltype(Σ⁻¹)
+        N = eltype(Σ⁻¹)
     end # if
 
     # Sample from standard normal distribution
-    r = randn(T, size(Σ⁻¹, 1))
+    r = randn(N, size(Σ⁻¹, 1))
 
     # Return sample multiplied by the Cholesky decomposition
     return chol.L * r
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
-    sample_MvNormalCanon(Σ⁻¹::CUDA.CuMatrix{T}) where {T<:Number}
+    sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{T}) where {T<:Number}
 
-Draw a random sample from a multivariate normal distribution in canonical form.
-
-# Arguments
-- `Σ⁻¹::CUDA.CuMatrix{T}`: The precision matrix (inverse of the covariance
-  matrix) of the multivariate normal distribution.
-
-# Returns
-- A random sample drawn from the multivariate normal distribution specified by
-  the input precision matrix.
+GPU AbstractMatrix implementation of `sample_MvNormalCanon`.
 """
-function sample_MvNormalCanon(
-    Σ⁻¹::CUDA.CuMatrix
-)
+function _sample_MvNormalCanon(
+    ::Type{T}, Σ⁻¹::AbstractMatrix
+) where {T<:CUDA.CuArray}
     # Invert the precision matrix
     Σ = LinearAlgebra.inv(Σ⁻¹)
 
@@ -1040,13 +1014,13 @@ function sample_MvNormalCanon(
 
     # Define sample type
     if !(eltype(Σ⁻¹) <: AbstractFloat)
-        T = Float32
+        N = Float32
     else
-        T = eltype(Σ⁻¹)
+        N = eltype(Σ⁻¹)
     end # if
 
     # Sample from standard normal distribution
-    r = CUDA.randn(T, size(Σ⁻¹, 1))
+    r = CUDA.randn(N, size(Σ⁻¹, 1))
 
     # Return sample multiplied by the Cholesky decomposition
     return chol.L * r
@@ -1057,19 +1031,10 @@ end # function
 @doc raw"""
     sample_MvNormalCanon(Σ⁻¹::AbstractArray{T,3}) where {T<:Number}
 
-Draw a random sample from a multivariate normal distribution in canonical form.
-
-# Arguments
-- `Σ⁻¹::AbstractArray{T,3}`: The precision matrix (inverse of the covariance
-  matrix) of the multivariate normal distribution. Each slice of the 3D tensor
-  corresponds to one precision matrix.
-
-# Returns
-- A random sample drawn from the multivariate normal distributions specified by
-  the input precision matrices.
+AbstractArray implementation of `sample_MvNormalCanon`.
 """
-function sample_MvNormalCanon(
-    Σ⁻¹::AbstractArray{<:Number,3}
+function _sample_MvNormalCanon(
+    ::Type, Σ⁻¹::AbstractArray{<:Number,3}
 )
     # Extract dimensions
     dim = size(Σ⁻¹, 1)
@@ -1091,37 +1056,28 @@ function sample_MvNormalCanon(
 
     # Define sample type
     if !(eltype(Σ⁻¹) <: AbstractFloat)
-        T = Float32
+        N = Float32
     else
-        T = eltype(Σ⁻¹)
+        N = eltype(Σ⁻¹)
     end # if
 
     # Sample from standard normal distribution
-    r = randn(T, dim, n_sample)
+    r = randn(N, dim, n_sample)
 
     # Return sample multiplied by the Cholesky decomposition
     return Flux.batched_vec(chol, r)
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{T,3}) where {T<:Number}
 
-Draw a random sample from a multivariate normal distribution in canonical form.
-
-# Arguments
-- `Σ⁻¹::CUDA.CuArray{T,3}`: The precision matrix (inverse of the covariance
-  matrix) of the multivariate normal distribution. Each slice of the 3D tensor
-  corresponds to one precision matrix.
-
-# Returns
-- A random sample drawn from the multivariate normal distributions specified by
-  the input precision matrices.
-
-# Note
-All computations are performed on the GPU. The inverse matrix is computed using
-`CUBLAS.matinv_batched` from the `CUDA.jl` package.
+GPU AbstractArray implementation of `sample_MvNormalCanon`.
 """
-function sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{<:Number,3})
+function _sample_MvNormalCanon(
+    ::Type{T}, Σ⁻¹::CUDA.CuArray{<:Number,3}
+) where {T<:CUDA.CuArray}
     # Extract dimensions
     dim = size(Σ⁻¹, 1)
     # Extract number of samples
@@ -1141,20 +1097,17 @@ function sample_MvNormalCanon(Σ⁻¹::CUDA.CuArray{<:Number,3})
 
     # Define sample type
     if !(eltype(Σ⁻¹) <: AbstractFloat)
-        T = Float32
+        N = Float32
     else
-        T = eltype(Σ⁻¹)
+        N = eltype(Σ⁻¹)
     end # if
 
     # Sample from standard normal distribution
-    r = CUDA.randn(T, dim, n_sample)
+    r = CUDA.randn(N, dim, n_sample)
 
     # Return sample multiplied by the Cholesky decomposition
     return Flux.batched_vec(chol, r)
 end
-
-# Set ChainRulesCore to ignore the function when computing gradients
-ChainRulesCore.@ignore_derivatives sample_MvNormalCanon
 
 ## =============================================================================
 # Define finite difference gradient function
@@ -1208,11 +1161,6 @@ Create a unit vector of the same length as the number of rows in `x` with the
 # Description
 This function creates a unit vector of the same length as the number of rows in
 `x` with the `i`-th element set to 1. All other elements are set to 0. 
-
-# Note
-This function is marked with the `@ignore_derivatives` macro from the
-`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
-call to this function when computing gradients.
 """
 function unit_vector(x::AbstractMatrix, i::Int)
     # Extract type of elements in the vector
@@ -1221,98 +1169,66 @@ function unit_vector(x::AbstractMatrix, i::Int)
     return [j == i ? one(T) : zero(T) for j in axes(x, 1)]
 end # function
 
-# Set Chainrulescore to ignore the function when computing gradients
-ChainRulesCore.@ignore_derivatives unit_vector
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+        unit_vectors(x::AbstractVecOrMat)
+
+Create a vector or matrix of unit vectors based on the length or size of `x`.
+
+# Arguments
+- `x::AbstractVecOrMat`: The vector or matrix whose length or size is used to
+  determine the dimension of the unit vectors.
+
+# Returns
+- A vector or matrix of unit vectors. Each unit vector has the same length as
+  `x` and has a single `1` at the position corresponding to its index in the
+  returned vector or matrix, with all other elements set to `0`.
+
+# Description
+This function creates a vector or matrix of unit vectors based on the length or
+size of `x`. Each unit vector has the same length as `x` and has a single `1` at
+the position corresponding to its index in the returned vector or matrix, with
+all other elements set to `0`.
+
+If `x` is a matrix, the function returns a matrix of unit vectors, where each
+column is a unit vector.
+
+# GPU Support
+This function supports both CPU and GPU arrays.
+"""
+function unit_vectors(x::AbstractVecOrMat)
+    return _unit_vectors(storage_type(x), x)
+end # function
 
 # ------------------------------------------------------------------------------
 
 @doc raw"""
     unit_vectors(x::AbstractVector)
 
-Create a vector of unit vectors based on the length of `x`.
-
-# Arguments
-- `x::AbstractVector`: The vector whose length is used to determine the
-  dimension of the unit vectors.
-
-# Returns
-- A vector of unit vectors. Each unit vector has the same length as `x` and has
-  a single `1` at the position corresponding to its index in the returned
-  vector, with all other elements set to `0`.
-
-# Description
-This function creates a vector of unit vectors based on the length of `x`. Each
-unit vector has the same length as `x` and has a single `1` at the position
-corresponding to its index in the returned vector, with all other elements set
-to `0`.
-
-# Note
-This function is marked with the `@ignore_derivatives` macro from the
-`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
-call to this function when computing gradients.
+AbstractVector implementation of `unit_vectors`.
 """
-function unit_vectors(x::AbstractVector)
+function _unit_vectors(::Type, x::AbstractVector)
     return [unit_vector(x, i) for i in 1:length(x)]
 end # function
 
 @doc raw"""
     unit_vectors(x::CUDA.CuVector)
 
-Create a vector of unit vectors based on the length of `x`.
-
-# Arguments
-- `x::CUDA.CuVector`: The vector whose length is used to determine the dimension
-  of the unit vectors.
-
-# Returns
-- A vector of unit vectors. Each unit vector has the same length as `x` and has
-  a single `1` at the position corresponding to its index in the returned
-  vector, with all other elements set to `0`.
-
-# Description
-This function creates a vector of unit vectors based on the length of `x`. Each
-unit vector has the same length as `x` and has a single `1` at the position
-corresponding to its index in the returned vector, with all other elements set
-to `0`.
-
-# Note
-This function is marked with the `@ignore_derivatives` macro from the
-`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
-call to this function when computing gradients.
+GPU AbstractVector implementation of `unit_vectors`.
 """
-function unit_vectors(x::CUDA.CuVector)
+function _unit_vectors(::Type{T}, x::AbstractVector) where {T<:CUDA.CuArray}
     return [unit_vector(x, i) for i in 1:length(x)] |> Flux.gpu
 end # function
 
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-        unit_vectors(x::AbstractMatrix)
+    unit_vectors(x::AbstractMatrix)
 
-Create a matrix where each column is a unit vector of the same length as the
-number of rows in `x`.
-
-# Arguments
-- `x::AbstractMatrix`: The matrix whose number of rows is used to determine the
-  dimension of the unit vectors.
-
-# Returns
-- A vector of matrices where each entry is a matrix containing all unit vectors
-  for a single vector. Each unit vector has a single `1` at the position
-  corresponding to its index in the column, with all other elements set to `0`.
-
-# Description
-This function creates a matrix where each column is a unit vector of the same
-length as the number of rows in `x`. Each unit vector has a single `1` at the
-position corresponding to its index in the column, with all other elements set
-to `0`.
-
-# Note
-This function is marked with the `@ignore_derivatives` macro from the
-`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
-call to this function when computing gradients.
+AbstractMatrix implementation of `unit_vectors`.
 """
-function unit_vectors(x::AbstractMatrix)
+function _unit_vectors(::Type, x::AbstractMatrix)
     vectors = [
         reduce(hcat, fill(unit_vector(x, i), size(x, 2)))
         for i in 1:size(x, 1)
@@ -1320,33 +1236,14 @@ function unit_vectors(x::AbstractMatrix)
     return vectors
 end # function
 
+# ------------------------------------------------------------------------------
+
 @doc raw"""
-        unit_vectors(x::CUDA.CuMatrix)
+    unit_vectors(x::CUDA.CuMatrix)
 
-Create a matrix where each column is a unit vector of the same length as the
-number of rows in `x`.
-
-# Arguments
-- `x::CUDA.CuMatrix`: The matrix whose number of rows is used to determine the
-  dimension of the unit vectors.
-
-# Returns
-- A vector of matrices where each entry is a matrix containing all unit vectors
-  for a single vector. Each unit vector has a single `1` at the position
-  corresponding to its index in the column, with all other elements set to `0`.
-
-# Description
-This function creates a matrix where each column is a unit vector of the same
-length as the number of rows in `x`. Each unit vector has a single `1` at the
-position corresponding to its index in the column, with all other elements set
-to `0`.
-
-# Note
-This function is marked with the `@ignore_derivatives` macro from the
-`ChainRulesCore` package, which means that all AutoDiff backends will ignore any
-call to this function when computing gradients.
+GPU AbstractMatrix implementation of `unit_vectors`.
 """
-function unit_vectors(x::CUDA.CuMatrix)
+function _unit_vectors(::Type{T}, x::CUDA.CuMatrix) where {T<:CUDA.CuArray}
     vectors = [
         reduce(hcat, fill(unit_vector(x, i), size(x, 2)))
         for i in 1:size(x, 1)
@@ -1354,10 +1251,9 @@ function unit_vectors(x::CUDA.CuMatrix)
     return vectors |> Flux.gpu
 end # function
 
-# Set Chainrulescore to ignore the function when computing gradients
-ChainRulesCore.@ignore_derivatives unit_vectors
-
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# Finite difference gradient computation
+# ==============================================================================
 
 @doc raw"""
     finite_difference_gradient(
@@ -1395,8 +1291,31 @@ formula, depending on the `fdtype` argument:
 - Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
 
 where ε is the step size and eᵢ is the `i`-th unit vector.
+
+# GPU Support
+This function supports both CPU and GPU arrays.
 """
 function finite_difference_gradient(
+    f::Function,
+    x::AbstractVecOrMat;
+    fdtype::Symbol=:central,
+)
+    return _finite_difference_gradient(storage_type(x), f, x; fdtype=fdtype)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    finite_difference_gradient(
+        f::Function,
+        x::AbstractVecOrMat;
+        fdtype::Symbol=:central
+    )
+
+CPU AbstractVecOrMat implementation of `finite_difference_gradient`.
+"""
+function _finite_difference_gradient(
+    ::Type,
     f::Function,
     x::AbstractVecOrMat;
     fdtype::Symbol=:central,
@@ -1435,48 +1354,18 @@ end # function
 @doc raw"""
     finite_difference_gradient(
         f::Function,
-        x::CUDA.CuVecOrMat;
+        x::CUDA.CuArray;
         fdtype::Symbol=:central
     )
 
-Compute the finite difference gradient of a function `f` at a point `x` on GPUs.
-
-# Arguments
-- `f::Function`: The function for which the gradient is to be computed. This
-  function must return a scalar value.
-- `x::CUDA.CuVecOrMat`: The point at which the gradient is to be computed. Can
-  be a vector or a matrix. If a matrix, each column represents a point where the
-  function f is to be evaluated and the derivative computed.
-
-# Optional Keyword Arguments
-- `fdtype::Symbol=:central`: The finite difference type. It can be either
-  `:forward` or `:central`. Defaults to `:central`.
-
-# Returns
-- A vector or a matrix representing the gradient of `f` at `x`, depending on the
-  input type of `x`.
-
-# Description
-This function computes the finite difference gradient of a function `f` at a
-point `x` on GPUs. The gradient is a vector or a matrix where the `i`-th element
-is the partial derivative of `f` with respect to the `i`-th element of `x`.
-
-The partial derivatives are computed using the forward or central difference
-formula, depending on the `fdtype` argument:
-
-- Forward difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x)] / ε
-- Central difference formula: ∂f/∂xᵢ ≈ [f(x + ε * eᵢ) - f(x - ε * eᵢ)] / 2ε
-
-where ε is the step size and eᵢ is the `i`-th unit vector.
-
-# Note
-This method is designed to work with GPUs.
+GPU AbstractVecOrMat implementation of `finite_difference_gradient`.
 """
-function finite_difference_gradient(
+function _finite_difference_gradient(
+    ::Type{T},
     f::Function,
-    x::CUDA.CuVecOrMat;
+    x::AbstractVecOrMat;
     fdtype::Symbol=:central,
-)
+) where {T<:CUDA.CuArray}
     # Check that mode is either :forward or :central
     if !(fdtype in (:forward, :central))
         error("fdtype must be either :forward or :central")
@@ -1511,10 +1400,10 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    taylordiff_gradient(
-        f::Function,
-        x::AbstractVector
-    )
+        taylordiff_gradient(
+                f::Function,
+                x::AbstractVecOrMat
+        )
 
 Compute the gradient of a function `f` at a point `x` using Taylor series
 differentiation.
@@ -1522,19 +1411,41 @@ differentiation.
 # Arguments
 - `f::Function`: The function for which the gradient is to be computed. This
   must be a scalar function.
-- `x::AbstractVector`: The point at which the gradient is to be computed.
+- `x::AbstractVecOrMat`: The point at which the gradient is to be computed. Can
+  be a vector or a matrix. If a matrix, each column represents a point where the
+  function f is to be evaluated and the derivative computed.
 
 # Returns
-- A vector representing the gradient of `f` at `x`.
+- A vector or a matrix representing the gradient of `f` at `x`, depending on the
+  input type of `x`.
 
 # Description
 This function computes the gradient of a function `f` at a point `x` using
-Taylor series differentiation. The gradient is a vector where the `i`-th element
-is the partial derivative of `f` with respect to the `i`-th element of `x`.
+Taylor series differentiation. The gradient is a vector or a matrix where the
+`i`-th element or column is the partial derivative of `f` with respect to the
+`i`-th element of `x`.
 
 The partial derivatives are computed using the TaylorDiff.derivative function.
+
+# GPU Support
+This function currently only supports CPU arrays.
 """
 function taylordiff_gradient(
+    f::Function,
+    x::AbstractVecOrMat;
+)
+    return _taylordiff_gradient(storage_type(x), f, x)
+end # function
+
+# ------------------------------------------------------------------------------
+
+@doc raw"""
+    taylordiff_gradient(f::Function, x::AbstractVector)
+
+CPU AbstractVector implementation of `taylordiff_gradient`.
+"""
+function _taylordiff_gradient(
+    ::Type,
     f::Function,
     x::AbstractVector;
 )
@@ -1547,36 +1458,12 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    taylordiff_gradient(
-        f::Function,
-        x::AbstractMatrix
-    )
+    taylordiff_gradient(f::Function, x::AbstractMatrix)
 
-Compute the gradient of a function `f` at each column of `x` using Taylor series
-differentiation.
-
-# Arguments
-- `f::Function`: The function for which the gradient is to be computed. This
-  must be a scalar function. However, when applied to a matrix, the function
-  should return a vector, where each element is the scalar output of the
-  function applied to each column of the matrix.
-- `x::AbstractMatrix`: A matrix where each column represents a point at which
-  the gradient is to be computed.
-
-# Returns
-- A matrix where each column represents the gradient of `f` at the corresponding
-  column of `x`.
-
-# Description
-This function computes the gradient of a function `f` at each column of `x`
-using Taylor series differentiation. The gradient is a matrix where the `i`-th
-column is the gradient of `f` with respect to the `i`-th column of `x`.
-
-The gradients are computed using the TaylorDiff.derivative function, with each
-column of `x` treated as a separate point. The result is then moved to the GPU
-using `Flux.gpu`.
+CPU AbstractMatrix implementation of `taylordiff_gradient`.
 """
-function taylordiff_gradient(
+function _taylordiff_gradient(
+    ::Type,
     f::Function,
     x::AbstractMatrix;
 )
