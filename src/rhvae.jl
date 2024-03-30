@@ -2427,6 +2427,22 @@ function ∇hamiltonian_TaylorDiff(
 end # function
 
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
+"""
+    ∇Hrhvae
+
+A `NamedTuple` mapping automatic differentiation types to their corresponding
+gradient computation functions for the Hamiltonian.
+"""
+const ∇Hrhvae = (
+    finite=∇hamiltonian_finite,
+    ForwardDiff=∇hamiltonian_ForwardDiff,
+    TaylorDiff=∇hamiltonian_TaylorDiff,
+)
+
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     ∇hamiltonian(
@@ -2527,20 +2543,13 @@ function ∇hamiltonian(
     adtype::Symbol=:TaylorDiff,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # List of valid automatic differentiation methods
-    ∇H = Dict(
-        :finite => ∇hamiltonian_finite,
-        :ForwardDiff => ∇hamiltonian_ForwardDiff,
-        :TaylorDiff => ∇hamiltonian_TaylorDiff,
-    )
-
     # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇H)
-        error("adtype must be one of $(keys(∇H))")
+    if adtype ∉ keys(∇Hrhvae)
+        error("adtype must be one of $(keys(∇Hrhvae))")
     end # if
 
     # Compute gradient with respect to var
-    return ∇H[adtype](
+    return ∇Hrhvae[adtype](
         x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, var;
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
@@ -2632,20 +2641,13 @@ function ∇hamiltonian(
     adtype::Symbol=:finite,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # List of valid automatic differentiation methods
-    ∇H = Dict(
-        :finite => ∇hamiltonian_finite,
-        :ForwardDiff => ∇hamiltonian_ForwardDiff,
-        :TaylorDiff => ∇hamiltonian_TaylorDiff,
-    )
-
     # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇H)
-        error("adtype must be one of $(keys(∇H))")
+    if adtype ∉ keys(∇Hrhvae)
+        error("adtype must be one of $(keys(∇Hrhvae))")
     end # if
 
     # Compute gradient with respect to var
-    return ∇H[adtype](
+    return ∇Hrhvae[adtype](
         x, z, ρ, G⁻¹, logdetG, decoder, decoder_output, var;
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
@@ -2727,20 +2729,13 @@ function ∇hamiltonian(
     adtype::Symbol=:TaylorDiff,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # List of valid automatic differentiation methods
-    ∇H = Dict(
-        :finite => ∇hamiltonian_finite,
-        :ForwardDiff => ∇hamiltonian_ForwardDiff,
-        :TaylorDiff => ∇hamiltonian_TaylorDiff,
-    )
-
     # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇H)
-        error("adtype must be one of $(keys(∇H))")
+    if adtype ∉ keys(∇Hrhvae)
+        error("adtype must be one of $(keys(∇Hrhvae))")
     end # if
 
     # Compute gradient with respect to var
-    return ∇H[adtype](
+    return ∇Hrhvae[adtype](
         x, z, ρ, rhvae, var;
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
@@ -2823,20 +2818,13 @@ function ∇hamiltonian(
     adtype::Symbol=:finite,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # List of valid automatic differentiation methods
-    ∇H = Dict(
-        :finite => ∇hamiltonian_finite,
-        :ForwardDiff => ∇hamiltonian_ForwardDiff,
-        :TaylorDiff => ∇hamiltonian_TaylorDiff,
-    )
-
     # Check that AD_backend is a valid automatic differentiation method
-    if adtype ∉ keys(∇H)
-        error("adtype must be one of $(keys(∇H))")
+    if adtype ∉ keys(∇Hrhvae)
+        error("adtype must be one of $(keys(∇Hrhvae))")
     end # if
 
     # Compute gradient with respect to var
-    return ∇H[adtype](
+    return ∇Hrhvae[adtype](
         x, z, ρ, rhvae, var;
         reconstruction_loglikelihood=reconstruction_loglikelihood,
         position_logprior=position_logprior,
@@ -4523,13 +4511,17 @@ function riemannian_hamiltonian_elbo(
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
     log_p = _log_p̄(
         x, rhvae, rhvae_outputs;
-        prefactor=logp_prefactor, momentum_logprior=∇H_kwargs.momentum_logprior
+        prefactor=logp_prefactor,
+        reconstruction_loglikelihood=∇H_kwargs.reconstruction_loglikelihood,
+        position_logprior=∇H_kwargs.position_logprior,
+        momentum_logprior=∇H_kwargs.momentum_logprior
     )
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
     log_q = _log_q̄(
         rhvae, rhvae_outputs, βₒ;
-        prefactor=logq_prefactor, momentum_logprior=∇H_kwargs.momentum_logprior
+        prefactor=logq_prefactor,
+        momentum_logprior=∇H_kwargs.momentum_logprior
     )
 
     if return_outputs
@@ -4639,10 +4631,20 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x, rhvae, rhvae_outputs; prefactor=logp_prefactor)
+    log_p = _log_p̄(
+        x, rhvae, rhvae_outputs;
+        prefactor=logp_prefactor,
+        reconstruction_loglikelihood=∇H_kwargs.reconstruction_loglikelihood,
+        position_logprior=∇H_kwargs.position_logprior,
+        momentum_logprior=∇H_kwargs.momentum_logprior
+    )
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ; prefactor=logq_prefactor)
+    log_q = _log_q̄(
+        rhvae, rhvae_outputs, βₒ;
+        prefactor=logq_prefactor,
+        momentum_logprior=∇H_kwargs.momentum_logprior
+    )
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4758,10 +4760,20 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x_out, rhvae, rhvae_outputs; prefactor=logp_prefactor)
+    log_p = _log_p̄(
+        x_out, rhvae, rhvae_outputs;
+        prefactor=logp_prefactor,
+        reconstruction_loglikelihood=∇H_kwargs.reconstruction_loglikelihood,
+        position_logprior=∇H_kwargs.position_logprior,
+        momentum_logprior=∇H_kwargs.momentum_logprior
+    )
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ; prefactor=logq_prefactor)
+    log_q = _log_q̄(
+        rhvae, rhvae_outputs, βₒ;
+        prefactor=logq_prefactor,
+        momentum_logprior=∇H_kwargs.momentum_logprior
+    )
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
@@ -4875,10 +4887,20 @@ function riemannian_hamiltonian_elbo(
 
     # log p̄ = log p(x, zₖ) + log p(ρₖ)
     # log p̄ = log p(x | zₖ) + log p(zₖ) + log p(ρₖ)
-    log_p = _log_p̄(x_out, rhvae, rhvae_outputs; prefactor=logp_prefactor)
+    log_p = _log_p̄(
+        x_out, rhvae, rhvae_outputs;
+        prefactor=logp_prefactor,
+        reconstruction_loglikelihood=∇H_kwargs.reconstruction_loglikelihood,
+        position_logprior=∇H_kwargs.position_logprior,
+        momentum_logprior=∇H_kwargs.momentum_logprior
+    )
 
     # log q̄ = log q(zₒ) + log p(ρₒ) - d/2 log(βₒ)
-    log_q = _log_q̄(rhvae, rhvae_outputs, βₒ; prefactor=logq_prefactor)
+    log_q = _log_q̄(
+        rhvae, rhvae_outputs, βₒ;
+        prefactor=logq_prefactor,
+        momentum_logprior=∇H_kwargs.momentum_logprior
+    )
 
     if return_outputs
         return StatsBase.mean(log_p - log_q), rhvae_outputs
