@@ -217,9 +217,9 @@ function (m::MetricChain)(x::AbstractArray; matrix::Bool=false)
     # Check if matrix should be returned
     # Check if matrix should be returned
     if matrix
-      return ChainRulesCore.@ignore_derivatives vec_to_ltri(
-          diag_out, lower_out
-      )
+        return ChainRulesCore.@ignore_derivatives vec_to_ltri(
+            diag_out, lower_out
+        )
     else
         return (diag=diag_out, lower=lower_out,)
     end # if
@@ -712,7 +712,7 @@ function _G_inv(
     )
 
     # Compute the regularization term.
-    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
+    Λ = Zygote.dropgrad(CUDA.cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. NOTE:
     # - We divide the result by the number of centroids. This is NOT done in the
@@ -827,7 +827,7 @@ function _G_inv(
     LLexp = M .* exp_term
 
     # Compute the regularization term.
-    Λ = Zygote.dropgrad(cu(Matrix(LinearAlgebra.I(size(z, 1)) .* λ)))
+    Λ = Zygote.dropgrad(CUDA.cu(Matrix(LinearAlgebra.I(size(z, 1)) .* λ)))
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
     # - We divide the result by the number of centroids. This is NOT done in the

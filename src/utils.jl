@@ -373,34 +373,49 @@ GPU implementation of `vec_to_ltri`.
 function _vec_to_ltri(
     ::Type{T}, diag::CUDA.CuVector, lower::CUDA.CuVector
 ) where {T<:CUDA.CuArray}
-    # Define dimensionality of the matrix
+    # Define the dimensionality of the matrix based on the length of the
+    # diagonal vector
     n = length(diag)
-    
-    # Create the matrix on the GPU
+
+    # Create a zero matrix of the same type as the diagonal vector on the GPU
     matrix = CUDA.zeros(eltype(diag), n, n)
-    
-    # Define the CUDA kernel
+
+    # Define the CUDA kernel function that will be executed on the GPU
     function kernel!(matrix, diag, lower, n)
+        # Calculate the row and column indices based on the thread and block
+        # indices
         i = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
         j = (CUDA.blockIdx().y - 1) * CUDA.blockDim().y + CUDA.threadIdx().y
-        
+
+        # Check if the indices are within the bounds of the matrix
         if i <= n && j <= n
+            # If the row and column indices are equal, set the matrix element to
+            # the corresponding element of the diagonal vector
             if i == j
                 matrix[i, j] = diag[i]
+                # If the row index is greater than the column index, set the
+                # matrix element to the corresponding element of the lower
+                # vector
             elseif i > j
                 lower_index = (i - 1) * (i - 2) ÷ 2 + j
                 matrix[i, j] = lower[lower_index]
             end
         end
-        
+
+        # Return nothing as the matrix is modified in-place
         return nothing
     end
-    
-    # Launch the CUDA kernel
+
+    # Define the size of the blocks and the grid for the CUDA kernel launch
     blocksize = (16, 16)
     gridsize = (cld(n, blocksize[1]), cld(n, blocksize[2]))
-    CUDA.@cuda threads=blocksize blocks=gridsize kernel!(matrix, diag, lower, n)
-    
+
+    # Launch the CUDA kernel with the specified block and grid sizes
+    CUDA.@cuda threads = blocksize blocks = gridsize kernel!(
+        matrix, diag, lower, n
+    )
+
+    # Return the resulting matrix
     return matrix
 end # function
 
@@ -409,45 +424,61 @@ end # function
 
 GPU implementation of `vec_to_ltri`.
 """
+# Define a function to convert a diagonal and lower triangular matrix into a 3D tensor on the GPU
 function _vec_to_ltri(
     ::Type{T}, diag::CUDA.CuMatrix, lower::CUDA.CuMatrix
 ) where {T<:CUDA.CuArray}
-    # Extract matrix dimensions and number of samples
+    # Extract the dimensions of the diagonal matrix and the number of samples
+    # (columns)
     n, cols = size(diag)
 
-    # Check that 'lower' has the correct dimensions
+    # Check if the dimensions of the lower triangular matrix match the expected
+    # dimensions
     if size(lower) != (n * (n - 1) ÷ 2, cols)
+        # If the dimensions do not match, throw an error
         error("Dimension mismatch between 'diag' and 'lower' matrices")
     end
 
-    # Create the 3D tensor on the GPU
+    # Create a 3D tensor of zeros on the GPU with the same type as the diagonal
+    # matrix
     tensor = CUDA.zeros(eltype(diag), n, n, cols)
 
-    # Define the CUDA kernel
+    # Define the CUDA kernel function that will be executed on the GPU
     function kernel!(tensor, diag, lower, n, cols)
+        # Calculate the row, column, and depth indices based on the thread and
+        # block indices
         i = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
         j = (CUDA.blockIdx().y - 1) * CUDA.blockDim().y + CUDA.threadIdx().y
         k = (CUDA.blockIdx().z - 1) * CUDA.blockDim().z + CUDA.threadIdx().z
 
+        # Check if the indices are within the bounds of the tensor
         if i <= n && j <= n && k <= cols
+            # If the row and column indices are equal, set the tensor element to
+            # the corresponding element of the diagonal matrix
             if i == j
                 tensor[i, j, k] = diag[i, k]
+                # If the row index is greater than the column index, set the
+                # tensor element to the corresponding element of the lower
+                # triangular matrix
             elseif i > j
                 lower_index = (i - 1) * (i - 2) ÷ 2 + j + (k - 1) * (n * (n - 1) ÷ 2)
                 tensor[i, j, k] = lower[lower_index]
             end
         end
+        # Return nothing as the tensor is modified in-place
         return nothing
     end
 
-    # Launch the CUDA kernel
+    # Define the size of the blocks and the grid for the CUDA kernel launch
     blocksize = (16, 16, 4)
     gridsize = (cld(n, blocksize[1]), cld(n, blocksize[2]), cld(cols, blocksize[3]))
-    CUDA.@cuda threads=blocksize blocks=gridsize kernel!(tensor, diag, lower, n, cols)
 
+    # Launch the CUDA kernel with the specified block and grid sizes
+    CUDA.@cuda threads = blocksize blocks = gridsize kernel!(tensor, diag, lower, n, cols)
+
+    # Return the resulting 3D tensor
     return tensor
 end # function
-
 
 ## =============================================================================
 # Vector Matrix Vector multiplication
