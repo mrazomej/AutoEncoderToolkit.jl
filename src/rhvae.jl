@@ -215,8 +215,11 @@ function (m::MetricChain)(x::AbstractArray; matrix::Bool=false)
     lower_out = m.lower(mlp_out)
 
     # Check if matrix should be returned
+    # Check if matrix should be returned
     if matrix
-        return vec_to_ltri(diag_out, lower_out)
+      return ChainRulesCore.@ignore_derivatives vec_to_ltri(
+          diag_out, lower_out
+      )
     else
         return (diag=diag_out, lower=lower_out,)
     end # if
