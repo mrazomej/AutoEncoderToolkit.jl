@@ -1025,7 +1025,7 @@ function riemannian_logprior(
     end # if
 
     return _riemannian_logprior(
-        storage_type(ρ), ρ, G⁻¹, logdetG, vec_mat_vec
+        ρ, G⁻¹, logdetG, vec_mat_vec
     )
 end # function
 
@@ -1042,7 +1042,6 @@ end # function
 CPU AbstractVector version of the riemannian_logprior function.
 """
 function _riemannian_logprior(
-    ::Type,
     ρ::AbstractVector,
     G⁻¹::AbstractMatrix,
     logdetG::Number,
@@ -1068,65 +1067,11 @@ end # function
 CPU AbstractMatrix version of the riemannian_logprior function.
 """
 function _riemannian_logprior(
-    ::Type,
     ρ::AbstractMatrix,
     G⁻¹::AbstractArray,
     logdetG::AbstractVector,
     vec_mat_vec::Function,
 )
-    # Compute ρᵀ G ρ
-    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
-
-    # Return the log-prior
-    return -0.5f0 .* (size(G⁻¹, 1) * log(2.0f0π) .+ logdetG) .-
-           (0.5f0 .* ρᵀ_G_ρ)
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    riemannian_logprior(
-        ρ::AbstractVector,
-        G⁻¹::AbstractMatrix,
-        logdetG::Number,
-        vec_mat_vec::Function
-    )
-
-GPU AbstractVector version of the riemannian_logprior function.
-"""
-function _riemannian_logprior(
-    ::Type{N},
-    ρ::AbstractVector,
-    G⁻¹::AbstractMatrix,
-    logdetG::Number,
-    vec_mat_vec::Function
-) where {N<:CUDA.CuArray}
-    # Compute ρᵀ G ρ
-    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
-
-    # Return the log-prior
-    return -0.5f0 * (size(G⁻¹, 1) * log(2.0f0π) + logdetG) - (0.5f0 * ρᵀ_G_ρ)
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    riemannian_logprior(
-        ρ::AbstractVector,
-        G⁻¹::AbstractMatrix,
-        logdetG::Number,
-        vec_mat_vec::Function,
-    )
-
-GPU AbstractMatrix version of the riemannian_logprior function.
-"""
-function _riemannian_logprior(
-    ::Type{N},
-    ρ::AbstractMatrix,
-    G⁻¹::AbstractArray,
-    logdetG::AbstractVector,
-    vec_mat_vec::Function,
-) where {N<:CUDA.CuArray}
     # Compute ρᵀ G ρ
     ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
 
@@ -2379,7 +2324,9 @@ log-likelihood of the decoder, the log-prior of the latent space, and `G_inv`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor.  Default is `G_inv`.
 - `adtype::Union{Symbol,Nothing}`=:TaylorDiff`: The type of automatic
-  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or `nothing`. Default is nothing, therefore, for GPU arrays, finite differences are used, and for CPU arrays, TaylorDiff is used.
+  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or
+  `nothing`. Default is nothing, therefore, for GPU arrays, finite differences
+  are used, and for CPU arrays, TaylorDiff is used.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
