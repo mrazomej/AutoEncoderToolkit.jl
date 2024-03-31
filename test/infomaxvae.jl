@@ -1,7 +1,7 @@
 # Import AutoEncode.jl module to be tested
 import AutoEncode.InfoMaxVAEs
 import AutoEncode.VAEs
-import AutoEncode.regularization
+import AutoEncode
 
 # Import Flux library
 import Flux
