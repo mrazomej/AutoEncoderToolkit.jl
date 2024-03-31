@@ -670,7 +670,11 @@ function _G_inv(
     )
 
     # Compute the regularization term.
-    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(length(z)) .* λ))
+    Λ = ChainRulesCore.ignore_derivatives() do
+      LinearAlgebra.Diagonal(
+        LinearAlgebra.ones(eltype(z), length(z), length(z))
+      ) .* λ
+    end # ignore_derivatives
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
     # - We divide the result by the number of centroids. This is NOT done in the
@@ -712,7 +716,11 @@ function _G_inv(
     )
 
     # Compute the regularization term.
-    Λ = Zygote.dropgrad(CUDA.cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
+    Λ = ChainRulesCore.ignore_derivatives() do
+      CUDA.Diagonal(CUDA.ones(eltype(z), length(z), length(z))) .* λ
+    end # ignore_derivatives
+    
+    # Zygote.dropgrad(CUDA.cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. NOTE:
     # - We divide the result by the number of centroids. This is NOT done in the
@@ -770,7 +778,9 @@ function _G_inv(
     LLexp = M .* exp_term
 
     # Compute the regularization term.
-    Λ = Zygote.dropgrad(Matrix(LinearAlgebra.I(size(z, 1)) .* λ))
+    Λ = ChainRulesCore.ignore_derivatives() do
+      LinearAlgebra.Diagonal(ones(eltype(z), size(z, 1), size(z, 1))) .* λ
+    end # ignore_derivatives
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
     # - We divide the result by the number of centroids. This is NOT done in the
@@ -827,7 +837,9 @@ function _G_inv(
     LLexp = M .* exp_term
 
     # Compute the regularization term.
-    Λ = Zygote.dropgrad(CUDA.cu(Matrix(LinearAlgebra.I(size(z, 1)) .* λ)))
+    Λ = ChainRulesCore.ignore_derivatives() do
+      CUDA.Diagonal(CUDA.ones(eltype(z), size(z, 1), size(z, 1))) .* λ
+    end # ignore_derivatives
 
     # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
     # - We divide the result by the number of centroids. This is NOT done in the
