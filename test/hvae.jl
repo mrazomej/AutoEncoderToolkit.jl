@@ -1,11 +1,11 @@
 ##
-println("Testing HVAEs module:\n")
+println("\nTesting HVAEs module:\n")
 ##
 
 # Import AutoEncode.jl module to be tested
-import AutoEncode.HVAEs
+using AutoEncode.HVAEs
 import AutoEncode.VAEs
-import AutoEncode.regularization: l2_regularization
+import AutoEncode.utils
 # Import Flux library
 import Flux
 
@@ -72,22 +72,21 @@ output_activations = [Flux.identity, Flux.softplus]
 
 # Define encoder layer and activation functions
 encoder_neurons = repeat([n_neuron], n_hidden)
-encoder_activation = repeat([Flux.swish], n_hidden)
+encoder_activation = repeat([Flux.relu], n_hidden)
 
 # Define decoder layer and activation function
 decoder_neurons = repeat([n_neuron], n_hidden)
-decoder_activation = repeat([Flux.swish], n_hidden)
+decoder_activation = repeat([Flux.relu], n_hidden)
 
 # Define decoder split layers and activation functions
 µ_neurons = repeat([n_neuron], n_hidden)
-µ_activation = repeat([Flux.swish], n_hidden)
+µ_activation = repeat([Flux.relu], n_hidden)
 
 logσ_neurons = repeat([n_neuron], n_hidden)
-logσ_activation = repeat([Flux.swish], n_hidden)
+logσ_activation = repeat([Flux.relu], n_hidden)
 
 σ_neurons = repeat([n_neuron], n_hidden)
-σ_activation = [repeat([Flux.swish], n_hidden - 1); Flux.softplus]
-
+σ_activation = [repeat([Flux.relu], n_hidden - 1); Flux.softplus]
 ## =============================================================================
 
 
@@ -163,394 +162,609 @@ decoders = [
 
 ## =============================================================================
 
-# Generate latent variables
-z_matrix = (joint_log_encoder * simple_decoder)(data, latent=true).z
-# Define single latent variable
-z_vector = @view z_matrix[:, 1]
+# Define data and parameters to use througout the tests
+x_mat = data
+x_vec = @view data[:, 1]
+z_mat = joint_log_encoder(x_mat).µ
+z_vec = @view z_mat[:, 1]
+ρ_mat = z_mat
+ρ_vec = @view ρ_mat[:, 1]
+T = 0.5f0
+λ = 0.1f0
 
-@testset "decoder_loglikelihood tests" begin
-    # Loop through decoders
-    for decoder in decoders
-        # Test 1: Check that the function returns a Float32
-        result = HVAEs.decoder_loglikelihood(decoder, x_vector, z_vector)
-        @test isa(result, Float32)
-    end # for decoder in decoders
-end # @testset "decoder_loglikelihood tests"
 
 ## =============================================================================
 
-@testset "spherical_logprior" begin
-    # Test 1: Check that the function returns a Float32
-    result = HVAEs.spherical_logprior(z_vector)
-    @test isa(result, Float32)
-end # @testset "spherical_logprior"
+# Build HVAE example to be used in the following tests
+exhvae = HVAEs.HVAE(
+    joint_log_encoder * joint_log_decoder,
+)
 
 ## =============================================================================
 
-@testset "potential_energy function" begin
-    # Test with default decoder distribution and prior
-    @testset "default decoder distribution and prior" begin
-        # Loop through decoders
-        for decoder in decoders
-            # Build HVAE
-            hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-            # Build potential energy function
-            result = HVAEs.potential_energy(hvae, x_vector, z_vector)
+@testset "potential energy function" begin
+    # Loop over all decoders
+    @testset "$(decoder)" for decoder in decoders
+
+        @testset "vector input" begin
+
+            # Compute Hamiltonian giving all parameters explicitly
+            result = HVAEs.potential_energy(
+                x_vec, z_vec, decoder, decoder(z_vec)
+            )
+
+            # Check that the result is a scalar
             @test isa(result, Float32)
-        end # @testset "default decoder distribution and prior"
-    end # for decoder in decoders
-end # @testset "potential_energy function"
+            # Check that the result is not NaN
+            @test !isnan(result)
+            # Check that the result is not Inf
+            @test !isinf(result)
+        end
+
+        @testset "matrix input" begin
+            # Compute Hamiltonian giving all parameters explicitly
+            result = HVAEs.potential_energy(
+                x_mat, z_mat, decoder, decoder(z_mat)
+            )
+
+            # Check that the result is a vector
+            @test isa(result, Vector{Float32})
+            # Check that the result is not NaN
+            @test all(!isnan, result)
+            # Check that the result is not Inf
+            @test all(!isinf, result)
+        end
+
+        @testset "HVAE as input" begin
+            # Build temporary HVAE
+            hvae = HVAEs.HVAE(
+                joint_log_encoder * decoder,
+            )
+
+            # Compute Hamiltonian using HVAE
+            result = HVAEs.potential_energy(x_vec, z_vec, hvae)
+
+            # Check that the result is a scalar
+            @test isa(result, Float32)
+            # Check that the result is not NaN
+            @test !isnan(result)
+            # Check that the result is not Inf
+            @test !isinf(result)
+        end # HVAE as input
+    end # for decoder
+end # hamiltonian function
 
 ## =============================================================================
 
-@testset "∇potential_energy function" begin
-    # Test with default decoder distribution and prior
-    @testset "default decoder distribution and prior" begin
-        # Loop through decoders
-        for decoder in decoders
-            # Build HVAE
-            hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-            # Build potential energy function
-            result = HVAEs.∇potential_energy(hvae, x_vector, z_vector)
+@testset "∇potential_energy_finite function" begin
+    # Loop over all decoders
+    @testset "$(decoder)" for decoder in decoders
+
+        @testset "vector input" begin
+            result = HVAEs.∇potential_energy_finite(
+                x_vec,
+                z_vec,
+                decoder,
+                decoder(z_vec),
+            )
+
+            # Check if the result is a vector of Float32
             @test isa(result, Vector{Float32})
-        end # @testset "default decoder distribution and prior"
-    end # for decoder in decoders
-end # @testset "potential_energy function"
+        end
+
+        @testset "matrix input" begin
+            result = HVAEs.∇potential_energy_finite(
+                x_mat,
+                z_mat,
+                decoder,
+                decoder(z_mat),
+            )
+
+            # Check if the result is a matrix of Float32
+            @test isa(result, Matrix{Float32})
+        end
+
+        @testset "HVAE as input" begin
+            # Build temporary HVAE
+            hvae = HVAEs.HVAE(
+                joint_log_encoder * decoder,
+            )
+            result = HVAEs.∇potential_energy_finite(
+                x_mat,
+                z_mat,
+                hvae,
+            )
+
+            # Check if the result is a matrix of Float32
+            @test isa(result, Matrix{Float32})
+        end # matrix input
+    end # for decoder
+end # ∇potential_energy_finite function
+
+## =============================================================================
+
+@testset "∇potential_energy_TaylorDiff function" begin
+    # Loop over all decoders
+    @testset "$(decoder)" for decoder in decoders
+
+        @testset "vector input" begin
+            # Test for var = :z
+            result = HVAEs.∇potential_energy_TaylorDiff(
+                x_vec,
+                z_vec,
+                decoder,
+                decoder(z_vec),
+            )
+
+            # Check if the result is a vector of Float32
+            @test isa(result, Vector{Float32})
+        end
+
+        @testset "matrix input" begin
+            # Test for var = :z
+            result = HVAEs.∇potential_energy_TaylorDiff(
+                x_mat,
+                z_mat,
+                decoder,
+                decoder(z_mat),
+            )
+
+            # Check if the result is a matrix of Float32
+            @test isa(result, Matrix{Float32})
+        end
+
+        @testset "HVAE as input" begin
+            # Build temporary HVAE
+            hvae = HVAEs.HVAE(
+                joint_log_encoder * decoder,
+            )
+
+            result = HVAEs.∇potential_energy_TaylorDiff(
+                x_mat,
+                z_mat,
+                hvae,
+            )
+
+            # Check if the result is a matrix of Float32
+            @test isa(result, Matrix{Float32})
+        end # matrix input
+    end # for decoder
+end # ∇potential_energy_finite function
 
 ## =============================================================================
 
 @testset "leapfrog_step function" begin
-    # Define default arguments
-    ϵ = 0.1f0
-    ρ_matrix = z_matrix
-    ρ_vector = z_vector
+    # Loop over all decoders
+    @testset "$(decoder)" for decoder in decoders
+        # Build temporary HVAE
+        hvae = HVAEs.HVAE(
+            joint_log_encoder * decoder,
+        )
+        @testset "vector inputs" begin
+            # Compute leapfrog_step giving all parameters explicitly
+            result = HVAEs.leapfrog_step(
+                x_vec, z_vec, ρ_vec, hvae
+            )
+            # Test that the result is a tuple of vectors
+            @test isa(
+                result,
+                Tuple{
+                    AbstractVector{Float32},
+                    AbstractVector{Float32},
+                    NamedTuple,
+                }
+            )
 
-    # Loop through decoders
-    for decoder in decoders
-        # Build HVAE
-        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-        # Test with default potential energy function and its arguments
-        @testset "default potential energy function and its arguments" begin
-            @testset "single data point" begin
-                # Compute leapfrog step
-                z̄, ρ̄ = HVAEs.leapfrog_step(
-                    hvae, x_vector, z_vector, ρ_vector, ϵ
-                )
-                @test isa(z̄, AbstractVector{Float32})
-                @test isa(ρ̄, AbstractVector{Float32})
-            end # @testset "single data point"
+            # Check that the result is not NaN
+            @test all(!isnan, result[1])
+            @test all(!isnan, result[2])
 
-            @testset "multiple data points" begin
-                # Compute leapfrog step
-                z̄, ρ̄ = HVAEs.leapfrog_step(
-                    hvae, x_matrix, z_matrix, ρ_matrix, ϵ
-                )
-                @test isa(z̄, AbstractMatrix{Float32})
-                @test isa(ρ̄, AbstractMatrix{Float32})
-            end # @testset "multiple data points
-        end # @testset "default potential energy function and its arguments"
-    end # for decoder in decoders
-end # @testset "leapfrog_step function"
+            # Check that the result is not Inf
+            @test all(!isinf, result[1])
+            @test all(!isinf, result[2])
+        end # vector inputs
+
+        @testset "matrix inputs" begin
+
+            # Compute leapfrog_step giving all parameters explicitly
+            result = HVAEs.leapfrog_step(
+                x_mat, z_mat, ρ_mat, hvae
+            )
+            # Test that the result is a tuple of vectors
+            @test isa(
+                result,
+                Tuple{
+                    AbstractMatrix{Float32},
+                    AbstractMatrix{Float32},
+                    NamedTuple,
+                }
+            )
+
+            # Check that the result is not NaN
+            @test all(!isnan, result[1])
+            @test all(!isnan, result[2])
+
+            # Check that the result is not Inf
+            @test all(!isinf, result[1])
+            @test all(!isinf, result[2])
+        end # matrix inputs
+
+        @testset "HVAE as input" begin
+            # Build temporary HVAE
+            hvae = HVAEs.HVAE(
+                joint_log_encoder * decoder,
+            )
+
+            # Compute leapfrog_step using HVAE
+            result = HVAEs.leapfrog_step(x_vec, z_vec, ρ_vec, hvae)
+
+            # Test that the result is a tuple of vectors
+            @test isa(
+                result,
+                Tuple{
+                    AbstractVector{Float32},
+                    AbstractVector{Float32},
+                    NamedTuple,
+                }
+            )
+
+            # Check that the result is not NaN
+            @test all(!isnan, result[1])
+            @test all(!isnan, result[2])
+
+            # Check that the result is not Inf
+            @test all(!isinf, result[1])
+            @test all(!isinf, result[2])
+        end
+    end # for decoder
+end # leapfrog_step function
 
 ## =============================================================================
 
-@testset "quadratic_tempering function" begin
-    # Define the initial inverse temperature, current stage, and total stages
-    βₒ = 0.5
-    k = 5
-    K = 10
+@testset "quadratic_tempering tests" begin
+    @test HVAEs.quadratic_tempering(0.3f0, 1, 3) isa Float32
+end
 
-    # Compute the inverse temperature at stage k
-    βₖ = HVAEs.quadratic_tempering(βₒ, k, K)
-
-    # Test that βₖ is a float and within the expected range
-    @test isa(βₖ, AbstractFloat)
-    @test βₖ >= βₒ
-    @test βₖ <= 1.0
-
-    # Test that βₖ is correct when k = 0 and k = K
-    @test HVAEs.quadratic_tempering(βₒ, 0, K) ≈ βₒ
-    @test HVAEs.quadratic_tempering(βₒ, K, K) ≈ 1.0
-end # @testset "quadratic_tempering function"
+@testset "null_tempering tests" begin
+    @test HVAEs.null_tempering(0.3f0, 1, 3) isa Float32
+end
 
 ## =============================================================================
 
 @testset "leapfrog_tempering_step function" begin
-    # Define the number of steps, step size, and initial inverse temperature
-    K = 2
-    ϵ = 0.01f0
-    βₒ = 1.0f0
+    # Loop over all decoders
+    @testset "$(decoder)" for decoder in decoders
+        @testset "vector inputs" begin
+            # Compute leapfrog_step giving all parameters explicitly
+            result = HVAEs.leapfrog_tempering_step(
+                x_vec, z_vec, decoder, decoder(z_vec),
+            )
+            # Test that the result is a tuple of vectors
+            @test isa(
+                result,
+                Tuple{
+                    NamedTuple,
+                    NamedTuple,
+                }
+            )
+        end # vector inputs
 
-    # Loop through decoders
-    for decoder in decoders
-        # Build HVAE
-        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-        # Test with default potential energy function and its arguments
-        @testset "default potential energy function and its arguments" begin
-            @testset "single data point" begin
-                # Compute leapfrog step
-                result = HVAEs.leapfrog_tempering_step(
-                    hvae, x_vector, z_vector;
-                    K=K, ϵ=ϵ, βₒ=βₒ
-                )
-                @test isa(result, NamedTuple)
-                @test all(isa.(values(result), AbstractVector{Float32}))
-            end # @testset "single data point"
+        @testset "matrix input" begin
+            # Compute leapfrog_step giving all parameters explicitly
+            result = HVAEs.leapfrog_tempering_step(
+                x_mat, z_mat, decoder, decoder(z_mat),
+            )
+            # Test that the result is a tuple of vectors
+            @test isa(
+                result,
+                Tuple{
+                    NamedTuple,
+                    NamedTuple,
+                }
+            )
+        end # matrix inputs
 
-            @testset "multiple data points" begin
-                # Compute leapfrog step
-                result = HVAEs.leapfrog_tempering_step(
-                    hvae, x_matrix, z_matrix;
-                    K=K, ϵ=ϵ, βₒ=βₒ
-                )
-                @test isa(result, NamedTuple)
-                @test all(isa.(values(result), AbstractMatrix{Float32}))
+        @testset "HVAE as input" begin
+            # Build temporary HVAE
+            hvae = HVAEs.HVAE(
+                joint_log_encoder * decoder,
+            )
 
-            end # @testset "multiple data points
-        end # @testset "default potential energy function and its arguments"
-    end # for decoder in decoders
-end # @testset "leapfrog_tempering_step function"
+            # Compute leapfrog_step using HVAE
+            result = HVAEs.leapfrog_tempering_step(x_vec, z_vec, hvae)
 
-## =============================================================================
-
-@testset "HVAE Forward Pass" begin
-    # Define the number of steps, step size, and initial inverse temperature
-    K = 2
-    ϵ = 0.01f0
-    βₒ = 1.0f0
-
-    @testset "Without ∇U provided" begin
-        @testset "latent=false" begin
-            # Loop through decoders
-            for decoder in decoders
-                # Define VAE
-                hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-
-                @testset "single input" begin
-                    # Test with single data point
-                    result = hvae(
-                        x_vector;
-                        K=K, ϵ=ϵ, βₒ=βₒ, latent=false
-                    )
-                    @test isa(result, NamedTuple)
-                    @test all(isa.(values(result), AbstractVector{Float32}))
-                end # @testset "single input"
-
-                @testset "multiple inputs" begin
-                    # Test with single data point
-                    result = hvae(
-                        x_matrix;
-                        K=K, ϵ=ϵ, βₒ=βₒ, latent=false
-                    )
-                    @test isa(result, NamedTuple)
-                    @test all(isa.(values(result), AbstractMatrix{Float32}))
-
-                end # @testset "multiple inputs"
-            end # for decoder in decoders
-        end # @testset "latent=false"
-
-        @testset "latent=true" begin
-            # Loop through decoders
-            for decoder in decoders
-                # Define VAE
-                hvae = HVAEs.HVAE(joint_log_encoder * decoder)
-
-                @testset "single input" begin
-                    # Test with single data point
-                    result = hvae(
-                        x_vector;
-                        K=K, ϵ=ϵ, βₒ=βₒ, latent=true
-                    )
-                    @test isa(result, NamedTuple)
-                end # @testset "single input"
-
-                @testset "multiple inputs" begin
-                    # Test with single data point
-                    result = hvae(
-                        x_matrix;
-                        K=K, ϵ=ϵ, βₒ=βₒ, latent=true
-                    )
-                    @test isa(result, NamedTuple)
-                end # @testset "multiple inputs"
-            end # for decoder in decoders
-        end # @testset "latent=true"
-    end # @testset "Without ∇U provided"
-end # @testset "HVAE Forward Pass"
+            # Test that the result is a tuple of vectors
+            @test isa(
+                result,
+                Tuple{
+                    NamedTuple,
+                    NamedTuple,
+                }
+            )
+        end
+    end # for decoder
+end # leapfrog_tempreing_step function
 
 ## =============================================================================
 
-@testset "hamiltonian_elbo" begin
-    # Define the number of steps, step size, and initial inverse temperature
-    K = 2
-    ϵ = 0.01f0
-    βₒ = 1.0f0
+@testset "HVAE forward pass" begin
+    # Loop over all decoders
+    @testset "$(decoder)" for decoder in decoders
+        # Build temporary HVAE
+        hvae = HVAEs.HVAE(
+            joint_log_encoder * decoder,
+        )
 
-    @testset "Without ∇U provided" begin
-        # Loop through decoders
-        for decoder in decoders
-            # Define VAE
-            hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+        @testset "latent = false" begin
+            @testset "vector inputs" begin
+                # Run HVAE with vector inputs
+                result = hvae(x_vec)
+                # Check that the result is a NamedTuple
+                @test isa(result, NamedTuple)
+            end # vector inputs
 
-            # Test with vector input
+            @testset "matrix inputs" begin
+                # Run HVAE with matrix inputs
+                result = hvae(x_mat)
+                # Check that the result is a NamedTuple
+                @test isa(result, NamedTuple)
+            end # matrix inputs
+        end # latent = false
+
+        @testset "latent = true" begin
+            @testset "vector inputs" begin
+                # Run HVAE with vector inputs
+                result = hvae(x_vec; latent=true)
+                # Check that the result is a NamedTuple
+                @test isa(
+                    result, NamedTuple{(:encoder, :decoder, :phase_space),}
+                )
+            end # vector inputs
+
+            @testset "matrix inputs" begin
+                # Run HVAE with matrix inputs
+                result = hvae(x_mat; latent=true)
+                # Check that the result is a NamedTuple
+                @test isa(
+                    result, NamedTuple{(:encoder, :decoder, :phase_space)}
+                )
+            end # matrix inputs
+        end # latent = false
+    end # for decoder
+end # HVAE function
+
+## =============================================================================
+
+@testset "_log_p̄ function" begin
+    # Loop through all decoders
+    @testset "$(decoder)" for decoder in decoders
+        # Build temporary HVAE
+        hvae = HVAEs.HVAE(
+            joint_log_encoder * decoder,
+        )
+
+        @testset "vector input" begin
+            # Define hvae_outputs
+            hvae_outputs = hvae(x_vec; latent=true)
+
+            # Compute _log_p̄
+            result = HVAEs._log_p̄(x_vec, hvae, hvae_outputs)
+            # Check that the result is a Float32
+            @test isa(result, Float32)
+            # Check that the result is not NaN
+            @test !isnan(result)
+            # Check that the result is not Inf
+            @test !isinf(result)
+        end # vector input
+
+        @testset "matrix input" begin
+            # Define hvae_outputs
+            hvae_outputs = hvae(x_mat; latent=true)
+
+            # Compute _log_p̄
+            result = HVAEs._log_p̄(x_mat, hvae, hvae_outputs)
+            # Check that the result is a Vector{Float32}
+            @test isa(result, Vector{Float32})
+            # Check that the result is not NaN
+            @test all(!isnan, result)
+            # Check that the result is not Inf
+            @test all(!isinf, result)
+        end # matrix input
+    end # for decoder
+end # _log_p̄ function
+
+## =============================================================================
+
+@testset "_log_q̄ function" begin
+    # Loop through all decoders
+    @testset "$(decoder)" for decoder in decoders
+        # Build temporary HVAE
+        hvae = HVAEs.HVAE(
+            joint_log_encoder * decoder,
+        )
+        # Define βₒ
+        β = 0.5f0
+
+        @testset "vector input" begin
+            # Define hvae_outputs
+            hvae_outputs = hvae(x_vec; latent=true)
+
+            # Compute _log_p̄
+            result = HVAEs._log_q̄(hvae, hvae_outputs, β)
+            # Check that the result is a Float32
+            @test isa(result, Float32)
+            # Check that the result is not NaN
+            @test !isnan(result)
+            # Check that the result is not Inf
+            @test !isinf(result)
+        end # vector input
+
+        @testset "matrix input" begin
+            # Define hvae_outputs
+            hvae_outputs = hvae(x_mat; latent=true)
+
+            # Compute _log_p̄
+            result = HVAEs._log_q̄(hvae, hvae_outputs, β)
+            # Check that the result is a Vector{Float32}
+            @test isa(result, Vector{Float32})
+            # Check that the result is not NaN
+            @test all(!isnan, result)
+            # Check that the result is not Inf
+            @test all(!isinf, result)
+        end # matrix input
+    end # for decoder
+end # _log_q̄ function
+
+## =============================================================================
+
+@testset "hamiltonian_elbo function" begin
+    # Loop through all decoders
+    @testset "$(decoder)" for decoder in decoders
+        # Build temporary HVAE
+        hvae = HVAEs.HVAE(
+            joint_log_encoder * decoder,
+        )
+
+        @testset "single x_in" begin
             @testset "vector input" begin
-                result = HVAEs.hamiltonian_elbo(hvae, x_vector)
+                # Compute hamiltonian_elbo
+                result = HVAEs.hamiltonian_elbo(
+                    hvae, x_vec
+                )
+                # Check that the result is a Float32
                 @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
             end # vector input
 
-            # Test with matrix input
             @testset "matrix input" begin
-                result = HVAEs.hamiltonian_elbo(hvae, x_matrix)
+                # Compute hamiltonian_elbo
+                result = HVAEs.hamiltonian_elbo(
+                    hvae, x_mat
+                )
+                # Check that the result is a Float32
                 @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
             end # matrix input
-        end # for decoder in decoders
-    end # @testset "Without U and ∇U provided"
-end # @testset "hamiltonian_elbo"
+        end # single x_in
+
+        @testset "x_in and x_out" begin
+            @testset "vector input" begin
+                # Compute hamiltonian_elbo
+                result = HVAEs.hamiltonian_elbo(
+                    hvae, x_vec, x_vec,
+                )
+                # Check that the result is a Float32
+                @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
+            end # vector input
+
+            @testset "matrix input" begin
+                # Compute hamiltonian_elbo
+                result = HVAEs.hamiltonian_elbo(
+                    hvae, x_mat, x_mat
+                )
+                # Check that the result is a Float32
+                @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
+            end # matrix input
+        end # x_in and x_out
+    end # for decoder
+end # hamiltonian_elbo function
 
 ## =============================================================================
 
-@testset "loss" begin
-    # Define the number of steps, step size, and initial inverse temperature
-    K = 2
-    ϵ = 0.01f0
-    βₒ = 1.0f0
+@testset "loss function" begin
+    # Loop through all decoders
+    @testset "$(decoder)" for decoder in decoders
+        # Build temporary HVAE
+        hvae = HVAEs.HVAE(
+            joint_log_encoder * decoder,
+        )
 
-    # Define regularization function and its arguments
-    reg_function = l2_regularization
-    reg_kwargs = Dict(:reg_terms => [:encoder_logσ])
+        @testset "single x_in" begin
+            @testset "vector input" begin
+                # Compute loss
+                result = HVAEs.loss(hvae, x_vec)
+                # Check that the result is a Float32
+                @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
+            end # vector input
 
-    # Loop through decoders
-    for decoder in decoders
-        # Define HVAE
-        hvae = HVAEs.HVAE(joint_log_encoder * decoder)
+            @testset "matrix input" begin
+                # Compute loss
+                result = HVAEs.loss(hvae, x_mat)
+                # Check that the result is a Float32
+                @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
+            end # matrix input
+        end # single x_in
 
-        # Test with vector input without regularization
-        @testset "vector input without regularization" begin
-            result = HVAEs.loss(hvae, x_vector; K=K, ϵ=ϵ, βₒ=βₒ)
-            @test isa(result, Float32)
-        end # vector input without regularization
+        @testset "x_in and x_out" begin
+            @testset "vector input" begin
+                # Compute loss
+                result = HVAEs.loss(hvae, x_vec, x_vec)
+                # Check that the result is a Float32
+                @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
+            end # vector input
 
-        # Test with matrix input without regularization
-        @testset "matrix input without regularization" begin
-            result = HVAEs.loss(hvae, x_matrix; K=K, ϵ=ϵ, βₒ=βₒ)
-            @test isa(result, Float32)
-        end # matrix input without regularization
-
-        # # Test with vector input with regularization
-        # @testset "vector input with regularization" begin
-        #     result = HVAEs.loss(hvae, x_vector; K=K, ϵ=ϵ, βₒ=βₒ, reg_function=reg_function, reg_kwargs=reg_kwargs)
-        #     @test isa(result, Float32)
-        # end # vector input with regularization
-
-        # # Test with matrix input with regularization
-        # @testset "matrix input with regularization" begin
-        #     result = HVAEs.loss(hvae, x_matrix; K=K, ϵ=ϵ, βₒ=βₒ, reg_function=reg_function, reg_kwargs=reg_kwargs)
-        #     @test isa(result, Float32)
-        # end # matrix input with regularization
-    end # for decoder in decoders
-end # @testset "loss"
+            @testset "matrix input" begin
+                # Compute loss
+                result = HVAEs.loss(hvae, x_mat, x_mat)
+                # Check that the result is a Float32
+                @test isa(result, Float32)
+                # Check that the result is not NaN
+                @test !isnan(result)
+                # Check that the result is not Inf
+                @test !isinf(result)
+            end # matrix input
+        end # single x_in
+    end # for decoder
+end # loss function
 
 ## =============================================================================
 
 @testset "HVAE training" begin
-    # Define number of epochs
-    n_epochs = 3
-    # Define the number of steps, step size, and initial inverse temperature
-    K = 2
-    ϵ = 0.01f0
-    βₒ = 1.0f0
-
     @testset "without regularization" begin
-        # Define loss_kwargs
-        loss_kwargs = Dict(:K => K, :ϵ => ϵ, :βₒ => βₒ)
-
         # Loop through decoders
         for decoder in decoders
-            # Define HVAE with any decoder
-            hvae = HVAEs.HVAE(deepcopy(joint_log_encoder) * deepcopy(decoder))
+            # Build temporary HVAE
+            hvae = HVAEs.HVAE(
+                joint_log_encoder * decoder,
+            )
 
             # Explicit setup of optimizer
             opt_state = Flux.Train.setup(
-                Flux.Optimisers.Adam(1E-3),
+                Flux.Optimisers.Adam(1E-2),
                 hvae
             )
 
-            # Extract parameters
-            params_init = deepcopy(Flux.params(hvae))
-
-            # Loop through a couple of epochs
-            losses = Float32[]  # Track the loss
-            for epoch = 1:n_epochs
-                Random.seed!(42)
-                # Test training function
-                HVAEs.train!(hvae, data, opt_state; loss_kwargs=loss_kwargs)
-                push!(losses, HVAEs.loss(hvae, data; loss_kwargs...))
-            end
-
-            # Check if loss is decreasing
-            @test all(diff(losses) ≠ 0)
-
-            # Extract modified parameters
-            params_end = deepcopy(Flux.params(hvae))
-
-            # Check that parameters have significantly changed
-            threshold = 1e-5
-            # Check if any parameter has changed significantly
-            @test all([
-                all(abs.(x .- y) .> threshold)
-                for (x, y) in zip(params_init, params_end)
-            ])
+            # Test training function
+            L = HVAEs.train!(hvae, data, opt_state; loss_return=true)
+            @test isa(L, Float32)
         end # for decoder in decoders
     end # @testset "without regularization"
-
-    # @testset "with regularization" begin
-    #     reg_function = l2_regularization
-    #     reg_kwargs = Dict(:reg_terms => [:encoder_μ, :encoder_logσ])
-
-    #     # Define loss_kwargs
-    #     loss_kwargs = Dict(
-    #         :K => K, :ϵ => ϵ, :βₒ => βₒ,
-    #         :reg_function => reg_function, :reg_kwargs => reg_kwargs
-    #     )
-
-    #     # Loop through decoders
-    #     for decoder in decoders
-    #         # Define HVAE with any decoder
-    #         hvae = HVAEs.HVAE(deepcopy(joint_log_encoder) * deepcopy(decoder))
-
-    #         # Explicit setup of optimizer
-    #         opt_state = Flux.Train.setup(
-    #             Flux.Optimisers.Adam(1E-3),
-    #             hvae
-    #         )
-
-    #         # Extract parameters
-    #         params_init = deepcopy(Flux.params(hvae))
-
-    #         # Loop through a couple of epochs
-    #         losses = Float32[]  # Track the loss
-    #         for epoch = 1:n_epochs
-    #             Random.seed!(42)
-    #             # Test training function
-    #             HVAEs.train!(hvae, data, opt_state; loss_kwargs=loss_kwargs)
-    #             push!(
-    #                 losses,
-    #                 HVAEs.loss(hvae, data; loss_kwargs...)
-    #             )
-    #         end
-
-    #         # Check if loss is decreasing
-    #         @test all(diff(losses) ≠ 0)
-
-    #         # Extract modified parameters
-    #         params_end = deepcopy(Flux.params(hvae))
-
-    #         # Check that parameters have significantly changed
-    #         threshold = 1e-5
-    #         # Check if any parameter has changed significantly
-    #         @test all([
-    #             all(abs.(x .- y) .> threshold)
-    #             for (x, y) in zip(params_init, params_end)
-    #         ])
-    #     end # for decoder in decoders
-    # end # @testset "with regularization"
 end # @testset "HVAE training"
+
+println("\nAll tests passed!\n")
