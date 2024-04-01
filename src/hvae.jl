@@ -46,7 +46,7 @@ using ..VAEs: reparameterize
 
 # Import functions
 using ..utils: finite_difference_gradient, taylordiff_gradient,
-    vec_mat_vec_loop, vec_mat_vec_batched, storage_type
+    storage_type, randn_sample
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Caterini, A. L., Doucet, A. & Sejdinovic, D. Hamiltonian Variational
@@ -1016,13 +1016,7 @@ function leapfrog_tempering_step(
     ldim = size(zₒ, 1)
 
     # Sample γₒ ~ N(0, I)
-    if isa(zₒ, AbstractVector)
-        γₒ = ChainRulesCore.@ignore_derivatives Random.randn(eltype(zₒ), ldim)
-    else
-        γₒ = ChainRulesCore.@ignore_derivatives Random.randn(
-            eltype(zₒ), ldim, size(zₒ, 2)
-        )
-    end # if
+    γₒ = ChainRulesCore.@ignore_derivatives randn_sample(zₒ)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
@@ -1146,13 +1140,7 @@ function leapfrog_tempering_step(
     ldim = size(zₒ, 1)
 
     # Sample γₒ ~ N(0, I)
-    if isa(zₒ, AbstractVector)
-        γₒ = ChainRulesCore.@ignore_derivatives Random.randn(eltype(zₒ), ldim)
-    else
-        γₒ = ChainRulesCore.@ignore_derivatives Random.randn(
-            eltype(zₒ), ldim, size(zₒ, 2)
-        )
-    end # if
+    γₒ = ChainRulesCore.@ignore_derivatives randn_sample(zₒ)
 
     # Define ρₒ = γₒ / √βₒ
     ρₒ = γₒ ./ √(βₒ)
