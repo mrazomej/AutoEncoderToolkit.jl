@@ -316,15 +316,12 @@ function curve_velocity_finitediff(
         error("fdtype must be either :forward or :central")
     end
 
-    # Extract dimensionality of latent space
-    ldim = size(curve.z_init, 1)
-
     # Check fdtype
     if fdtype == :forward
         # Define step size
         ε = √(eps(eltype(t)))
         # Compute finite difference derivatives
-        dγdt = (curve(t + ε) .- curve(t)) ./ ε
+        dγdt = (curve(t .+ ε) .- curve(t)) ./ ε
     elseif fdtype == :central
         # Define step size
         ε = ∛(eps(eltype(t)))
@@ -508,7 +505,7 @@ function loss(
     curve::NeuralGeodesic,
     rhvae::RHVAE,
     t::AbstractVector;
-    curve_velocity::Function=curve_velocity_TaylorDiff,
+    curve_velocity::Function=curve_velocity_finitediff,
     curve_integral::Function=curve_length,
     vec_mat_vec::Function=vec_mat_vec_loop,
 )
