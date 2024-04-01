@@ -1,5 +1,5 @@
 ##
-println("Testing RHVAEs module:\n")
+println("\nTesting RHVAEs module:\n")
 ##
 
 # Import AutoEncode.jl module to be tested
@@ -1556,3 +1556,5 @@ end # loss function
         end # for decoder in decoders
     end # @testset "without regularization"
 end # @testset "RHVAE training"
+
+println("\nAll tests passed!\n")

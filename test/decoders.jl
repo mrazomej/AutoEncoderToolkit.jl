@@ -1,5 +1,4 @@
-## ============= decoders module =============
-println("Testing decoders module:\n")
+println("\nTesting decoders...\n")
 
 # Import AutoEncode.jl module to be tested
 using AutoEncode
@@ -478,3 +477,5 @@ end
         end
     end
 end
+
+println("\nAll tests passed!\n")

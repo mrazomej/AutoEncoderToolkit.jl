@@ -1,3 +1,4 @@
+println("\nTesting MMDVAEs.jl module...\n")
 # Import AutoEncode.jl module to be tested
 import AutoEncode.MMDVAEs
 import AutoEncode.VAEs
@@ -221,3 +222,5 @@ end # @testset "loss functions"
         @test isa(L, Float32)
     end # @testset "with different input and output"
 end # @testset "MMDVAE training"
+
+println("\nAll tests passed!\n")

@@ -1,3 +1,4 @@
+println("\nTesting InfoMaxVAEs.jl...\n")
 # Import AutoEncode.jl module to be tested
 import AutoEncode.InfoMaxVAEs
 import AutoEncode.VAEs
@@ -282,3 +283,5 @@ end # @testset "Loss functions"
         @test L isa Tuple{<:Number,<:Number}
     end # @testset "with different input and output"
 end # @testset "InfoMaxVAE training"
+
+println("\nAll tests passed!\n")

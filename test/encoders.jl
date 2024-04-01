@@ -1,3 +1,4 @@
+println("\nTestin Encoders...\n")
 # Import AutoEncode.jl module to be tested
 using AutoEncode
 
@@ -214,3 +215,5 @@ end
     @test kl_div isa Vector{Float32}
     @test length(kl_div) == 10
 end
+
+println("\nAll tests passed!\n")

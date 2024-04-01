@@ -1,5 +1,5 @@
 ## ============= Utils module =============
-println("Testing utils module:\n")
+println("\nTesting utils module:\n")
 
 ## =============================================================================
 
@@ -517,3 +517,5 @@ end
         @test all(abs.(grad - 2x) .< 1e-5)
     end
 end
+
+println("\nAll tests passed!\n")

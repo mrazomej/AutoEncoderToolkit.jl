@@ -1,3 +1,4 @@
+println("\nTesting AutoEncode.jl module...\n")
 # Import AutoEncode.jl module to be tested
 import AutoEncode.AEs
 import AutoEncode: Encoder, Decoder
@@ -147,3 +148,5 @@ end # @testset "loss functions"
         @test isa(L, Float32)
     end # @testset "with different input and output"
 end # @testset "AE training"
+
+println("\nAll tests passed!\n")

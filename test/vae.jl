@@ -1,5 +1,5 @@
 ##
-println("Testing VAEs module:\n")
+println("\nTesting VAEs module...\n")
 ##
 
 # Import AutoEncode.jl module to be tested
@@ -405,3 +405,5 @@ end # @testset "loss function"
     #     end # for decoder in decoders
     # end # @testset "with regularization"
 end # @testset "VAE training"
+
+println("\nAll tests passed!\n")
