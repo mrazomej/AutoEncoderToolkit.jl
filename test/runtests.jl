@@ -24,7 +24,7 @@ using Test
     include("infomaxvae.jl")
 
     # Test HVAE module
-    # include("hvae.jl")
+    include("hvae.jl")
 
     # Test RHVAE module
     include("rhvae.jl")
