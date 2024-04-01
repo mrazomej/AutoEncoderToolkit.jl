@@ -1034,6 +1034,42 @@ end # function
 # Defining random number generators 
 ## =============================================================================
 
+"""
+    randn_sample(z)
+
+Generates a random sample with the same type and size as `z` using a standard
+normal distribution.
+"""
+function randn_sample(z)
+    return _randn_samples(storage_type(z), z)
+end
+
+# ------------------------------------------------------------------------------
+
+"""
+    _randn_samples(::Type, z::AbstractArray)
+
+Generates a random sample with the same type and size as `z` using a standard
+normal distribution. This function is used for non-GPU arrays.
+"""
+function _randn_samples(::Type, z::AbstractArray)
+    return randn(eltype(z), size(z))
+end
+
+# ------------------------------------------------------------------------------
+
+"""
+    _randn_samples(::Type{T}, z::AbstractArray) where {T<:CUDA.CuArray}
+
+Generates a random sample with the same type and size as `z` using a standard
+normal distribution. This function is used for GPU arrays.
+"""
+function _randn_samples(::Type{T}, z::CUDA.CuArray) where {T<:CUDA.CuArray}
+    return CUDA.randn(eltype(z), size(z))
+end
+
+## =============================================================================
+
 @doc raw"""
     sample_MvNormalCanon(Σ⁻¹::AbstractArray{T}) where {T<:Number}
 
