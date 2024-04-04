@@ -67,244 +67,191 @@ end
 # Define ChainRulesCore rrules for vec_to_ltri
 # ==============================================================================
 
+@doc raw"""
+    rrule(::typeof(vec_to_ltri), diag::AbstractVecOrMat, lower::AbstractVecOrMat)
+
+This function defines the reverse mode rule (rrule) for the `vec_to_ltri`
+function. The `vec_to_ltri` function converts a diagonal vector and a lower
+triangular vector into a lower triangular matrix. The `rrule` function computes
+the gradients of the inputs `diag` and `lower` with respect to the output lower
+triangular matrix.
+
+# Arguments
+- `diag::AbstractVecOrMat`: The diagonal vector.
+- `lower::AbstractVecOrMat`: The lower triangular vector.
+
+# Returns
+- `ltri`: The lower triangular matrix computed by `vec_to_ltri`.
+- `vec_to_ltri_pullback`: The pullback function that computes the gradients of
+  `diag` and `lower`.
+"""
 function rrule(
     ::typeof(vec_to_ltri), diag::AbstractVecOrMat, lower::AbstractVecOrMat
 )
+    # Compute the lower triangular matrix
     ltri = vec_to_ltri(diag, lower)
-    function vec_to_ltri_pullback(ΔLtri)
-        # Transfer GPU arrays to CPU if necessary
-        cpu_ΔLtri = Array(ΔLtri)
-        cpu_diag = Array(diag)
-        cpu_lower = Array(lower)
 
+    # Define the pullback function
+    function vec_to_ltri_pullback(ΔLtri)
         # Extract matrix dimensions and number of samples
-        n, _, cols = size(cpu_ΔLtri)
+        n, _, cols = size(ΔLtri)
 
         # Initialize the gradients for 'diag' and 'lower'
-        Δdiag = zeros(eltype(cpu_ΔLtri), size(cpu_diag))
-        Δlower = zeros(eltype(cpu_ΔLtri), size(cpu_lower))
+        Δdiag = zeros(eltype(ΔLtri), size(diag))
+        Δlower = zeros(eltype(ΔLtri), size(lower))
 
-        # Compute the gradients for 'diag' and 'lower' on the CPU
+        # Compute the gradients for 'diag' and 'lower'
         for k in 1:cols
             for i in 1:n
-                Δdiag[i, k] = cpu_ΔLtri[i, i, k]
+                # Gradient for 'diag'
+                Δdiag[i, k] = ΔLtri[i, i, k]
                 for j in 1:(i-1)
-                    Δlower[(i - 1) * (i - 2) ÷ 2 + j + (k - 1) * (n * (n - 1) ÷ 2)] = cpu_ΔLtri[i, j, k]
+                    # Gradient for 'lower'
+                    Δlower[(i-1)*(i-2)÷2+j+(k-1)*(n*(n-1)÷2)] = ΔLtri[i, j, k]
                 end
             end
         end
 
-        # Transfer the gradients back to GPU if necessary
-        gpu_Δdiag = diag isa CuArray ? CuArray(Δdiag) : Δdiag
-        gpu_Δlower = lower isa CuArray ? CuArray(Δlower) : Δlower
-
         # Return the gradients for 'diag' and 'lower'
-        return (NO_FIELDS, gpu_Δdiag, gpu_Δlower)
+        return (NO_FIELDS, Δdiag, Δlower)
     end
+
+    # Return the lower triangular matrix and the pullback function
     return ltri, vec_to_ltri_pullback
 end
 
-# @doc raw"""
-#     rrule(::typeof(vec_to_ltri), diag::AbstractVecOrMat, lower::AbstractVecOrMat)
+# ------------------------------------------------------------------------------
 
-# This function defines the reverse mode rule (rrule) for the `vec_to_ltri`
-# function. The `vec_to_ltri` function converts a diagonal vector and a lower
-# triangular vector into a lower triangular matrix. The `rrule` function computes
-# the gradients of the inputs `diag` and `lower` with respect to the output lower
-# triangular matrix.
+@doc raw"""
+    rrule(::typeof(vec_to_ltri), diag::CUDA.CuVector, lower::CUDA.CuVector)
 
-# # Arguments
-# - `diag::AbstractVecOrMat`: The diagonal vector.
-# - `lower::AbstractVecOrMat`: The lower triangular vector.
+This function defines the reverse mode rule (rrule) for the `vec_to_ltri`
+function. The `vec_to_ltri` function converts a diagonal vector and a lower
+triangular vector into a lower triangular matrix. The `rrule` function computes
+the gradients of the inputs `diag` and `lower` with respect to the output lower
+triangular matrix.
 
-# # Returns
-# - `ltri`: The lower triangular matrix computed by `vec_to_ltri`.
-# - `vec_to_ltri_pullback`: The pullback function that computes the gradients of
-#   `diag` and `lower`.
-# """
-# function rrule(
-#     ::typeof(vec_to_ltri), diag::AbstractVecOrMat, lower::AbstractVecOrMat
-# )
-#     # Compute the lower triangular matrix
-#     ltri = vec_to_ltri(diag, lower)
+# Arguments
+- `diag::CUDA.CuVector`: The diagonal vector.
+- `lower::CUDA.CuVector`: The lower triangular vector.
 
-#     # Define the pullback function
-#     function vec_to_ltri_pullback(ΔLtri)
-#         # Extract matrix dimensions and number of samples
-#         n, _, cols = size(ΔLtri)
+# Returns
+- `ltri`: The lower triangular matrix computed by `vec_to_ltri`.
+- `vec_to_ltri_pullback`: The pullback function that computes the gradients of
+  `diag` and `lower`.
+"""
+function rrule(::typeof(vec_to_ltri), diag::CUDA.CuVector, lower::CUDA.CuVector)
+    # Compute the lower triangular matrix
+    ltri = vec_to_ltri(diag, lower)
 
-#         # Initialize the gradients for 'diag' and 'lower'
-#         Δdiag = zeros(eltype(ΔLtri), size(diag))
-#         Δlower = zeros(eltype(ΔLtri), size(lower))
+    # Define the pullback function
+    function vec_to_ltri_pullback(ΔLtri)
+        # Define the dimensionality of the matrix based on the length of the
+        # diagonal vector
+        n = length(diag)
 
-#         # Compute the gradients for 'diag' and 'lower'
-#         for k in 1:cols
-#             for i in 1:n
-#                 # Gradient for 'diag'
-#                 Δdiag[i, k] = ΔLtri[i, i, k]
-#                 for j in 1:(i-1)
-#                     # Gradient for 'lower'
-#                     Δlower[(i-1)*(i-2)÷2+j+(k-1)*(n*(n-1)÷2)] = ΔLtri[i, j, k]
-#                 end
-#             end
-#         end
+        # Initialize the gradients for 'diag' and 'lower' on the GPU
+        Δdiag = CUDA.zeros(eltype(ΔLtri), n)
+        Δlower = CUDA.zeros(eltype(ΔLtri), length(lower))
 
-#         # Return the gradients for 'diag' and 'lower'
-#         return (NO_FIELDS, Δdiag, Δlower)
-#     end
+        # Define the CUDA kernel function for computing the gradients
+        function kernel!(Δdiag, Δlower, ΔLtri, n)
+            # Calculate the index for each thread
+            i = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
 
-#     # Return the lower triangular matrix and the pullback function
-#     return ltri, vec_to_ltri_pullback
-# end
+            # Check if the thread index is within the matrix dimensions
+            if i <= n
+                # Compute the gradient for the diagonal elements
+                Δdiag[i] = ΔLtri[i, i]
+                # Compute the gradient for the lower triangular elements
+                for j in 1:(i-1)
+                    lower_index = (i - 1) * (i - 2) ÷ 2 + j
+                    Δlower[lower_index] = ΔLtri[i, j]
+                end
+            end
 
-# # ------------------------------------------------------------------------------
+            return nothing
+        end
 
-# @doc raw"""
-#     rrule(::typeof(vec_to_ltri), diag::CUDA.CuVector, lower::CUDA.CuVector)
+        # Define the size of the blocks and the grid for the CUDA kernel launch
+        blocksize = 256
+        gridsize = cld(n, blocksize)
 
-# This function defines the reverse mode rule (rrule) for the `vec_to_ltri`
-# function. The `vec_to_ltri` function converts a diagonal vector and a lower
-# triangular vector into a lower triangular matrix. The `rrule` function computes
-# the gradients of the inputs `diag` and `lower` with respect to the output lower
-# triangular matrix.
+        # Launch the CUDA kernel to compute the gradients
+        CUDA.@cuda threads = blocksize blocks = gridsize kernel!(Δdiag, Δlower, ΔLtri, n)
 
-# # Arguments
-# - `diag::CUDA.CuVector`: The diagonal vector.
-# - `lower::CUDA.CuVector`: The lower triangular vector.
+        # Return the gradients for 'diag' and 'lower'
+        return (NO_FIELDS, Δdiag, Δlower)
+    end
 
-# # Returns
-# - `ltri`: The lower triangular matrix computed by `vec_to_ltri`.
-# - `vec_to_ltri_pullback`: The pullback function that computes the gradients of
-#   `diag` and `lower`.
-# """
-# function rrule(::typeof(vec_to_ltri), diag::CUDA.CuVector, lower::CUDA.CuVector)
-#     # Compute the lower triangular matrix
-#     ltri = vec_to_ltri(diag, lower)
+    # Return the lower triangular matrix and the pullback function
+    return ltri, vec_to_ltri_pullback
+end
 
-#     # Define the pullback function
-#     function vec_to_ltri_pullback(ΔLtri)
-#         # Define the dimensionality of the matrix based on the length of the
-#         # diagonal vector
-#         n = length(diag)
+# ------------------------------------------------------------------------------
 
-#         # Initialize the gradients for 'diag' and 'lower' on the GPU
-#         Δdiag = CUDA.zeros(eltype(ΔLtri), n)
-#         Δlower = CUDA.zeros(eltype(ΔLtri), length(lower))
+@doc raw"""
+    rrule(::typeof(vec_to_ltri), diag::CUDA.CuMatrix, lower::CUDA.CuMatrix)
 
-#         # Define the CUDA kernel function for computing the gradients
-#         function kernel!(Δdiag, Δlower, ΔLtri, n)
-#             # Calculate the index for each thread
-#             i = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+This function defines the reverse mode rule (rrule) for the `vec_to_ltri`
+function. The `vec_to_ltri` function converts a diagonal matrix and a lower
+triangular matrix into a lower triangular matrix. The `rrule` function computes
+the gradients of the inputs `diag` and `lower` with respect to the output lower
+triangular matrix.
 
-#             # Check if the thread index is within the matrix dimensions
-#             if i <= n
-#                 # Compute the gradient for the diagonal elements
-#                 Δdiag[i] = ΔLtri[i, i]
-#                 # Compute the gradient for the lower triangular elements
-#                 for j in 1:(i-1)
-#                     lower_index = (i - 1) * (i - 2) ÷ 2 + j
-#                     Δlower[lower_index] = ΔLtri[i, j]
-#                 end
-#             end
+# Arguments
+- `diag::CUDA.CuMatrix`: The diagonal matrix.
+- `lower::CUDA.CuMatrix`: The lower triangular matrix.
 
-#             return nothing
-#         end
+# Returns
+- `ltri`: The lower triangular matrix computed by `vec_to_ltri`.
+- `vec_to_ltri_pullback`: The pullback function that computes the gradients of
+  `diag` and `lower`.
+"""
+function rrule(::typeof(vec_to_ltri), diag::CUDA.CuMatrix, lower::CUDA.CuMatrix)
+    # Compute the lower triangular matrix
+    ltri = vec_to_ltri(diag, lower)
 
-#         # Define the size of the blocks and the grid for the CUDA kernel launch
-#         blocksize = 256
-#         gridsize = cld(n, blocksize)
+    # Define the pullback function
+    function vec_to_ltri_pullback(ΔLtri)
+        # Extract matrix dimensions and number of samples
+        n, _, cols = size(ΔLtri)
 
-#         # Launch the CUDA kernel to compute the gradients
-#         CUDA.@cuda threads = blocksize blocks = gridsize kernel!(Δdiag, Δlower, ΔLtri, n)
+        # Initialize the gradients for 'diag' and 'lower' on the GPU
+        Δdiag = CUDA.zeros(eltype(ΔLtri), size(diag))
+        Δlower = CUDA.zeros(eltype(ΔLtri), size(lower))
 
-#         # Return the gradients for 'diag' and 'lower'
-#         return (NO_FIELDS, Δdiag, Δlower)
-#     end
+        # Define the CUDA kernel function for computing the gradients
+        function kernel!(Δdiag, Δlower, ΔLtri, n, cols)
+            # Calculate the index for each thread
+            i = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+            k = (CUDA.blockIdx().y - 1) * CUDA.blockDim().y + CUDA.threadIdx().y
 
-#     # Return the lower triangular matrix and the pullback function
-#     return ltri, vec_to_ltri_pullback
-# end
+            # Check if the thread index is within the matrix dimensions
+            if i <= n && k <= cols
+                # Compute the gradient for the diagonal elements
+                Δdiag[i, k] = ΔLtri[i, i, k]
+                # Compute the gradient for the lower triangular elements
+                for j in 1:(i-1)
+                    lower_index = (i - 1) * (i - 2) ÷ 2 + j + (k - 1) * (n * (n - 1) ÷ 2)
+                    Δlower[lower_index] = ΔLtri[i, j, k]
+                end
+            end
 
-# # # ------------------------------------------------------------------------------
+            return nothing
+        end
 
-# @doc raw"""
-#     rrule(::typeof(vec_to_ltri), diag::CUDA.CuMatrix, lower::CUDA.CuMatrix)
+        # Define the size of the blocks and the grid for the CUDA kernel launch
+        blocksize = (16, 16)
+        gridsize = (cld(n, blocksize[1]), cld(cols, blocksize[2]))
 
-# This function defines the reverse mode rule (rrule) for the `vec_to_ltri`
-# function. The `vec_to_ltri` function converts a diagonal matrix and a lower
-# triangular matrix into a lower triangular matrix. The `rrule` function computes
-# the gradients of the inputs `diag` and `lower` with respect to the output lower
-# triangular matrix.
+        # Launch the CUDA kernel to compute the gradients
+        CUDA.@cuda threads = blocksize blocks = gridsize kernel!(Δdiag, Δlower, ΔLtri, n, cols)
 
-# # Arguments
-# - `diag::CUDA.CuMatrix`: The diagonal matrix.
-# - `lower::CUDA.CuMatrix`: The lower triangular matrix.
+        # Return the gradients for 'diag' and 'lower'
+        return (NO_FIELDS, Δdiag, Δlower)
+    end
 
-# # Returns
-# - `ltri`: The lower triangular matrix computed by `vec_to_ltri`.
-# - `vec_to_ltri_pullback`: The pullback function that computes the gradients of
-#   `diag` and `lower`.
-# """
-# function rrule(::typeof(vec_to_ltri), diag::CUDA.CuMatrix, lower::CUDA.CuMatrix)
-#     # Compute the lower triangular matrix
-#     ltri = vec_to_ltri(diag, lower)
-
-#     # Define the pullback function
-#     function vec_to_ltri_pullback(ΔLtri)
-#         # Extract matrix dimensions and number of samples
-#         n, _, cols = size(ΔLtri)
-
-#         # Initialize the gradients for 'diag' and 'lower' on the GPU
-#         Δdiag = CUDA.zeros(eltype(ΔLtri), size(diag))
-#         Δlower = CUDA.zeros(eltype(ΔLtri), size(lower))
-
-#         # Define the CUDA kernel function for computing the gradients
-#         function kernel!(Δdiag, Δlower, ΔLtri, n, cols)
-#             # Calculate the index for each thread
-#             i = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
-#             k = (CUDA.blockIdx().y - 1) * CUDA.blockDim().y + CUDA.threadIdx().y
-
-#             # Check if the thread index is within the matrix dimensions
-#             if i <= n && k <= cols
-#                 # Compute the gradient for the diagonal elements
-#                 Δdiag[i, k] = ΔLtri[i, i, k]
-#                 # Compute the gradient for the lower triangular elements
-#                 for j in 1:(i-1)
-#                     lower_index = (i - 1) * (i - 2) ÷ 2 + j + (k - 1) * (n * (n - 1) ÷ 2)
-#                     Δlower[lower_index] = ΔLtri[i, j, k]
-#                 end
-#             end
-
-#             return nothing
-#         end
-
-#         # Define the size of the blocks and the grid for the CUDA kernel launch
-#         blocksize = (16, 16)
-#         gridsize = (cld(n, blocksize[1]), cld(cols, blocksize[2]))
-
-#         # Launch the CUDA kernel to compute the gradients
-#         CUDA.@cuda threads = blocksize blocks = gridsize kernel!(Δdiag, Δlower, ΔLtri, n, cols)
-
-#         # Return the gradients for 'diag' and 'lower'
-#         return (NO_FIELDS, Δdiag, Δlower)
-#     end
-
-#     # Return the lower triangular matrix and the pullback function
-#     return ltri, vec_to_ltri_pullback
-# end
-
-# @adjoint function vec_to_ltri(diag::CUDA.CuVector, lower::CUDA.CuVector)
-#     ltri, pullback = rrule(vec_to_ltri, diag, lower)
-#     return ltri, ΔLtri -> begin
-#         Δdiag, Δlower = pullback(ΔLtri)
-#         return (Δdiag, Δlower)
-#     end
-# end
-
-# @adjoint function vec_to_ltri(diag::CUDA.CuMatrix, lower::CUDA.CuMatrix)
-#     ltri, pullback = rrule(vec_to_ltri, diag, lower)
-#     return ltri, ΔLtri -> begin
-#         Δdiag, Δlower = pullback(ΔLtri)
-#         return (Δdiag, Δlower)
-#     end
-# end
+    # Return the lower triangular matrix and the pullback function
+    return ltri, vec_to_ltri_pullback
+end
