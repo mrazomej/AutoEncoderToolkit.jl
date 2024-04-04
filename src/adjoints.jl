@@ -67,6 +67,10 @@ end
 # Define ChainRulesCore rrules for vec_to_ltri
 # ==============================================================================
 
+# ChainRulesCore.@non_differentiable vec_to_ltri(
+#     diag::AbstractVecOrMat, lower::AbstractVecOrMat
+# )
+
 @doc raw"""
     rrule(::typeof(vec_to_ltri), diag::AbstractVecOrMat, lower::AbstractVecOrMat)
 
@@ -85,7 +89,7 @@ triangular matrix.
 - `vec_to_ltri_pullback`: The pullback function that computes the gradients of
   `diag` and `lower`.
 """
-function rrule(
+function ChainRulesCore.rrule(
     ::typeof(vec_to_ltri), diag::AbstractVecOrMat, lower::AbstractVecOrMat
 )
     # Compute the lower triangular matrix
@@ -113,7 +117,7 @@ function rrule(
         end
 
         # Return the gradients for 'diag' and 'lower'
-        return (NO_FIELDS, Δdiag, Δlower)
+        return NoTangent(), Δdiag, Δlower
     end
 
     # Return the lower triangular matrix and the pullback function
@@ -140,7 +144,9 @@ triangular matrix.
 - `vec_to_ltri_pullback`: The pullback function that computes the gradients of
   `diag` and `lower`.
 """
-function rrule(::typeof(vec_to_ltri), diag::CUDA.CuVector, lower::CUDA.CuVector)
+function ChainRulesCore.rrule(
+    ::typeof(vec_to_ltri), diag::CUDA.CuVector, lower::CUDA.CuVector
+)
     # Compute the lower triangular matrix
     ltri = vec_to_ltri(diag, lower)
 
@@ -181,7 +187,7 @@ function rrule(::typeof(vec_to_ltri), diag::CUDA.CuVector, lower::CUDA.CuVector)
         CUDA.@cuda threads = blocksize blocks = gridsize kernel!(Δdiag, Δlower, ΔLtri, n)
 
         # Return the gradients for 'diag' and 'lower'
-        return (NO_FIELDS, Δdiag, Δlower)
+        return (ΔLtri, Δdiag, Δlower)
     end
 
     # Return the lower triangular matrix and the pullback function
@@ -208,7 +214,9 @@ triangular matrix.
 - `vec_to_ltri_pullback`: The pullback function that computes the gradients of
   `diag` and `lower`.
 """
-function rrule(::typeof(vec_to_ltri), diag::CUDA.CuMatrix, lower::CUDA.CuMatrix)
+function ChainRulesCore.rrule(
+    ::typeof(vec_to_ltri), diag::CUDA.CuMatrix, lower::CUDA.CuMatrix
+)
     # Compute the lower triangular matrix
     ltri = vec_to_ltri(diag, lower)
 
@@ -249,9 +257,11 @@ function rrule(::typeof(vec_to_ltri), diag::CUDA.CuMatrix, lower::CUDA.CuMatrix)
         CUDA.@cuda threads = blocksize blocks = gridsize kernel!(Δdiag, Δlower, ΔLtri, n, cols)
 
         # Return the gradients for 'diag' and 'lower'
-        return (NO_FIELDS, Δdiag, Δlower)
+        return (ΔLtri, Δdiag, Δlower)
     end
 
     # Return the lower triangular matrix and the pullback function
     return ltri, vec_to_ltri_pullback
 end
+
+
