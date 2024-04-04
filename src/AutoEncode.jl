@@ -79,6 +79,8 @@ include("layers.jl")
 # Include Utils module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+include("nnlib.jl")
+
 module utils
 include("utils.jl")
 end # submodule
