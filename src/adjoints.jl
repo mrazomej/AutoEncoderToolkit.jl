@@ -9,7 +9,9 @@ using ChainRulesCore
 # Import CUDA
 using CUDA
 
-using ..utils: vec_to_ltri
+using LinearAlgebra
+
+using ..utils: vec_to_ltri, vec_mat_vec_batched
 # ==============================================================================
 # Define Zygote.@adjoint for FillArrays.fill
 # ==============================================================================
@@ -266,6 +268,3 @@ function ChainRulesCore.rrule(
     # Return the lower triangular matrix and the pullback function
     return ltri, vec_to_ltri_pullback
 end
-
-
->>>>>>> fd3efbe4449e1e48605e2c8ac652bcf42041e410

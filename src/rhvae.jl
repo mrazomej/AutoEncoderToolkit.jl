@@ -47,7 +47,7 @@ using ..VAEs: reparameterize
 
 # Import functions
 using ..utils: vec_to_ltri, sample_MvNormalCanon, finite_difference_gradient,
-    slogdet, taylordiff_gradient, vec_mat_vec_loop, vec_mat_vec_batched,
+    slogdet, taylordiff_gradient, vec_mat_vec_batched,
     storage_type
 
 using ..HVAEs: quadratic_tempering, null_tempering
@@ -965,85 +965,20 @@ end # function
 
 @doc raw"""
     riemannian_logprior(
-        ρ::AbstractVecOrMat,
-        G⁻¹::AbstractArray,
-        logdetG::Union{Number,AbstractVector};
-        vec_mat_vec::Function=vec_mat_vec_loop
-    )
-
-Compute the log-prior of a Gaussian distribution with a covariance matrix given
-by the Riemannian metric.
-
-# Arguments
-- `ρ::AbstractVecOrMat`: The momentum variable of the Hamiltonian system. If a
-  matrix, each column represents a momentum variable.
-- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. If a 3D
-  array, each slice represents the inverse metric tensor at a different point in
-  the latent space.
-- `logdetG::Union{Number,AbstractVector}`: The log determinant of the Riemannian
-  metric tensor. If a vector, each element represents the log determinant at a different point in the latent space.
-
-# Optional Keyword Arguments
-- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
-  vector with a matrix with a vector. Default is `vec_mat_vec_loop`, but also
-  accepts `vec_mat_vec_batched`. The former is needed when using `TaylorDiff.jl`
-  to compute Hamiltonian gradients. The latter works better on GPUs.
-
-# Returns
-The log-prior of the Gaussian distribution with a covariance matrix given by the
-Riemannian metric.
-
-# Notes
-- Ensure that the dimensions of `ρ` match the dimensions of the latent space of
-  the RHVAE model.
-
-# GPU Support
-This function supports CPU and GPU arrays.
-"""
-function riemannian_logprior(
-    ρ::AbstractVecOrMat,
-    G⁻¹::AbstractArray,
-    logdetG::Union{Number,AbstractVector};
-    vec_mat_vec::Union{Function,Nothing}=nothing
-)
-    # Obtain ρ storage type
-    stρ = storage_type(ρ)
-
-    # Check if input is in GPU and select the appropriate vec_mat_vec function
-    # if not provided
-    if (stρ <: CUDA.CuArray) && (vec_mat_vec === nothing)
-        # For GPU arrays, use vec_mat_vec_batched
-        vec_mat_vec = vec_mat_vec_batched
-    elseif vec_mat_vec === nothing
-        # For CPU arrays, use vec_mat_vec_loop
-        vec_mat_vec = vec_mat_vec_loop
-    end # if
-
-    return _riemannian_logprior(
-        ρ, G⁻¹, logdetG, vec_mat_vec
-    )
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    riemannian_logprior(
         ρ::AbstractVector,
         G⁻¹::AbstractMatrix,
         logdetG::Number;
-        vec_mat_vec::Function,
     )
 
 CPU AbstractVector version of the riemannian_logprior function.
 """
-function _riemannian_logprior(
+function riemannian_logprior(
     ρ::AbstractVector,
     G⁻¹::AbstractMatrix,
     logdetG::Number,
-    vec_mat_vec::Function,
 )
     # Compute ρᵀ G ρ
-    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
+    ρᵀ_G_ρ = vec_mat_vec_batched(ρ, G⁻¹, ρ)
 
     # Return the log-prior
     return -0.5f0 * (size(G⁻¹, 1) * log(2.0f0π) + logdetG) - (0.5f0 * ρᵀ_G_ρ)
@@ -1056,19 +991,17 @@ end # function
         ρ::AbstractVector,
         G⁻¹::AbstractMatrix,
         logdetG::Number,
-        vec_mat_vec::Function,
     )
 
 CPU AbstractMatrix version of the riemannian_logprior function.
 """
-function _riemannian_logprior(
+function riemannian_logprior(
     ρ::AbstractMatrix,
     G⁻¹::AbstractArray,
     logdetG::AbstractVector,
-    vec_mat_vec::Function,
 )
     # Compute ρᵀ G ρ
-    ρᵀ_G_ρ = vec_mat_vec(ρ, G⁻¹, ρ)
+    ρᵀ_G_ρ = vec_mat_vec_batched(ρ, G⁻¹, ρ)
 
     # Return the log-prior
     return -0.5f0 .* (size(G⁻¹, 1) * log(2.0f0π) .+ logdetG) .-
@@ -2252,7 +2185,7 @@ function ∇hamiltonian(
     elseif adtype === nothing
         # If no automatic differentiation method is specified, use TaylorDiff
         adtype = :TaylorDiff
-    elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hrhvae))
+    elseif (typeof(adtype) <: Symbol) && (adtype ∉ keys(∇Hrhvae))
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
     end
@@ -2353,7 +2286,7 @@ function ∇hamiltonian(
     elseif adtype === nothing
         # If no automatic differentiation method is specified, use TaylorDiff
         adtype = :TaylorDiff
-    elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hrhvae))
+    elseif (typeof(adtype) <: Symbol) && (adtype ∉ keys(∇Hrhvae))
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
     end
