@@ -63,18 +63,12 @@ end
 # @adjoint TaylorScalar(v) = TaylorScalar(v), t̄ -> (t̄.value,)
 # @adjoint function getindex(t::NTuple{N,T}, i::Int) where {N,T<:Number}
 #     getindex(t, i), v̄ -> (tuple(zeros(T, i - 1)..., v̄, zeros(T, N - i)...), nothing)
-<<<<<<< HEAD
 # end
-=======
 # end
 
 # ==============================================================================
 # Define ChainRulesCore rrules for vec_to_ltri
 # ==============================================================================
-
-# ChainRulesCore.@non_differentiable vec_to_ltri(
-#     diag::AbstractVecOrMat, lower::AbstractVecOrMat
-# )
 
 @doc raw"""
     rrule(::typeof(vec_to_ltri), diag::AbstractVecOrMat, lower::AbstractVecOrMat)

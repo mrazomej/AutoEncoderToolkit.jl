@@ -157,7 +157,8 @@ function MetricChain(
         push!(
             mlp_layers,
             Flux.Dense(
-                metric_neurons[i-1] => metric_neurons[i], metric_activation[i]; init=init
+                metric_neurons[i-1] => metric_neurons[i], metric_activation[i];
+                init=init
             )
         )
     end # for
@@ -165,7 +166,9 @@ function MetricChain(
     # Create the MLP
     mlp = Flux.Chain(mlp_layers...)
 
-    # Create the diag and lower layers. These layers have a number of neurons equal to the number of entries in a lower triangular matrix in the latent space.  
+    # Create the diag and lower layers. These layers have a number of neurons
+    # equal to the number of entries in a lower triangular matrix in the latent
+    # space.  
     diag = Flux.Dense(
         metric_neurons[end] => n_latent, output_activation; init=init
     )
@@ -481,7 +484,9 @@ end # function
 
 @doc raw"""
     update_metric!(
-        rhvae::RHVAE{<:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}}
+        rhvae::RHVAE{
+            <:VAE{<:AbstractGaussianEncoder,<:AbstractVariationalDecoder}
+        }
     )
 
 Update the `centroids_latent`, and `M` fields of a `RHVAE` instance in place.
@@ -543,7 +548,8 @@ This function takes a point `z` in the latent space, the `centroids_latent` of
 the RHVAE instance, a 3D array `M` representing the metric tensor, a temperature
 `T`, and a regularization factor `λ`, and computes the inverse of the metric
 tensor G at that point. The computation is based on the centroids and the
-temperature, as well as a regularization term. The inverse metric is computed as follows:
+temperature, as well as a regularization term. The inverse metric is computed as
+follows:
 
 G⁻¹(z) = ∑ᵢ₌₁ⁿ L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ,
 
@@ -1058,11 +1064,11 @@ where p(ρ) is the log-prior of the momentum.
   array should be of size 1.
 - `z::AbstractVecOrMat`: The point in the latent space.
 - `ρ::AbstractVecOrMat`: The momentum.
-- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. This
-  should be computed elsewhere and should correspond to the given `z` value.
-- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the Riemannian
-  metric tensor. This should be computed elsewhere and should correspond to the
-  given `z` value.
+- `G⁻¹::AbstractArray`: The inverse of the Riemannian metric tensor. This should
+  be computed elsewhere and should correspond to the given `z` value.
+- `logdetG::Union{<:Number,AbstractVector}`: The log determinant of the
+  Riemannian metric tensor. This should be computed elsewhere and should
+  correspond to the given `z` value.
 - `decoder::AbstractVariationalDecoder`: The decoder instance. This is not used
   in the computation of the Hamiltonian, but is passed to the
   `decoder_loglikelihood` function to know which method to use.
@@ -2151,7 +2157,9 @@ the point `z`.
   momentum. Default is `riemannian_logprior`. This function must take as input
   the momentum `ρ` and `G⁻¹`.
 - `adtype::Union{Symbol,Nothing}`=:TaylorDiff`: The type of automatic
-  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or `nothing`. Default is nothing, therefore, for GPU arrays, finite differences are used, and for CPU arrays, TaylorDiff is used.
+  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or
+  `nothing`. Default is nothing, therefore, for GPU arrays, finite differences
+  are used, and for CPU arrays, TaylorDiff is used.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
@@ -2343,7 +2351,8 @@ Hamiltonian (`∇H`), and a set of keyword arguments for `∇H` (`∇H_kwargs`).
 
 The function performs the following update for `steps` times:
 
-ρ̃ = ρ̃ - 0.5 * ϵ * ∇hamiltonian(x, z, ρ̃, G⁻¹, decoder, decoder_output, :z; ∇H_kwargs...)
+ρ̃ = ρ̃ - 0.5 * ϵ * ∇hamiltonian(x, z, ρ̃, G⁻¹, decoder, decoder_output, :z;
+∇H_kwargs...)
 
 where `∇H` is the gradient of the Hamiltonian with respect to the position
 variables `z`. The result is returned as ρ̃.
@@ -2369,8 +2378,8 @@ variables `z`. The result is returned as ρ̃.
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default
   is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`. Default
-  is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+  Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`, and `G_inv`.
 
 # Returns
@@ -2545,8 +2554,10 @@ Hamiltonian (`∇H`), and a set of keyword arguments for `∇H` (`∇H_kwargs`).
 
 The function performs the following update for `steps` times:
 
-z̄ = z̄ + 0.5 * ϵ * ( ∇hamiltonian(x, z̄, ρ, G⁻¹, decoder, decoder_output, :ρ;
-∇H_kwargs...) + ∇hamiltonian(x, z, ρ, G⁻¹, decoder, decoder_output, :ρ; ∇H_kwargs...) )
+z̄ = z̄ + 0.5 * ϵ * ( 
+    ∇hamiltonian(x, z̄, ρ, G⁻¹, decoder, decoder_output, :ρ; ∇H_kwargs...) + 
+    ∇hamiltonian(x, z, ρ, G⁻¹, decoder, decoder_output, :ρ; ∇H_kwargs...) 
+)
 
 where `∇H` is the gradient of the Hamiltonian with respect to the momentum
 variables `ρ`. The result is returned as z̄.
@@ -2720,7 +2731,7 @@ function _leapfrog_second_step(
     )
 end # function
 
-# # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     _leapfrog_third_step(
@@ -2757,7 +2768,8 @@ Hamiltonian (`∇H`), and a set of keyword arguments for `∇H` (`∇H_kwargs`).
 
 The function performs the following update:
 
-ρ̃ = ρ - 0.5 * ϵ * ∇hamiltonian(x, z, ρ, G⁻¹, decoder, decoder_output, :z; ∇H_kwargs...)
+ρ̃ = ρ - 0.5 * ϵ * ∇hamiltonian( x, z, ρ, G⁻¹, decoder, decoder_output, :z;
+    ∇H_kwargs... )
 
 where `∇H` is the gradient of the Hamiltonian with respect to the position
 variables `z`. The result is returned as ρ̃.
@@ -2782,8 +2794,8 @@ variables `z`. The result is returned as ρ̃.
 # Optional Keyword Arguments
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is
   0.01f0.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`. Default
-  is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+  Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`.
 
 # Returns
@@ -2868,9 +2880,9 @@ variables `z`. The result is returned as ρ̃.
 - `ϵ::Union{<:Number,<:AbstractVector}`: The leapfrog step size. Default is
   0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`. Default
-  is a tuple with `reconstruction_loglikelihood`, `position_logprior`, and
-  `momentum_logprior`.
+- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+  Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
+  and `momentum_logprior`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor. Default is `G_inv`.
 
@@ -3924,9 +3936,10 @@ elbo = mean(log p̄ - log q̄),
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of leapfrog steps (default is 3).
 - `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
-  to the `∇hamiltonian` function. Defaults to a NamedTuple with `:decoder_loglikelihood`
-  set to `decoder_loglikelihood`, `:position_logprior` set to
-  `spherical_logprior`, and `:momentum_logprior` set to `riemannian_logprior`.
+  to the `∇hamiltonian` function. Defaults to a NamedTuple with
+  `:decoder_loglikelihood` set to `decoder_loglikelihood`, `:position_logprior`
+  set to `spherical_logprior`, and `:momentum_logprior` set to
+  `riemannian_logprior`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor. Defaults to `G_inv`.
 - `tempering_schedule::Function`: The tempering schedule function used in the
@@ -4038,10 +4051,10 @@ elbo = mean(log p̄ - log q̄)
 
 ## Optional Keyword Arguments
 - `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
-  to the `∇hamiltonian` function. Defaults to a NamedTuple with `:decoder_loglikelihood`
-  set to `decoder_loglikelihood`, `:position_logprior` set to
-  `spherical_logprior`, `:momentum_logprior` set to `riemannian_logprior`, and
-  `:G_inv` set to `G_inv`.
+  to the `∇hamiltonian` function. Defaults to a NamedTuple with
+  `:decoder_loglikelihood` set to `decoder_loglikelihood`, `:position_logprior`
+  set to `spherical_logprior`, `:momentum_logprior` set to
+  `riemannian_logprior`, and `:G_inv` set to `G_inv`.
 - `K::Int`: The number of RHMC steps (default is 3).
 - `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
   integrator (default is 0.001).
@@ -4293,10 +4306,10 @@ elbo = mean(log p̄ - log q̄).
 
 ## Optional Keyword Arguments
 - `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
-  to the `∇hamiltonian` function. Defaults to a NamedTuple with `:decoder_loglikelihood`
-  set to `decoder_loglikelihood`, `:position_logprior` set to
-  `spherical_logprior`, `:momentum_logprior` set to `riemannian_logprior`, and
-  `:G_inv` set to `G_inv`.
+  to the `∇hamiltonian` function. Defaults to a NamedTuple with
+  `:decoder_loglikelihood` set to `decoder_loglikelihood`, `:position_logprior`
+  set to `spherical_logprior`, `:momentum_logprior` set to
+  `riemannian_logprior`, and `:G_inv` set to `G_inv`.
 - `K::Int`: The number of RHMC steps (default is 3).
 - `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
   integrator (default is 0.001).

@@ -419,11 +419,8 @@ function _vec_to_ltri(
     # Return the resulting matrix
     return matrix
 end # function
-<<<<<<< HEAD
 
 # ------------------------------------------------------------------------------
-=======
->>>>>>> fd3efbe4449e1e48605e2c8ac652bcf42041e410
 
 @doc raw"""
     vec_to_ltri(diag::AbstractVecOrMat, lower::AbstractVecOrMat)
@@ -571,11 +568,50 @@ function vec_mat_vec_batched(
     return vec(sum(v .* Flux.batched_vec(M, w), dims=1))
 end # function
 
+@doc raw"""
+    vec_mat_vec_batched(
+        v::AbstractMatrix{T}, 
+        M::AbstractArray{S,3}, 
+        w::AbstractMatrix{T}
+    ) where {T<:TaylorDiff.TaylorScalar{Float32,2},S<:Number}
+
+Compute the batched product of vectors and matrices in the form v̲ᵀ M̲̲ w̲ for a
+specific type of matrices and vectors.
+
+This function takes two matrices `v` and `w` of type
+`TaylorDiff.TaylorScalar{Float32,2}`, and a 3D array `M` of type `Number`, and
+computes the batched product v̲ M̲̲ w̲. The computation is performed by first
+extracting each slice of `M` and each column of `w`, then performing the
+vector-matrix multiplication for each pair of slices, and finally computing the
+element-wise multiplication of the resulting matrix with `v` and summing over
+the dimensions.
+
+# Arguments
+- `v::AbstractMatrix{T}`: A `d×n` matrix, where `d` is the dimension of the
+  vectors and `n` is the number of vectors. `T` is a subtype of
+  `TaylorDiff.TaylorScalar{Float32,2}`.
+- `M::AbstractArray{S,3}`: A `d×d×n` array, where `d` is the dimension of the
+  matrices and `n` is the number of matrices. `S` is a subtype of `Number`.
+- `w::AbstractMatrix{T}`: A `d×n` matrix, where `d` is the dimension of the
+  vectors and `n` is the number of vectors. `T` is a subtype of
+  `TaylorDiff.TaylorScalar{Float32,2}`.
+
+# Returns
+An `n` dimensional array where each element is the result of the product v̲ M̲̲
+w̲ for the corresponding vectors and matrix.
+
+# Notes
+This function uses the `eachslice` and `eachcol` functions to extract the slices
+of `M` and the columns of `w`, respectively. It then uses a list comprehension
+to perform the vector-matrix multiplication for each pair of slices, and finally
+computes the element-wise multiplication of the resulting matrix with `v` and
+sums over the dimensions to obtain the final result.
+"""
 function vec_mat_vec_batched(
     v::AbstractMatrix{T},
     M::AbstractArray{S,3},
     w::AbstractMatrix{T},
-) where {T<:TaylorDiff.TaylorScalar{Float32,2}, S<:Number}
+) where {T<:TaylorDiff.TaylorScalar{Float32,2},S<:Number}
     # Extract each slice of M
     M_slices = eachslice(M, dims=3)
     # Extract each vector of w
