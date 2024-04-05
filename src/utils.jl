@@ -15,10 +15,6 @@ import Distances
 
 # Import library to use Ellipsis Notation
 using EllipsisNotation
-using OMEinsum
-
-# Import lobary to conditionally load functions when GPUs are available
-import Requires
 
 # Import library for random sampling
 import Distributions

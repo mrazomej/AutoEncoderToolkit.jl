@@ -17,7 +17,7 @@ using ...RHVAEs: RHVAE
 using ...RHVAEs: metric_tensor
 
 # Import functions from utils module
-using ...utils: vec_mat_vec_batched, vec_mat_vec_loop
+using ...utils: vec_mat_vec_batched
 
 # ==============================================================================
 # > Chen, N. et al. Metrics for Deep Generative Models. in Proceedings of the
@@ -341,7 +341,6 @@ end # function
         riemannian_metric::AbstractArray,
         curve_velocity::AbstractArray,
         t::AbstractVector;
-        vec_mat_vec::Function=vec_mat_vec_batched
     )
 
 Function to compute the (discretized) integral defining the length of a curve γ̲
@@ -368,13 +367,6 @@ constant, thus, the time points `t` must be equally spaced.
   the corresponding time point.
 - `t::AbstractVector`: Vector of time points at which the curve is sampled.
 
-## Optional Keyword Arguments
-- `vec_mat_vec::Function=vec_mat_vec_batched`: Function to compute the product
-  of a vector with a matrix with a vector. Default is `vec_mat_vec_batched`, but
-  also accepts `vec_mat_vec_loop`. The former is faster since it uses batched
-  operations, the latter is necessary for automatic differentiation with
-  `Zygote.jl` over `TaylorDiff.jl`.
-
 # Returns
 - `Length::Number`: Approximation of the Length for the path on the manifold.
 """
@@ -382,13 +374,14 @@ function curve_length(
     riemannian_metric::AbstractArray,
     curve_velocity::AbstractArray,
     t::AbstractVector;
-    vec_mat_vec::Function=vec_mat_vec_batched
 )
     # Compute Δt
     Δt = t[2] - t[1]
 
     # Compute γ̲̇ᵀ G̲̲ γ̲̇ 
-    γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec(curve_velocity, riemannian_metric, curve_velocity)
+    γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec_batched(
+        curve_velocity, riemannian_metric, curve_velocity
+    )
 
     return sum(sqrt.(γ̲̇ᵀ_G_γ̲̇) .* Δt)
 end # function
@@ -402,7 +395,6 @@ end # function
         riemannian_metric::AbstractArray,
         curve_velocity::AbstractArray,
         t::AbstractVector;
-        vec_mat_vec::Function=vec_mat_vec_batched
     )
 
 Function to compute the (discretized) integral defining the energy of a curve γ̲
@@ -429,13 +421,6 @@ constant, thus, the time points `t` must be equally spaced.
   the corresponding time point.
 - `t::AbstractVector`: Vector of time points at which the curve is sampled.
 
-## Optional Keyword Arguments
-- `vec_mat_vec::Function=vec_mat_vec_batched`: Function to compute the product
-  of a vector with a matrix with a vector. Default is `vec_mat_vec_batched`, but
-  also accepts `vec_mat_vec_loop`. The former is faster since it uses batched
-  operations, the latter is necessary for automatic differentiation with
-  `Zygote.jl` over `TaylorDiff.jl`.
-
 # Returns
 - `Energy::Number`: Approximation of the Energy for the path on the manifold.
 """
@@ -443,13 +428,14 @@ function curve_energy(
     riemannian_metric::AbstractArray,
     curve_velocity::AbstractArray,
     t::AbstractVector;
-    vec_mat_vec::Function=vec_mat_vec_batched
 )
     # Compute Δt
     Δt = t[2] - t[1]
 
     # Compute γ̲̇ᵀ G̲̲ γ̲̇ 
-    γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec(curve_velocity, riemannian_metric, curve_velocity)
+    γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec_batched(
+        curve_velocity, riemannian_metric, curve_velocity
+    )
 
     return sum(γ̲̇ᵀ_G_γ̲̇ .* Δt) / 2
 end # function
@@ -465,7 +451,6 @@ end # function
         t::AbstractVector;
         curve_velocity::Function=curve_velocity_TaylorDiff,
         curve_integral::Function=curve_length,
-        vec_mat_vec::Function=vec_mat_vec_loop,
     )
 
 Function to compute the loss for a given curve on a Riemmanian manifold. The
@@ -484,11 +469,6 @@ loss is defined as the integral over the curve, computed using the provided
   `curve_velocity_finitediff`.
 - `curve_integral::Function=curve_length`: Function to compute the integral over
   the curve. Default is `curve_length`. Also accepts `curve_energy`.
-- `vec_mat_vec::Function=vec_mat_vec_loop`: Function to compute the product of a
-  vector with a matrix with a vector. Default is `vec_mat_vec_loop`. This
-  function is used in the computation of the integral over the curve. Also
-  accepts `vec_mat_vec_batched`. But this latter is not compatible with
-  `curve_velocity_TaylorDiff`.
 
 # Returns
 - `Loss::Number`: The computed loss for the given curve.
@@ -507,7 +487,6 @@ function loss(
     t::AbstractVector;
     curve_velocity::Function=curve_velocity_finitediff,
     curve_integral::Function=curve_length,
-    vec_mat_vec::Function=vec_mat_vec_loop,
 )
     # Compute the geodesic curve
     z_mat = curve(t)
@@ -519,7 +498,7 @@ function loss(
     γ̇ = curve_velocity(curve, t)
 
     # Compute and return the integral over the curve
-    return curve_integral(G, γ̇, t; vec_mat_vec=vec_mat_vec)
+    return curve_integral(G, γ̇, t)
 end # function
 
 # ------------------------------------------------------------------------------
