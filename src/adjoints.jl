@@ -9,6 +9,8 @@ using ChainRulesCore
 # Import CUDA
 using CUDA
 
+using LinearAlgebra
+
 using ..utils: vec_to_ltri, vec_mat_vec_batched
 # ==============================================================================
 # Define Zygote.@adjoint for FillArrays.fill
@@ -262,52 +264,4 @@ function ChainRulesCore.rrule(
 
     # Return the lower triangular matrix and the pullback function
     return ltri, vec_to_ltri_pullback
-end
-
-# ==============================================================================
-# Define ChainRulesCore rrules for 
-# ==============================================================================
-
-function ChainRulesCore.rrule(
-    ::typeof(NNlib.batched_vec), 
-    M::CUDA.CuArray{S,3}, 
-    w::CUDA.CuMatrix{T}
-) where {T<:TaylorDiff.TaylorScalar{Float32,2}, S<:Number}
-    # Compute the result of batched_vec
-    Mw = NNlib.batched_vec(M, w)
-    
-    # Define the pullback function
-    function batched_vec_pullback(M̄w)
-        # Extract the coefficients and order from w
-        w_coeffs = reinterpret(Float32, w)[1:2:end, :]
-        w_order = reinterpret(Float32, w)[2:2:end, :]
-        
-        # Extract the coefficients and order from M̄w
-        M̄w_coeffs = reinterpret(Float32, M̄w)[1:2:end, :]
-        M̄w_order = reinterpret(Float32, M̄w)[2:2:end, :]
-        
-        # Compute gradient w.r.t. M
-        M̄ = CUDA.zeros(S, size(M))
-        CUDA.CUBLAS.gemv_strided_batched!(
-            'T', CUDA.one(S), M, M̄w_coeffs, CUDA.zero(S), M̄
-        )
-        CUDA.CUBLAS.gemv_strided_batched!(
-            'T', CUDA.one(S), M, M̄w_order, CUDA.one(S), M̄
-        )
-        
-        # Compute gradient w.r.t. w
-        w̄_coeffs = CUDA.zeros(Float32, size(w_coeffs))
-        w̄_order = CUDA.zeros(Float32, size(w_order))
-        CUDA.CUBLAS.gemv_strided_batched!(
-            'N', CUDA.one(S), M, M̄w_coeffs, CUDA.zero(S), w̄_coeffs
-        )
-        CUDA.CUBLAS.gemv_strided_batched!(
-            'N', CUDA.one(S), M, M̄w_order, CUDA.zero(S), w̄_order
-        )
-        w̄ = reinterpret(T, vcat(w̄_coeffs, w̄_order))
-        
-        return (NoTangent(), M̄, w̄)
-    end
-    
-    return Mw, batched_vec_pullback
 end

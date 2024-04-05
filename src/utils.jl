@@ -15,6 +15,7 @@ import Distances
 
 # Import library to use Ellipsis Notation
 using EllipsisNotation
+using OMEinsum
 
 # Import lobary to conditionally load functions when GPUs are available
 import Requires
@@ -565,117 +566,24 @@ function vec_mat_vec_batched(
     return vec(sum(v .* Flux.batched_vec(M, w), dims=1))
 end # function
 
-# ------------------------------------------------------------------------------
+function vec_mat_vec_batched(
+    v::AbstractMatrix{T},
+    M::AbstractArray{S,3},
+    w::AbstractMatrix{T},
+) where {T<:TaylorDiff.TaylorScalar{Float32,2}, S<:Number}
+    # Extract each slice of M
+    M_slices = eachslice(M, dims=3)
+    # Extract each vector of w
+    w_slices = eachcol(w)
 
-@doc raw"""
-    vec_mat_vec_loop(
-        v::AbstractVector, 
-        M::AbstractMatrix, 
-        w::AbstractVector
+    # Perform vector-matrix multiplication  M̲̲ w̲ 
+    Mw = reduce(
+        hcat,
+        [(M_ * w_) for (M_, w_) in zip(M_slices, w_slices)]
     )
 
-Compute the product of a vector, a matrix, and another vector in the form v̲ᵀ
-M̲̲ w̲ using loops.
-
-This function takes two vectors `v` and `w`, and a matrix `M`, and computes the
-product v̲ M̲̲ w̲ using nested loops. This method might be slower than using
-batched operations, but it is needed when performing differentiation with
-`Zygote.jl` over `TaylorDiff.jl`.
-
-# Arguments
-- `v::AbstractVector`: A `d` dimensional vector.
-- `M::AbstractMatrix`: A `d×d` matrix.
-- `w::AbstractVector`: A `d` dimensional vector.
-
-# Returns
-A scalar which is the result of the product v̲ M̲̲ w̲ for the corresponding
-vectors and matrix.
-
-# Notes
-This function uses nested loops to perform the multiplication of the matrix `M`
-with the vector `w`. The resulting vector is then element-wise multiplied with
-the vector `v` and summed over the dimensions to obtain the final result. This
-method might be slower than using batched operations, but it is needed when
-performing differentiation with `Zygote.jl` over `TaylorDiff.jl`.
-"""
-function vec_mat_vec_loop(
-    v::AbstractVector,
-    M::AbstractMatrix,
-    w::AbstractVector
-)
-    # Check dimensions to see if the multiplication is possible
-    if size(v, 1) ≠ size(M, 1) || size(M, 2) ≠ size(w, 1)
-        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
-    end # if
-    # Compute v̲ M̲̲ w̲ in a loop
-    return sum(
-        begin
-            v[i] * M[i, j] * w[j]
-        end
-        for i in axes(v, 1)
-        for j in axes(w, 1)
-    )
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    vec_mat_vec_loop(
-        v::AbstractMatrix, 
-        M::AbstractArray, 
-        w::AbstractMatrix
-    )
-
-Compute the product of vectors and matrices in the form v̲ᵀ M̲̲ w̲ using loops.
-
-This function takes two matrices `v` and `w`, and a 3D array `M`, and computes
-the product v̲ M̲̲ w̲ using nested loops. This method might be slower than using
-batched operations, but it is needed when performing differentiation with
-`Zygote.jl` over `TaylorDiff.jl`.
-
-# Arguments
-- `v::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
-  and `n` is the number of vectors.
-- `M::AbstractArray`: A `d×d×n` array, where `d` is the dimension of the
-  matrices and `n` is the number of matrices.
-- `w::AbstractMatrix`: A `d×n` matrix, where `d` is the dimension of the vectors
-  and `n` is the number of vectors.
-
-# Returns
-A `1×n` matrix where each element is the result of the product v̲ M̲̲ w̲ for the
-corresponding vectors and matrix.
-
-# Notes
-This function uses nested loops to perform the multiplication of the matrices in
-`M` with the vectors in `w`. The resulting vectors are then element-wise
-multiplied with the vectors in `v` and summed over the dimensions to obtain the
-final result. This method might be slower than using batched operations, but it
-is needed when performing differentiation with `Zygote.jl` over `TaylorDiff.jl`.
-"""
-function vec_mat_vec_loop(
-    v::AbstractMatrix,
-    M::AbstractArray{<:Any,3},
-    w::AbstractMatrix
-)
-    # Check dimensions to see if the multiplication is possible
-    if size(v, 1) ≠ size(M, 1) || size(M, 2) != size(w, 1)
-        throw(DimensionMismatch("Dimensions of vectors and matrices do not match"))
-    end # if
-
-    # Compute v̲ M̲̲ w̲ in a loop
-    return [
-        begin
-            sum(
-                begin
-                    v[i, k] *
-                    M[i, j, k] *
-                    w[j, k]
-                end
-                for i in axes(v, 1)
-                for j in axes(w, 1)
-            )
-        end for k in axes(v, 2)
-    ]
+    # Compute v̲ M̲̲ w̲ in a broadcasted manner
+    return vec(sum(v .* Mw, dims=1))
 end # function
 
 ## =============================================================================

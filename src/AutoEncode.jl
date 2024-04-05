@@ -79,21 +79,15 @@ include("layers.jl")
 # Include Utils module
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-include("nnlib.jl")
-
 module utils
 include("utils.jl")
 end # submodule
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-# Include functions defined in adjoints.jl
+# Include functions defined in adjoints.jl for custom AutoDiff rules
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
 include("adjoints.jl")
-
-
-# Temporary fix for some TaylorDiff limitations
-# include("diffgeo/primitives.jl")
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Add AEs module
