@@ -7,6 +7,9 @@ import TaylorDiff
 import Flux
 import NNlib
 
+# Import basic math
+import LinearAlgebra
+
 # Import library to use Ellipsis Notation
 using EllipsisNotation
 
@@ -162,7 +165,7 @@ respectively.
 # Note
 Ensure that each `t` in the array is within the interval [0, 1].
 """
-function (g::NeuralGeodesic)(t::AbstractVector{<:Number})
+function (g::NeuralGeodesic)(t::AbstractVector)
     # Check that every t is within the interval [0, 1]
     if any(t .< 0.0f0 - 2 * cbrt(eps(Float32))) ||
        any(t .> 1 + 2 * cbrt(eps(Float32)))
@@ -179,7 +182,7 @@ function (g::NeuralGeodesic)(t::AbstractVector{<:Number})
 
     # Compute scale and shift parameters
     scale = @. (g.z_init - g.z_end) / (ẑ_init - ẑ_end)
-    shift = @. ((g.z_init * ẑ_end) - (g.z_end .* ẑ_init)) / (ẑ_init - ẑ_end)
+    shift = @. ((g.z_init * ẑ_end) - (g.z_end * ẑ_init)) / (ẑ_init - ẑ_end)
 
     # Return shifted and scaled output
     return @. (scale * g_t) - shift
@@ -351,7 +354,7 @@ on a Riemmanina manifold. The length is defined as
 where γ̲̇(t) defines the velocity of the parametric curve, and G̲̲ is the
 Riemmanian metric tensor. For this function, we approximate the integral as
 
-    L(γ̲) ≈ ∑ᵢ Δt √(⟨γ̲̇(tᵢ)ᵀ G̲̲ (γ̲(tᵢ+1) γ̲̇(tᵢ))⟩),
+    L(γ̲) ≈ ∑ᵢ Δt √(⟨γ̲̇(tᵢ)ᵀ G̲̲ (γ̲(tᵢ+1)) γ̲̇(tᵢ))⟩),
 
 where Δt is the time step between points. Note that this Δt is assumed to be
 constant, thus, the time points `t` must be equally spaced.
@@ -375,15 +378,12 @@ function curve_length(
     curve_velocity::AbstractArray,
     t::AbstractVector;
 )
-    # Compute Δt
-    Δt = t[2] - t[1]
-
     # Compute γ̲̇ᵀ G̲̲ γ̲̇ 
     γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec_batched(
         curve_velocity, riemannian_metric, curve_velocity
     )
 
-    return sum(sqrt.(γ̲̇ᵀ_G_γ̲̇) .* Δt)
+    return sum(sqrt.(γ̲̇ᵀ_G_γ̲̇)) / length(t)
 end # function
 
 # ------------------------------------------------------------------------------
@@ -429,15 +429,12 @@ function curve_energy(
     curve_velocity::AbstractArray,
     t::AbstractVector;
 )
-    # Compute Δt
-    Δt = t[2] - t[1]
-
     # Compute γ̲̇ᵀ G̲̲ γ̲̇ 
     γ̲̇ᵀ_G_γ̲̇ = vec_mat_vec_batched(
         curve_velocity, riemannian_metric, curve_velocity
     )
 
-    return sum(γ̲̇ᵀ_G_γ̲̇ .* Δt) / 2
+    return sum(γ̲̇ᵀ_G_γ̲̇) / (2 * length(t))
 end # function
 
 # ==============================================================================
@@ -497,9 +494,14 @@ function loss(
     # Compute the curve velocity
     γ̇ = curve_velocity(curve, t)
 
-    # Compute and return the integral over the curve
-    return curve_integral(G, γ̇, t)
-end # function
+    # Compute the integral over the curve
+    L = curve_integral(G, γ̇, t)
+
+    # Combine the loss and regularization terms
+    total_loss = L
+
+    return total_loss
+end
 
 # ------------------------------------------------------------------------------
 
