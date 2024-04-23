@@ -534,6 +534,7 @@ is used to map to the latent space mean `µ` and standard deviation `σ`.
 enc = JointEncoder(
     Flux.Chain(Dense(784, 400, relu)), Flux.Dense(400, 20), Flux.Dense(400, 20)
 )
+```
 """
 struct JointEncoder <: AbstractGaussianLinearEncoder
     encoder::Flux.Chain
@@ -733,8 +734,7 @@ Gaussian distribution with zero mean and standard deviation `σ`. The log-prior
 is computed using the formula for the log-prior of a Gaussian distribution.
 
 # Note
-Ensure the dimension of `z` matches the expected dimensionality of the latent
-# space.
+Ensure the dimension of `z` matches the expected dimensionality of the latent space.
 """
 function spherical_logprior(
     z::AbstractMatrix,

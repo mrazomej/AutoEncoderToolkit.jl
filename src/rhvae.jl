@@ -79,6 +79,11 @@ space of a Riemannian Hamiltonian Variational AutoEncoder (RHVAE).
 The outputs of `diag` and `lower` are used to construct a lower-triangular
 matrix used to compute the Riemannian metric tensor in latent space.
 
+# Note
+If the dimension of the latent space is `n`, the number of neurons in the output
+layer of `diag` must be `n`, and the number of neurons in the output layer of
+`lower` must be `n * (n - 1) ÷ 2`.
+
 # Example
 ```julia
 mlp = Flux.Chain(Dense(10, 10, relu), Dense(10, 10, relu))

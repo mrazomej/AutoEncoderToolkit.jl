@@ -94,7 +94,7 @@ Flux.@functor MutualInfoChain
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    (mi::MutualInfoChain)(x::AbstractArray)
+    (mi::MutualInfoChain)(x::AbstractArray, z::AbstractVecOrMat)
 
 Forward pass function for the MutualInfoChain, which applies the MLP to an input
 x.

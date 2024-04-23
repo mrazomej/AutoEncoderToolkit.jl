@@ -467,7 +467,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    train!(vae, x, opt; loss_function, loss_kwargs, verbose, loss_return)
+    train!(mmdvae, x, opt; loss_function, loss_kwargs, verbose, loss_return)
 
 Customized training function to update parameters of a variational autoencoder
 given a specified loss function.
@@ -496,7 +496,6 @@ Trains the MMDVAE by:
 1. Computing the gradient of the loss w.r.t the MMDVAE parameters.
 2. Updating the MMDVAE parameters using the optimizer.
 """
-
 function train!(
     mmdvae::MMDVAE,
     x::AbstractArray,
@@ -528,7 +527,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    train!(vae, x_in, x_out, opt; loss_function, loss_kwargs, verbose, loss_return)
+    train!(mmdvae, x_in, x_out, opt; loss_function, loss_kwargs, verbose, loss_return)
 
 Customized training function to update parameters of a variational autoencoder
 given a specified loss function.
@@ -559,7 +558,6 @@ Trains the MMDVAE by:
 1. Computing the gradient of the loss w.r.t the MMDVAE parameters.
 2. Updating the MMDVAE parameters using the optimizer.
 """
-
 function train!(
     mmdvae::MMDVAE,
     x_in::AbstractArray,

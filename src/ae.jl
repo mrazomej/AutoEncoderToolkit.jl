@@ -42,7 +42,7 @@ end # struct
 Flux.@functor AE
 
 @doc raw"""
-    (ae::AE{Encoder, Decoder})(x::AbstractVecOrMat{Float32}; latent::Bool=false)
+    (ae::AE{Encoder, Decoder})(x::AbstractArray; latent::Bool=false)
 
 Processes the input data `x` through the autoencoder (AE) that consists of an
 encoder and a decoder.
@@ -71,8 +71,7 @@ it also returns the latent representation.
 Ensure the input data `x` matches the expected input dimensionality for the
 encoder in the AE.
 """
-
-function (ae::AE{Encoder,Decoder})(
+function (ae::AE)(
     x::AbstractArray; latent::Bool=false
 )
     # Run input through encoder to get encoded representation
