@@ -564,6 +564,50 @@ function vec_mat_vec_batched(
     return vec(sum(v .* Flux.batched_vec(M, w), dims=1))
 end # function
 
+# ------------------------------------------------------------------------------
+@doc raw"""
+    vec_mat_vec_batched(
+        v::AbstractVector{T}, 
+        M::AbstractMatrix{S}, 
+        w::AbstractVector{T}
+    ) where {T<:TaylorDiff.TaylorScalar{Float32,2},S<:Number}
+
+Compute the product of a vector and a matrix in the form v̲ᵀ M̲ w̲ for a
+specific type of matrix and vectors.
+
+This function takes two vectors `v` and `w` of type
+`TaylorDiff.TaylorScalar{Float32,2}`, and a matrix `M` of type `Number`, and
+computes the product v̲ M̲ w̲. The computation is performed by first performing
+the matrix-vector multiplication M̲ w̲, and then computing the dot product of
+the resulting vector with `v`.
+
+# Arguments
+- `v::AbstractVector{T}`: A `d` dimensional vector. `T` is a subtype of
+  `TaylorDiff.TaylorScalar{Float32,2}`.
+- `M::AbstractMatrix{S}`: A `d×d` matrix. `S` is a subtype of `Number`.
+- `w::AbstractVector{T}`: A `d` dimensional vector. `T` is a subtype of
+  `TaylorDiff.TaylorScalar{Float32,2}`.
+
+# Returns
+A scalar which is the result of the product v̲ M̲ w̲.
+
+# Notes
+This function uses the `dot` function to compute the final dot product.
+"""
+function vec_mat_vec_batched(
+    v::AbstractVector{T},
+    M::AbstractMatrix{S},
+    w::AbstractVector{T},
+) where {T<:TaylorDiff.TaylorScalar{Float32,2},S<:Number}
+    # Perform matrix-vector multiplication M̲ w̲ 
+    Mw = M * w
+
+    # Compute v̲ M̲ w̲
+    return sum(v .* Mw)
+end
+
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     vec_mat_vec_batched(
         v::AbstractMatrix{T}, 
