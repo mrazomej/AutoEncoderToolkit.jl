@@ -569,7 +569,7 @@ function ∇potential_energy(
         adtype = :finite
     elseif adtype === nothing
         # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :TaylorDiff
+        adtype = :finite
     elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hhvae))
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇energyhvae))")
@@ -649,7 +649,7 @@ function ∇potential_energy(
         adtype = :finite
     elseif adtype === nothing
         # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :TaylorDiff
+        adtype = :finite
     elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hhvae))
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇energyhvae))")

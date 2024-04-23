@@ -2197,7 +2197,7 @@ function ∇hamiltonian(
         adtype = :finite
     elseif adtype === nothing
         # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :TaylorDiff
+        adtype = :finite
     elseif (typeof(adtype) <: Symbol) && (adtype ∉ keys(∇Hrhvae))
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
@@ -2298,7 +2298,7 @@ function ∇hamiltonian(
         adtype = :finite
     elseif adtype === nothing
         # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :TaylorDiff
+        adtype = :finite
     elseif (typeof(adtype) <: Symbol) && (adtype ∉ keys(∇Hrhvae))
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
