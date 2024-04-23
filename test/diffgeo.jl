@@ -2,7 +2,6 @@ println("\nTesting AutoEncode.diffgeo.NeuralGeodesics module...\n")
 # Import AutoEncode.jl module to be tested
 import AutoEncode.diffgeo.NeuralGeodesics
 import AutoEncode.RHVAEs: RHVAE, metric_tensor
-import AutoEncode.utils: vec_mat_vec_batched, vec_mat_vec_loop
 
 # Import Flux library
 import Flux
@@ -141,13 +140,6 @@ end # @testset "Curve velocity computation"
     @testset "curve_length" begin
         result = NeuralGeodesics.curve_length(
             riemannian_metric, curve_velocity, t;
-            vec_mat_vec=vec_mat_vec_batched
-        )
-        @test isa(result, Number)
-
-        result = NeuralGeodesics.curve_length(
-            riemannian_metric, curve_velocity, t;
-            vec_mat_vec=vec_mat_vec_loop
         )
         @test isa(result, Number)
     end # @testset "curve_length"
@@ -155,13 +147,6 @@ end # @testset "Curve velocity computation"
     @testset "curve_energy" begin
         result = NeuralGeodesics.curve_energy(
             riemannian_metric, curve_velocity, t;
-            vec_mat_vec=vec_mat_vec_batched
-        )
-        @test isa(result, Number)
-
-        result = NeuralGeodesics.curve_energy(
-            riemannian_metric, curve_velocity, t;
-            vec_mat_vec=vec_mat_vec_loop
         )
         @test isa(result, Number)
     end # @testset "curve_energy"
@@ -268,9 +253,7 @@ AutoEncode.RHVAEs.update_metric!(rhvae)
     )
     @test isa(result, Number)
 
-    result = NeuralGeodesics.loss(
-        curve, rhvae, t; vec_mat_vec=vec_mat_vec_batched
-    )
+    result = NeuralGeodesics.loss(curve, rhvae, t;)
     @test isa(result, Number)
 end # @testset "Loss function"
 

@@ -166,38 +166,6 @@ end
 
 ## =============================================================================
 
-@testset "vec_mat_vec_loop tests" begin
-    @testset "vector inputs" begin
-        v = [1, 2, 3]
-        M = [4 5 6; 7 8 9; 10 11 12]
-        w = [13, 14, 15]
-        expected = LinearAlgebra.dot(v, M, w)
-        @test typeof(utils.vec_mat_vec_loop(v, M, w)) <: Number
-        @test utils.vec_mat_vec_loop(v, M, w) == expected
-    end
-
-    @testset "matrix inputs" begin
-        v = [1 4; 2 5; 3 6]
-        M = cat([4 7 10; 5 8 11; 6 9 12], [13 16 19; 14 17 20; 15 18 21], dims=3)
-        w = [22 25; 23 26; 24 27]
-        expected = [
-            LinearAlgebra.dot(v[:, i], M[:, :, i], w[:, i]) for i in axes(v, 2)
-        ]
-
-        @test typeof(utils.vec_mat_vec_loop(v, M, w)) <: AbstractVector
-        @test utils.vec_mat_vec_loop(v, M, w) == expected
-    end
-
-    @testset "dimension mismatch" begin
-        v = [1, 2, 3]
-        M = [4 5 6; 7 8 9]
-        w = [10, 11, 12]
-        @test_throws DimensionMismatch utils.vec_mat_vec_loop(v, M, w)
-    end
-end
-
-## =============================================================================
-
 # Define a test set for the centroids_kmeans function
 @testset "centroids_kmeans tests" begin
     # Define a test set for the case without assignments

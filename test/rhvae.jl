@@ -56,7 +56,7 @@ z_rand = f.(x_rand, y_rand)
 data = Matrix(hcat(x_rand, y_rand, z_rand)')
 
 # Build single and batch data
-x_vector = @view data[:, 1]
+x_vector = data[:, 1]
 x_matrix = data
 
 ## =============================================================================
@@ -167,11 +167,11 @@ decoders = [
 
 # Define data and parameters to use througout the tests
 x_mat = data
-x_vec = @view data[:, 1]
+x_vec = data[:, 1]
 z_mat = joint_log_encoder(x_mat).µ
-z_vec = @view z_mat[:, 1]
+z_vec = z_mat[:, 1]
 ρ_mat = z_mat
-ρ_vec = @view ρ_mat[:, 1]
+ρ_vec = ρ_mat[:, 1]
 T = 0.5f0
 λ = 0.1f0
 

@@ -3,7 +3,7 @@ println("\nTestin Encoders...\n")
 using AutoEncode
 
 # Import necessary libraries for testing
-import Flux
+using Flux
 import LinearAlgebra
 import Random
 import StatsBase
