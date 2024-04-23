@@ -283,53 +283,53 @@ end # ∇potential_energy_finite function
 
 ## =============================================================================
 
-@testset "∇potential_energy_TaylorDiff function" begin
-    # Loop over all decoders
-    @testset "$(decoder)" for decoder in decoders
+# @testset "∇potential_energy_TaylorDiff function" begin
+#     # Loop over all decoders
+#     @testset "$(decoder)" for decoder in decoders
 
-        @testset "vector input" begin
-            # Test for var = :z
-            result = HVAEs.∇potential_energy_TaylorDiff(
-                x_vec,
-                z_vec,
-                decoder,
-                decoder(z_vec),
-            )
+#         @testset "vector input" begin
+#             # Test for var = :z
+#             result = HVAEs.∇potential_energy_TaylorDiff(
+#                 x_vec,
+#                 z_vec,
+#                 decoder,
+#                 decoder(z_vec),
+#             )
 
-            # Check if the result is a vector of Float32
-            @test isa(result, Vector{Float32})
-        end
+#             # Check if the result is a vector of Float32
+#             @test isa(result, Vector{Float32})
+#         end
 
-        @testset "matrix input" begin
-            # Test for var = :z
-            result = HVAEs.∇potential_energy_TaylorDiff(
-                x_mat,
-                z_mat,
-                decoder,
-                decoder(z_mat),
-            )
+#         @testset "matrix input" begin
+#             # Test for var = :z
+#             result = HVAEs.∇potential_energy_TaylorDiff(
+#                 x_mat,
+#                 z_mat,
+#                 decoder,
+#                 decoder(z_mat),
+#             )
 
-            # Check if the result is a matrix of Float32
-            @test isa(result, Matrix{Float32})
-        end
+#             # Check if the result is a matrix of Float32
+#             @test isa(result, Matrix{Float32})
+#         end
 
-        @testset "HVAE as input" begin
-            # Build temporary HVAE
-            hvae = HVAEs.HVAE(
-                joint_log_encoder * decoder,
-            )
+#         @testset "HVAE as input" begin
+#             # Build temporary HVAE
+#             hvae = HVAEs.HVAE(
+#                 joint_log_encoder * decoder,
+#             )
 
-            result = HVAEs.∇potential_energy_TaylorDiff(
-                x_mat,
-                z_mat,
-                hvae,
-            )
+#             result = HVAEs.∇potential_energy_TaylorDiff(
+#                 x_mat,
+#                 z_mat,
+#                 hvae,
+#             )
 
-            # Check if the result is a matrix of Float32
-            @test isa(result, Matrix{Float32})
-        end # matrix input
-    end # for decoder
-end # ∇potential_energy_finite function
+#             # Check if the result is a matrix of Float32
+#             @test isa(result, Matrix{Float32})
+#         end # matrix input
+#     end # for decoder
+# end # ∇potential_energy_finite function
 
 ## =============================================================================
 

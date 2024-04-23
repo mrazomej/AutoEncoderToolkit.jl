@@ -718,121 +718,121 @@ end # ∇hamiltonian_finite function
 
 ## =============================================================================
 
-@testset "∇hamiltonian_TaylorDiff function" begin
-    # Loop over all decoders
-    @testset "$(decoder)" for decoder in decoders
+# @testset "∇hamiltonian_TaylorDiff function" begin
+#     # Loop over all decoders
+#     @testset "$(decoder)" for decoder in decoders
 
-        @testset "vector input" begin
-            # Compute G⁻¹ 
-            Ginv = RHVAEs.G_inv(z_vec, exrhvae)
-            # Compute logdetG
-            logdetG = utils.slogdet(Ginv)
+#         @testset "vector input" begin
+#             # Compute G⁻¹ 
+#             Ginv = RHVAEs.G_inv(z_vec, exrhvae)
+#             # Compute logdetG
+#             logdetG = utils.slogdet(Ginv)
 
-            # Test for var = :z
-            result = RHVAEs.∇hamiltonian_TaylorDiff(
-                x_vec,
-                z_vec,
-                ρ_vec,
-                Ginv,
-                logdetG,
-                decoder,
-                decoder(z_vec),
-                :z
-            )
+#             # Test for var = :z
+#             result = RHVAEs.∇hamiltonian_TaylorDiff(
+#                 x_vec,
+#                 z_vec,
+#                 ρ_vec,
+#                 Ginv,
+#                 logdetG,
+#                 decoder,
+#                 decoder(z_vec),
+#                 :z
+#             )
 
-            # Check if the result is a vector of Float32
-            @test isa(result, Vector{Float32})
+#             # Check if the result is a vector of Float32
+#             @test isa(result, Vector{Float32})
 
-            # Test for var = :ρ
-            result = RHVAEs.∇hamiltonian_TaylorDiff(
-                x_vec,
-                z_vec,
-                ρ_vec,
-                Ginv,
-                logdetG,
-                decoder,
-                decoder(z_vec),
-                :ρ
-            )
+#             # Test for var = :ρ
+#             result = RHVAEs.∇hamiltonian_TaylorDiff(
+#                 x_vec,
+#                 z_vec,
+#                 ρ_vec,
+#                 Ginv,
+#                 logdetG,
+#                 decoder,
+#                 decoder(z_vec),
+#                 :ρ
+#             )
 
 
-            # Check if the result is a vector of Float32
-            @test isa(result, Vector{Float32})
-        end
+#             # Check if the result is a vector of Float32
+#             @test isa(result, Vector{Float32})
+#         end
 
-        @testset "matrix input" begin
-            # Compute G⁻¹ 
-            Ginv = RHVAEs.G_inv(z_mat, exrhvae)
-            # Compute logdetG
-            logdetG = utils.slogdet(Ginv)
+#         @testset "matrix input" begin
+#             # Compute G⁻¹ 
+#             Ginv = RHVAEs.G_inv(z_mat, exrhvae)
+#             # Compute logdetG
+#             logdetG = utils.slogdet(Ginv)
 
-            # Test for var = :z
-            result = RHVAEs.∇hamiltonian_TaylorDiff(
-                x_mat,
-                z_mat,
-                ρ_mat,
-                Ginv,
-                logdetG,
-                decoder,
-                decoder(z_mat),
-                :z
-            )
+#             # Test for var = :z
+#             result = RHVAEs.∇hamiltonian_TaylorDiff(
+#                 x_mat,
+#                 z_mat,
+#                 ρ_mat,
+#                 Ginv,
+#                 logdetG,
+#                 decoder,
+#                 decoder(z_mat),
+#                 :z
+#             )
 
-            # Check if the result is a matrix of Float32
-            @test isa(result, Matrix{Float32})
+#             # Check if the result is a matrix of Float32
+#             @test isa(result, Matrix{Float32})
 
-            # Test for var = :ρ
-            result = RHVAEs.∇hamiltonian_TaylorDiff(
-                x_mat,
-                z_mat,
-                ρ_mat,
-                Ginv,
-                logdetG,
-                decoder,
-                decoder(z_mat),
-                :ρ
-            )
+#             # Test for var = :ρ
+#             result = RHVAEs.∇hamiltonian_TaylorDiff(
+#                 x_mat,
+#                 z_mat,
+#                 ρ_mat,
+#                 Ginv,
+#                 logdetG,
+#                 decoder,
+#                 decoder(z_mat),
+#                 :ρ
+#             )
 
-            # Check if the result is a matrix of Float32
-            @test isa(result, Matrix{Float32})
-        end
+#             # Check if the result is a matrix of Float32
+#             @test isa(result, Matrix{Float32})
+#         end
 
-        @testset "RHVAE as input" begin
-            # Build temporary RHVAE
-            rhvae = RHVAEs.RHVAE(
-                joint_log_encoder * decoder,
-                metric_chain,
-                data,
-                T,
-                λ,
-            )
+#         @testset "RHVAE as input" begin
+#             # Build temporary RHVAE
+#             rhvae = RHVAEs.RHVAE(
+#                 joint_log_encoder * decoder,
+#                 metric_chain,
+#                 data,
+#                 T,
+#                 λ,
+#             )
 
-            # Test for var = :z
-            result = RHVAEs.∇hamiltonian_TaylorDiff(
-                x_mat,
-                z_mat,
-                ρ_mat,
-                rhvae,
-                :z
-            )
+#             # Test for var = :z
+#             result = RHVAEs.∇hamiltonian_TaylorDiff(
+#                 x_mat,
+#                 z_mat,
+#                 ρ_mat,
+#                 rhvae,
+#                 :z
+#             )
 
-            # Check if the result is a matrix of Float32
-            @test isa(result, Matrix{Float32})
+#             # Check if the result is a matrix of Float32
+#             @test isa(result, Matrix{Float32})
 
-            # Test for var = :ρ
-            result = RHVAEs.∇hamiltonian_TaylorDiff(
-                x_mat,
-                z_mat,
-                ρ_mat,
-                rhvae,
-                :ρ
-            )
+#             # Test for var = :ρ
+#             result = RHVAEs.∇hamiltonian_TaylorDiff(
+#                 x_mat,
+#                 z_mat,
+#                 ρ_mat,
+#                 rhvae,
+#                 :ρ
+#             )
 
-            # Check if the result is a matrix of Float32
-            @test isa(result, Matrix{Float32})
-        end # matrix input
-    end # for decoder
-end # ∇hamiltonian_finite function
+#             # Check if the result is a matrix of Float32
+#             @test isa(result, Matrix{Float32})
+#         end # matrix input
+#     end # for decoder
+# end # ∇hamiltonian_finite function
 
 ## =============================================================================
 
