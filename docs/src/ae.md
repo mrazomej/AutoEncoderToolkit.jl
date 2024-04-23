@@ -1,4 +1,4 @@
-# AutoEncoder
+# [Deterministic Autoencoder] (@id AEsmodule)
 
 The deterministic autoencoders are a type of neural network that learns to embed
 high-dimensional data into a lower-dimensional space in a one-to-one fashion.

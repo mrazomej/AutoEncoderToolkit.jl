@@ -1,4 +1,4 @@
-# MMD-VAE (InfoVAE)
+# [MMD-VAE (InfoVAE)] (@id MMDVAEsmodule)
 
 The Maximum-Mean Discrepancy Variational Autoencoder (MMD-VAE) is a variant of
 the Variational Autoencoder (VAE) that adds an extra term to the evidence lower

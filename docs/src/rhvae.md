@@ -1,4 +1,4 @@
-# Riemannian Hamiltonian Variational Autoencoder
+# [Riemannian Hamiltonian Variational Autoencoder] (@id RHVAEsmodule)
 
 The Riemannian Hamiltonian Variational Autoencoder (RHVAE) is a variant of the
 Hamiltonian Variational Autoencoder (HVAE) that uses concepts from Riemannian

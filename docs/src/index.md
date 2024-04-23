@@ -141,15 +141,15 @@ This is the power of `AutoEncode.jl` and Julia's multiple dispatch!
 
 ## Implemented Autoencoders
 
-| model                   | module        | description                                                    |
-| ----------------------- | ------------- | -------------------------------------------------------------- |
-| AutoEncoder             | `AEs`         | Vanilla deterministic autoencoder                              |
-| Variational Autoencoder | `VAEs`        | Vanilla variational autoencoder                                |
-| β-VAE                   | `VAEs`        | beta-VAE to weigh the reconstruction vs. KL divergence in ELBO |
-| MMD-VAEs                | `MMDs`        | Maximum-Mean Discrepancy Variational Autoencoders              |
-| InfoMax-VAEs            | `InfoMaxVAEs` | Information Maximization Variational Autoencoders              |
-| Hamiltonian VAE         | `HVAEs`       | Hamiltonian Variational Autoencoders                           |
-| RH-VAE                  | `RHVAEs`      | Riemannian-Hamiltonian Variational Autoencoder                 |
+| model                      | module                                  | description                                                    |
+| -------------------------- | --------------------------------------- | -------------------------------------------------------------- |
+| Autoencoder                | [`AEs`](@ref AEsmodule)                 | Vanilla deterministic autoencoder                              |
+| Variational Autoencoder    | [`VAEs`](@ref VAEsmodule)               | Vanilla variational autoencoder                                |
+| β-VAE                      | [`VAEs`](@ref VAEsmodule)               | beta-VAE to weigh the reconstruction vs. KL divergence in ELBO |
+| MMD-VAEs                   | [`MMDs`](@ref MMDVAEsmodule)            | Maximum-Mean Discrepancy Variational Autoencoders              |]
+| InfoMax-VAEs               | [`InfoMaxVAEs`](@ref InfoMaxVAEsmodule) | Information Maximization Variational Autoencoders              |
+| Hamiltonian VAE            | [`HVAEs`](@ref HVAEsmodule)             | Hamiltonian Variational Autoencoders                           |
+| Riemannian Hamiltonian-VAE | [`RHVAEs`](@ref RHVAEsmodule)          | Riemannian-Hamiltonian Variational Autoencoder                 |
 
 !!! tip "Looking for contributors!" 
     If you are interested in contributing to the package to add a new model,

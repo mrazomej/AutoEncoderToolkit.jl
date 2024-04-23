@@ -1,4 +1,4 @@
-# β-Variational Autoencoder
+# [β-Variational Autoencoder] (@id VAEsmodule)
 
 Variational Autoencoders, first introduced by Kingma and Welling in 2014, are a
 type of generative model that learns to encode high-dimensional data into a

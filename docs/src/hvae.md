@@ -1,4 +1,4 @@
-# Hamiltonian Variational Autoencoder
+# [Hamiltonian Variational Autoencoder] (@id HVAEsmodule)
 
 The Hamiltonian Variational Autoencoder (HVAE) is a variant of the Variational
 autoencoder (VAE) that uses Hamiltonian dynamics to improve the sampling of the

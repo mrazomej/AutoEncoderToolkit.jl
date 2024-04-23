@@ -1,14 +1,14 @@
-# InfoMax VAE
+# [InfoMax VAE] (@id InfoMaxVAEsmodule)
 
 The InfoMax VAE is a variant of the Variational Autoencoder (VAE) that aims to
 explicitly account for the maximization of mutual information between the latent
 space representation and the input data. The main difference between the InfoMax
-VAE and the [MMD-VAE (InfoVAE)](@ref) is that rather than using the Maximum-Mean
-Discrepancy (MMD) as a measure of the "distance" between the latent space, the
-InfoMax VAE explicitly models the mutual information between latent
-representations and data inputs via a separate neural network. The loss function
-for this separate network then takes the form of a variational lower bound on
-the mutual information between the latent space and the input data.
+VAE and the [MMD-VAE (InfoVAE)](@ref MMDVAEsmodule) is that rather than using
+the Maximum-Mean Discrepancy (MMD) as a measure of the "distance" between the
+latent space, the InfoMax VAE explicitly models the mutual information between
+latent representations and data inputs via a separate neural network. The loss
+function for this separate network then takes the form of a variational lower
+bound on the mutual information between the latent space and the input data.
 
 Because of the need of this separate network, the [`InfoMaxVAE`](@ref
 InfoMaxVAE) struct in `AutoEncode.jl` takes two arguments to construct: the
