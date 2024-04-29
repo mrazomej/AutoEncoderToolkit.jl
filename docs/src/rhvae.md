@@ -15,6 +15,13 @@ VAEstruct) as well as a separate neural network used to compute the metric
 tensor. To facilitate the dispatch of the necessary functions associated with
 this second network, we also provide a [`MetricChain`](@ref MetricChain) struct.
 
+!!! warning
+    HVAEs require the computation of nested gradients. This means that the
+    AutoDiff framework must differentiate a function of an already AutoDiff
+    differentiated function. This is known to be problematic for `Julia`'s
+    AutoDiff backends. See [details below](@ref gradhamiltonian) to understand
+    how to we circumvent this problem.
+
 ## Reference
 
 > Chadebec, C., Mantoux, C. & Allassonnière, S. Geometry-Aware Hamiltonian
@@ -58,16 +65,15 @@ AutoEncode.RHVAEs.loss
 AutoEncode.RHVAEs.train!
 ```
 
-## [Computing the gradient of the potential energy] (@id rgradpotenergy)
+## [Computing the gradient of the potential energy] (@id gradhamiltonian)
 
 One of the crucial components in the training of the RHVAE is the computation of
-the gradient of the Hamiltonian $$\nabla H$$ with respect to the latent
-space representation. This gradient is used in the leapfrog steps of the
+the gradient of the Hamiltonian $$\nabla H$$ with respect to the latent space
+representation. This gradient is used in the leapfrog steps of the generalized
 Hamiltonian dynamics. When training the RHVAE, we need to backpropagate through
 the leapfrog steps to update the parameters of the neural network. This requires
-computing a gradient of a function of the gradient of the potential energy,
-i.e., nested gradients. `Zygote.jl` the main AutoDiff backend in `Flux.jl`
-[famously
+computing a gradient of a function of the gradient of the Hamiltonian, i.e.,
+nested gradients. `Zygote.jl` the main AutoDiff backend in `Flux.jl` [famously
 struggle](https://discourse.julialang.org/t/is-it-possible-to-do-nested-ad-elegantly-in-julia-pinns/98888)
 with these types of computations. Specifically, `Zygote.jl` does not support
 `Zygote` over `Zygote` differentiation (meaning differentiating a function of
@@ -111,8 +117,7 @@ loss_kwargs = Dict(
     Although verbose, the nested dictionaries help to keep everything organized.
     (PRs with better design ideas are welcome!)
 
-The default for `cpu` devices is `:TaylorDiff`, while the default for `gpu`
-devices is `:finite`.
+The default both for `cpu` and `gpu` devices is `:finite`.
 
 ```@docs
 AutoEncode.RHVAEs.∇hamiltonian_finite

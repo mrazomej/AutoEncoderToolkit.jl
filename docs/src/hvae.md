@@ -103,8 +103,7 @@ loss_kwargs = Dict(
     Although verbose, the nested dictionaries help to keep everything organized.
     (PRs with better design ideas are welcome!)
 
-The default for `cpu` devices is `:TaylorDiff`, while the default for `gpu`
-devices is `:finite`.
+The default both for `cpu` and `gpu` devices is `:finite`.
 
 ```@docs
 AutoEncode.HVAEs.∇potential_energy_finite
