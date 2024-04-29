@@ -1,7 +1,7 @@
 # Import Zygote
 using Zygote
 using Zygote: @adjoint
-using FillArrays: Fill
+# using FillArrays: Fill
 using TaylorDiff
 using TaylorDiff: value
 using ChainRulesCore
@@ -22,33 +22,33 @@ using ..utils: vec_to_ltri, vec_mat_vec_batched
 
 # Define the Zygote.@adjoint function for the FillArrays.fill method.
 # The function takes a matrix `x` of type Float32 and a size `sz` as input.
-@adjoint function (::Type{T})(
-    x::AbstractMatrix{Float32}, sz
-) where {T<:Fill}
-    # Define the backpropagation function for the adjoint. The function takes a
-    # gradient `Δ` as input and returns the sum of the gradient and `nothing`.
-    back(Δ::AbstractArray) = (sum(Δ), nothing)
-    # Define the backpropagation function for the adjoint. The function takes a
-    # gradient `Δ` as input and returns the value of `Δ` and `nothing`.
-    back(Δ::NamedTuple) = (Δ.value, nothing)
-    # Return the result of the FillArrays.fill method and the backpropagation
-    # function.
-    return Fill(x, sz), back
-end # @adjoint
+# @adjoint function (::Type{T})(
+#     x::AbstractMatrix{Float32}, sz
+# ) where {T<:Fill}
+#     # Define the backpropagation function for the adjoint. The function takes a
+#     # gradient `Δ` as input and returns the sum of the gradient and `nothing`.
+#     back(Δ::AbstractArray) = (sum(Δ), nothing)
+#     # Define the backpropagation function for the adjoint. The function takes a
+#     # gradient `Δ` as input and returns the value of `Δ` and `nothing`.
+#     back(Δ::NamedTuple) = (Δ.value, nothing)
+#     # Return the result of the FillArrays.fill method and the backpropagation
+#     # function.
+#     return Fill(x, sz), back
+# end # @adjoint
 
 
-@adjoint function fill!(A::AbstractArray, x)
-    # Define the backward pass
-    function back(Δ::AbstractArray)
-        # The gradient with respect to x is the sum of all elements in Δ
-        grad_x = sum(Δ)
-        # The gradient with respect to A is nothing because A is overwritten
-        return (nothing, grad_x)
-    end
+# @adjoint function fill!(A::AbstractArray, x)
+#     # Define the backward pass
+#     function back(Δ::AbstractArray)
+#         # The gradient with respect to x is the sum of all elements in Δ
+#         grad_x = sum(Δ)
+#         # The gradient with respect to A is nothing because A is overwritten
+#         return (nothing, grad_x)
+#     end
 
-    # Execute the operation and return the result and the backward pass
-    return fill!(A, x), back
-end
+#     # Execute the operation and return the result and the backward pass
+#     return fill!(A, x), back
+# end
 
 # ==============================================================================
 # Define Zygote.@adjoint for TaylorDiff.TaylorScalar

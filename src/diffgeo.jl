@@ -3,7 +3,7 @@ import LinearAlgebra
 import Distances
 
 # Import library to perform Einstein summation
-using TensorOperations: @tensor
+# using TensorOperations: @tensor
 
 # Import library for automatic differentiation
 import Zygote
@@ -42,7 +42,7 @@ include("diffgeo/pullback.jl")
 # Geodesic differential equation
 # ==============================================================================
 
-include("diffgeo/diffeq.jl")
+# include("diffgeo/diffeq.jl")
 
 # ==============================================================================
 # Approximating geodesics via Splines
@@ -51,7 +51,7 @@ include("diffgeo/diffeq.jl")
 # Reference
 # > Hofer, M. & Pottmann, H. Energy-Minimizing Splines in Manifolds.
 
-include("diffgeo/splines.jl")
+# include("diffgeo/splines.jl")
 
 # ==============================================================================
 # Discretized curve characteristics

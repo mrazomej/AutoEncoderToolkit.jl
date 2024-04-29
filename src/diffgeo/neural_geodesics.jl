@@ -5,7 +5,6 @@ import TaylorDiff
 
 # Import ML library
 import Flux
-import NNlib
 
 # Import basic math
 import LinearAlgebra
