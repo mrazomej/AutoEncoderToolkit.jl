@@ -3,6 +3,16 @@
 [![Build Status](https://github.com/mrazomej/AutoEncode.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mrazomej/AutoEncode.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![codecov](https://codecov.io/gh/mrazomej/AutoEncode.jl/graph/badge.svg?token=9DKTMW94G5)](https://codecov.io/gh/mrazomej/AutoEncode.jl)
 
+> **Note**: The build status above shows `failed` because some tests are failing
+> only when running on GitHub Actions. Locally, all tests pass. The error  in
+> Github Actions shows up when testing the computation of loss function
+> gradients as:
+>
+> `Got exception outside of a @test`
+> `BoundsError: attempt to access 16-element Vector{UInt8} at index [0]`
+>
+> PRs to fix this issue are welcome.
+
 Welcome to the `AutoEncode.jl` GitHub repository. This package provides a simple
 interface for training and using [Flux.jl](https://fluxml.ai)-based autoencoders
 and variational autoencoders in Julia.
