@@ -146,10 +146,10 @@ This is the power of `AutoEncode.jl` and Julia's multiple dispatch!
 | Autoencoder                | [`AEs`](@ref AEsmodule)                 | Vanilla deterministic autoencoder                              |
 | Variational Autoencoder    | [`VAEs`](@ref VAEsmodule)               | Vanilla variational autoencoder                                |
 | β-VAE                      | [`VAEs`](@ref VAEsmodule)               | beta-VAE to weigh the reconstruction vs. KL divergence in ELBO |
-| MMD-VAEs                   | [`MMDs`](@ref MMDVAEsmodule)            | Maximum-Mean Discrepancy Variational Autoencoders              |]
+| MMD-VAEs                   | [`MMDs`](@ref MMDVAEsmodule)            | Maximum-Mean Discrepancy Variational Autoencoders              |
 | InfoMax-VAEs               | [`InfoMaxVAEs`](@ref InfoMaxVAEsmodule) | Information Maximization Variational Autoencoders              |
 | Hamiltonian VAE            | [`HVAEs`](@ref HVAEsmodule)             | Hamiltonian Variational Autoencoders                           |
-| Riemannian Hamiltonian-VAE | [`RHVAEs`](@ref RHVAEsmodule)          | Riemannian-Hamiltonian Variational Autoencoder                 |
+| Riemannian Hamiltonian-VAE | [`RHVAEs`](@ref RHVAEsmodule)           | Riemannian-Hamiltonian Variational Autoencoder                 |
 
 !!! tip "Looking for contributors!" 
     If you are interested in contributing to the package to add a new model,
@@ -157,3 +157,11 @@ This is the power of `AutoEncode.jl` and Julia's multiple dispatch!
     repository](https://github.com/mrazomej/AutoEncode.jl). We are always 
     looking to expand the list of available models. And `AutoEncode.jl`'s 
     structure should make it relatively easy.
+
+## GPU support
+
+`AutoEncode.jl` supports GPU training out of the box for `CUDA.jl`-compatible
+GPUs. The `CUDA` functionality is provided as an extension. Therefore, to train
+a model on the GPU, simply import `CUDA` into the current environment, then move
+the model and data to the GPU. The rest of the training pipeline remains the
+same.
