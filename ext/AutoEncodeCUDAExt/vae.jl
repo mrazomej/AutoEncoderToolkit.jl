@@ -1,3 +1,5 @@
+using AutoEncode.VAEs
+
 @doc raw"""
         reparameterize(µ, σ; log::Bool=true)
 
@@ -46,7 +48,7 @@ distribution is consistent with the expectations of the latent space.
 Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. Preprint at
 http://arxiv.org/abs/1312.6114 (2014).
 """
-function reparameterize(
+function VAEs.reparameterize(
     µ::CUDA.CuVecOrMat,
     σ::CUDA.CuVecOrMat;
     log::Bool=true,

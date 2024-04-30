@@ -1,7 +1,9 @@
 module AutoEncodeCUDAExt
 
 # Import CUDA library
-import CUDA
+using CUDA
+# Import AutoEncode
+using AutoEncode
 
 # Include utils extension
 include("utils.jl")

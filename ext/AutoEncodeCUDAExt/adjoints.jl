@@ -1,5 +1,6 @@
 using CUDA
-using ..utils: vec_to_ltri
+import ChainRulesCore
+using AutoEncode.utils
 
 # ==============================================================================
 

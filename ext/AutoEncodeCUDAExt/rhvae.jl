@@ -9,6 +9,8 @@ import Zygote
 import LinearAlgebra
 import StatsBase
 
+using AutoEncode.RHVAEs
+
 @doc raw"""
     G_inv(
         z::AbstractMatrix,
@@ -20,7 +22,7 @@ import StatsBase
 
 GPU AbstractVector version of the G_inv function.
 """
-function _G_inv(
+function RHVAEs._G_inv(
     ::Type{N},
     z::AbstractVector,
     centroids_latent::AbstractMatrix,
@@ -66,7 +68,7 @@ end # function
 
 GPU AbstractMatrix version of the G_inv function.
 """
-function _G_inv(
+function RHVAEs._G_inv(
     ::Type{N},
     z::AbstractMatrix,
     centroids_latent::AbstractMatrix,
@@ -122,10 +124,10 @@ end # function
 
 GPU AbstractMatrix version of the metric_tensor function.
 """
-function _metric_tensor(
+function RHVAEs._metric_tensor(
     ::Type{T},
     z::AbstractMatrix,
-    metric_param::Union{RHVAE,NamedTuple},
+    metric_param::Union{RHVAEs.RHVAE,NamedTuple},
 ) where {T<:CUDA.CuArray}
     # Compute the inverse of the metric tensor G at each point in z.
     G⁻¹ = G_inv(z, metric_param)
@@ -177,11 +179,11 @@ Trains the RHVAE by:
 2. Updating the RHVAE parameters using the optimizer.
 3. Updating the metric parameters.
 """
-function train!(
-    rhvae::RHVAE,
+function RHVAEs.train!(
+    rhvae::RHVAEs.RHVAE,
     x::CUDA.CuArray,
     opt::NamedTuple;
-    loss_function::Function=loss,
+    loss_function::Function=RHVAEs.loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     verbose::Bool=false,
     loss_return::Bool=false,
@@ -254,12 +256,12 @@ Trains the RHVAE by:
 2. Updating the RHVAE parameters using the optimizer.
 3. Updating the metric parameters.
 """
-function train!(
-    rhvae::RHVAE,
+function RHVAEs.train!(
+    rhvae::RHVAEs.RHVAE,
     x_in::CUDA.CuArray,
     x_out::CUDA.CuArray,
     opt::NamedTuple;
-    loss_function::Function=loss,
+    loss_function::Function=RHVAEs.loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     verbose::Bool=false,
     loss_return::Bool=false,

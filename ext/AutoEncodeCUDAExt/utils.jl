@@ -8,6 +8,8 @@ import Random
 # Import library for basic math
 import LinearAlgebra
 
+using AutoEncode.utils
+
 # ==============================================================================
 # Functions that extend the methods in the utils.jl file for GPU arrays
 # ==============================================================================
@@ -17,7 +19,7 @@ import LinearAlgebra
 
 GPU implementation of `vec_to_ltri`.
 """
-function _vec_to_ltri(
+function utils._vec_to_ltri(
     ::Type{T}, diag::CUDA.CuVector, lower::CUDA.CuVector
 ) where {T<:CUDA.CuArray}
     # Define the dimensionality of the matrix based on the length of the
@@ -75,7 +77,7 @@ GPU implementation of `vec_to_ltri`.
 """
 # Define a function to convert a diagonal and lower triangular matrix into a 3D
 # tensor on the GPU
-function _vec_to_ltri(
+function utils._vec_to_ltri(
     ::Type{T}, diag::CUDA.CuMatrix, lower::CUDA.CuMatrix
 ) where {T<:CUDA.CuArray}
     # Extract the dimensions of the diagonal matrix and the number of samples
@@ -137,7 +139,7 @@ end # function
 
 GPU AbstractArray implementation of `slogdet`.
 """
-function _slogdet(
+function utils._slogdet(
     ::Type{T}, A::AbstractArray{<:Any,3}; check::Bool=false
 ) where {T<:CUDA.CuArray}
     # Compute the Cholesky decomposition of each slice of A. 
@@ -162,7 +164,7 @@ end # function
 Generates a random sample with the same type and size as `z` using a standard
 normal distribution. This function is used for GPU arrays.
 """
-function _randn_samples(::Type{T}, z::CUDA.CuArray) where {T<:CUDA.CuArray}
+function utils._randn_samples(::Type{T}, z::CUDA.CuArray) where {T<:CUDA.CuArray}
     return CUDA.randn(eltype(z), size(z))
 end # function
 
@@ -173,7 +175,7 @@ end # function
 
 GPU AbstractMatrix implementation of `sample_MvNormalCanon`.
 """
-function _sample_MvNormalCanon(
+function utils._sample_MvNormalCanon(
     ::Type{T}, Σ⁻¹::AbstractMatrix
 ) where {T<:CUDA.CuArray}
     # Invert the precision matrix
@@ -203,7 +205,7 @@ end # function
 
 GPU AbstractArray implementation of `sample_MvNormalCanon`.
 """
-function _sample_MvNormalCanon(
+function utils._sample_MvNormalCanon(
     ::Type{T}, Σ⁻¹::CUDA.CuArray{<:Number,3}
 ) where {T<:CUDA.CuArray}
     # Extract dimensions
@@ -244,7 +246,9 @@ end # function
 
 GPU AbstractVector implementation of `unit_vectors`.
 """
-function _unit_vectors(::Type{T}, x::AbstractVector) where {T<:CUDA.CuArray}
+function utils._unit_vectors(
+    ::Type{T}, x::AbstractVector
+) where {T<:CUDA.CuArray}
     return [unit_vector(x, i) for i in 1:length(x)] |> Flux.gpu
 end # function
 
@@ -255,7 +259,9 @@ end # function
 
 GPU AbstractMatrix implementation of `unit_vectors`.
 """
-function _unit_vectors(::Type{T}, x::CUDA.CuMatrix) where {T<:CUDA.CuArray}
+function utils._unit_vectors(
+    ::Type{T}, x::CUDA.CuMatrix
+) where {T<:CUDA.CuArray}
     vectors = [
         reduce(hcat, fill(unit_vector(x, i), size(x, 2)))
         for i in 1:size(x, 1)
@@ -274,7 +280,7 @@ end # function
 
 GPU AbstractVecOrMat implementation of `finite_difference_gradient`.
 """
-function _finite_difference_gradient(
+function utils._finite_difference_gradient(
     ::Type{T},
     f::Function,
     x::AbstractVecOrMat;

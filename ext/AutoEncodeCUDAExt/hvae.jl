@@ -1,4 +1,5 @@
-import CUDA
+using CUDA
+using AutoEncode.HVAEs
 
 @doc raw"""
     train!(
@@ -38,11 +39,11 @@ Trains the HVAE by:
 2. Updating the HVAE parameters using the optimizer.
 3. Updating the metric parameters.
 """
-function train!(
-    hvae::HVAE,
+function HVAEs.train!(
+    hvae::HVAEs.HVAE,
     x::CUDA.CuArray,
     opt::NamedTuple;
-    loss_function::Function=loss,
+    loss_function::Function=HVAEs.loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     verbose::Bool=false,
     loss_return::Bool=false,
@@ -112,12 +113,12 @@ Trains the HVAE by:
 2. Updating the HVAE parameters using the optimizer.
 3. Updating the metric parameters.
 """
-function train!(
-    hvae::HVAE,
+function HVAEs.train!(
+    hvae::HVAEs.HVAE,
     x_in::CUDA.CuArray,
     x_out::CUDA.CuArray,
     opt::NamedTuple;
-    loss_function::Function=loss,
+    loss_function::Function=HVAEs.loss,
     loss_kwargs::Union{NamedTuple,Dict}=Dict(),
     verbose::Bool=false,
     loss_return::Bool=false,
