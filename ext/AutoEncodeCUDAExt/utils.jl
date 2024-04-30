@@ -240,15 +240,6 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    unit_vectors(x::AbstractVector)
-
-AbstractVector implementation of `unit_vectors`.
-"""
-function _unit_vectors(::Type, x::AbstractVector)
-    return [unit_vector(x, i) for i in 1:length(x)]
-end # function
-
-@doc raw"""
     unit_vectors(x::CUDA.CuVector)
 
 GPU AbstractVector implementation of `unit_vectors`.
