@@ -1,10 +1,9 @@
 name = "AutoEncode"
 uuid = "1575904b-3569-468b-ae7a-8569c4d6dae9"
 authors = ["Manuel Razo-Mejia"]
-version = "1.0.0-DEV"
+version = "0.0.1"
 
 [deps]
-CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
@@ -18,7 +17,13 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TaylorDiff = "b36ab563-344f-407b-a36a-4f200bebf99c"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+
+[weakdeps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
+
+[extensions]
+AutoEncodeCUDAExt = "CUDA"
 
 [compat]
 CUDA = "^5.3.3"

@@ -7,9 +7,6 @@ import TaylorDiff
 import Zygote
 import ForwardDiff
 
-# Import GPU libraries
-using CUDA
-
 # Import basic math
 import LinearAlgebra
 import Random
@@ -691,49 +688,7 @@ end # function
 
 # ------------------------------------------------------------------------------
 
-@doc raw"""
-    G_inv(
-        z::AbstractMatrix,
-        centroids_latent::AbstractMatrix,
-        M::AbstractArray{<:Number,3},
-        T::Number,
-        λ::Number,
-    )
 
-GPU AbstractVector version of the G_inv function.
-"""
-function _G_inv(
-    ::Type{N},
-    z::AbstractVector,
-    centroids_latent::AbstractMatrix,
-    M::AbstractArray{<:Any,3},
-    T::Number,
-    λ::Number,
-) where {N<:CUDA.CuArray}
-    # Compute L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²). Notes: 
-    # - We use the reshape function to broadcast the operation over the third
-    # dimension of M.
-    # - The Zygote.dropgrad function is used to prevent the gradient from being
-    # computed with respect to T.
-    LLexp = M .*
-            reshape(
-        exp.(-sum((z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2), dims=1)),
-        1, 1, :
-    )
-
-    # Compute the regularization term.
-    Λ = ChainRulesCore.ignore_derivatives() do
-        CUDA.Diagonal(CUDA.ones(eltype(z), length(z), length(z))) .* λ
-    end # ignore_derivatives
-
-    # Zygote.dropgrad(CUDA.cu(Matrix(LinearAlgebra.I(length(z)) .* λ)))
-
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. NOTE:
-    # - We divide the result by the number of centroids. This is NOT done in the
-    #   original implementation, but without it, the metric tensor scales with
-    #   the number of centroids.
-    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) + Λ
-end # function
 
 
 # ------------------------------------------------------------------------------
@@ -797,62 +752,7 @@ end # function
 
 # ------------------------------------------------------------------------------
 
-@doc raw"""
-    G_inv( 
-        z::AbstractMatrix,
-        centroids_latent::AbstractMatrix,
-        M::AbstractArray{<:Any,3},
-        T::Number,
-        λ::Number,
-    )
 
-GPU AbstractMatrix version of the G_inv function.
-"""
-function _G_inv(
-    ::Type{N},
-    z::AbstractMatrix,
-    centroids_latent::AbstractMatrix,
-    M::AbstractArray{<:Any,3},
-    T::Number,
-    λ::Number,
-) where {N<:CUDA.CuArray}
-    # Find number of centroids
-    n_centroid = size(centroids_latent, 2)
-    # Find number of samples
-    n_sample = size(z, 2)
-
-    # Reshape arrays to broadcast subtraction
-    z = reshape(z, size(z, 1), 1, n_sample)
-    centroids_latent = reshape(
-        centroids_latent, size(centroids_latent, 1), n_centroid, 1
-    )
-
-    # Compute exp(-‖z - cᵢ‖₂² / T²). Notes:
-    # - We bradcast the operation by reshaping the input arrays.
-    # - We use Zygot.dropgrad to prevent the gradient from being computed for T.
-    # - The result is a 3D array of size (1, n_centroid, n_sample).
-    exp_term = exp.(-sum(
-        (z .- centroids_latent) .^ 2 / Zygote.dropgrad(T^2),
-        dims=1
-    ))
-
-    # Reshape exp_term to broadcast multiplication
-    exp_term = reshape(exp_term, 1, 1, n_centroid, n_sample)
-
-    # Perform the multiplication
-    LLexp = M .* exp_term
-
-    # Compute the regularization term.
-    Λ = ChainRulesCore.ignore_derivatives() do
-        CUDA.Diagonal(CUDA.ones(eltype(z), size(z, 1), size(z, 1))) .* λ
-    end # ignore_derivatives
-
-    # Return L_ψᵢ L_ψᵢᵀ exp(-‖z - cᵢ‖₂² / T²) + λIₗ as a matrix. Note:
-    # - We divide the result by the number of centroids. This is NOT done in the
-    # original implementation, but without it, the metric tensor scales with the
-    # number of centroids.
-    return dropdims(StatsBase.mean(LLexp, dims=3), dims=3) .+ Λ
-end # function
 
 # ------------------------------------------------------------------------------
 # Metric Tensor computation
@@ -938,31 +838,6 @@ function _metric_tensor(
     reduce(
         (x, y) -> cat(x, y, dims=3),
         [inv(g⁻¹) for g⁻¹ in eachslice(G⁻¹, dims=3)]
-    )
-end # function
-
-# ------------------------------------------------------------------------------
-
-@doc raw"""
-    metric_tensor(
-        z::AbstractMatrix,
-        metric_param::Union{RHVAE,NamedTuple},
-    )
-
-GPU AbstractMatrix version of the metric_tensor function.
-"""
-function _metric_tensor(
-    ::Type{T},
-    z::AbstractMatrix,
-    metric_param::Union{RHVAE,NamedTuple},
-) where {T<:CUDA.CuArray}
-    # Compute the inverse of the metric tensor G at each point in z.
-    G⁻¹ = G_inv(z, metric_param)
-
-    # Invert each slice of G⁻¹
-    G = reduce(
-        (x, y) -> cat(x, y, dims=3),
-        last(CUDA.CUBLAS.matinv_batched(collect(eachslice(G⁻¹, dims=3))))
     )
 end # function
 
@@ -2079,7 +1954,6 @@ gradient computation functions for the Hamiltonian.
 """
 const ∇Hrhvae = (
     finite=∇hamiltonian_finite,
-    ForwardDiff=∇hamiltonian_ForwardDiff,
     TaylorDiff=∇hamiltonian_TaylorDiff,
 )
 
@@ -2161,10 +2035,9 @@ the point `z`.
 - `momentum_logprior::Function`: The function to compute the log-prior of the
   momentum. Default is `riemannian_logprior`. This function must take as input
   the momentum `ρ` and `G⁻¹`.
-- `adtype::Union{Symbol,Nothing}`=:TaylorDiff`: The type of automatic
-  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or
-  `nothing`. Default is nothing, therefore, for GPU arrays, finite differences
-  are used, and for CPU arrays, TaylorDiff is used.
+- `adtype::Symbol`=:finite`: The type of automatic differentiation method to
+  use. Must be `:finite`, `:ForwardDiff`, or `:TaylorDiff`. Default is
+  `:finite`.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
@@ -2184,21 +2057,11 @@ function ∇hamiltonian(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
-    adtype::Union{Symbol,Nothing}=nothing,
+    adtype::Symbol=:finite,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # Obtain x storage type
-    stx = storage_type(x)
-
-    # Check if no automatic differentiation method is specified
-    if (stx <: CUDA.CuArray) && (adtype === nothing)
-        # If no automatic differentiation method is specified, use finite
-        # differences for CUDA arrays
-        adtype = :finite
-    elseif adtype === nothing
-        # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :finite
-    elseif (typeof(adtype) <: Symbol) && (adtype ∉ keys(∇Hrhvae))
+    # Check that the provided adtype is valid
+    if adtype ∉ keys(∇Hrhvae)
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
     end
@@ -2264,10 +2127,9 @@ log-likelihood of the decoder, the log-prior of the latent space, and `G_inv`.
   the momentum `ρ` and `G_inv`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor.  Default is `G_inv`.
-- `adtype::Union{Symbol,Nothing}`=:TaylorDiff`: The type of automatic
-  differentiation method to use. Must be :finite, :ForwardDiff, :TaylorDiff, or
-  `nothing`. Default is nothing, therefore, for GPU arrays, finite differences
-  are used, and for CPU arrays, TaylorDiff is used.
+- `adtype::Symbol`=:finite`: The type of automatic differentiation method to
+  use. Must be `:finite`, `:ForwardDiff`, or `:TaylorDiff`. Default is
+  `:finite`.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
@@ -2285,21 +2147,11 @@ function ∇hamiltonian(
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
-    adtype::Union{Symbol,Nothing}=nothing,
+    adtype::Symbol=:finite,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # Obtain x storage type
-    stx = storage_type(x)
-
-    # Check if no automatic differentiation method is specified
-    if (stx <: CUDA.CuArray) && (adtype === nothing)
-        # If no automatic differentiation method is specified, use finite
-        # differences for CUDA arrays
-        adtype = :finite
-    elseif adtype === nothing
-        # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :finite
-    elseif (typeof(adtype) <: Symbol) && (adtype ∉ keys(∇Hrhvae))
+    # Check that the provided adtype is valid
+    if adtype ∉ keys(∇Hrhvae)
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇Hrhvae))")
     end
@@ -4685,11 +4537,9 @@ function train!(
     loss_return::Bool=false,
 )
     # Compute VAE gradient
-    L, ∇L = CUDA.allowscalar() do
-        Flux.withgradient(rhvae) do rhvae_model
-            loss_function(rhvae_model, x; loss_kwargs...)
-        end # do block
-    end
+    L, ∇L = Flux.withgradient(rhvae) do rhvae_model
+        loss_function(rhvae_model, x; loss_kwargs...)
+    end # do block
 
     # Update parameters
     Flux.Optimisers.update!(opt, rhvae, ∇L[1])
@@ -4763,11 +4613,9 @@ function train!(
     loss_return::Bool=false,
 )
     # Compute VAE gradient
-    L, ∇L = CUDA.allowscalar() do
-        Flux.withgradient(rhvae) do rhvae_model
-            loss_function(rhvae_model, x_in, x_out; loss_kwargs...)
-        end # do block
-    end
+    L, ∇L = Flux.withgradient(rhvae) do rhvae_model
+        loss_function(rhvae_model, x_in, x_out; loss_kwargs...)
+    end # do block
 
     # Update parameters
     Flux.Optimisers.update!(opt, rhvae, ∇L[1])

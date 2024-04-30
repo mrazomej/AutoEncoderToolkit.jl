@@ -7,9 +7,6 @@ import TaylorDiff
 import Zygote
 import ForwardDiff
 
-# Import GPU libraries
-using CUDA
-
 # Import basic math
 import LinearAlgebra
 import Random
@@ -539,9 +536,8 @@ potential energy computed for given data `x` and latent variable `z`.
   log-prior distribution used in the autoencoder. The function must take as
   single input a vector or matrix `z` representing the latent variable. Default
   is `spherical_logprior`.  
-- `adtype::Union{Symbol,Nothing}=nothing`: A symbol representing the type of
-  automatic differentiation method to use. Default is `nothing`, which means the
-  method will be chosen based on the type of `x`.
+- `adtype::Symbol`=:finite`: The type of automatic differentiation method to
+  use. Must be `:finite` or `:TaylorDiff`. Default is `:finite`.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
@@ -556,21 +552,11 @@ function ∇potential_energy(
     decoder_output::NamedTuple;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     latent_logprior::Function=spherical_logprior,
-    adtype::Union{Symbol,Nothing}=nothing,
+    adtype::Symbol=:finite,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # Obtain x storage type
-    stx = storage_type(x)
-
-    # Check if no automatic differentiation method is specified
-    if (stx <: CUDA.CuArray) && (adtype === nothing)
-        # If no automatic differentiation method is specified, use finite
-        # differences for CUDA arrays
-        adtype = :finite
-    elseif adtype === nothing
-        # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :finite
-    elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hhvae))
+    # Check that the provided adtype is valid
+    if adtype ∉ keys(∇energyhvae)
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇energyhvae))")
     end
@@ -620,9 +606,8 @@ potential energy computed for given data `x` and latent variable `z`.
   log-prior distribution used in the autoencoder. The function must take as
   single input a vector or matrix `z` representing the latent variable.  Default
   is `spherical_logprior`.  
-- `adtype::Union{Symbol,Nothing}=nothing`: A symbol representing the type of
-  automatic differentiation method to use. Default is `nothing`, which means the
-  method will be chosen based on the type of `x`.
+  - `adtype::Symbol`=:finite`: The type of automatic differentiation method to
+  use. Must be `:finite` or `:TaylorDiff`. Default is `:finite`.
 - `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
@@ -636,21 +621,11 @@ function ∇potential_energy(
     hvae::HVAE;
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     latent_logprior::Function=spherical_logprior,
-    adtype::Union{Symbol,Nothing}=nothing,
+    adtype::Symbol=:finite,
     adkwargs::Union{NamedTuple,Dict}=Dict(),
 )
-    # Obtain x storage type
-    stx = storage_type(x)
-
-    # Check if no automatic differentiation method is specified
-    if (stx <: CUDA.CuArray) && (adtype === nothing)
-        # If no automatic differentiation method is specified, use finite
-        # differences for CUDA arrays
-        adtype = :finite
-    elseif adtype === nothing
-        # If no automatic differentiation method is specified, use TaylorDiff
-        adtype = :finite
-    elseif (adtype <: Symbol) && (adtype ∉ keys(∇Hhvae))
+    # Check that the provided adtype is valid
+    if adtype ∉ keys(∇energyhvae)
         # If automatic differentiation method is specified, check if it is valid
         error("adtype must be one of $(keys(∇energyhvae))")
     end
@@ -1926,11 +1901,9 @@ function train!(
     loss_return::Bool=false,
 )
     # Compute VAE gradient
-    L, ∇L = CUDA.allowscalar() do
-        Flux.withgradient(hvae) do hvae_model
-            loss_function(hvae_model, x; loss_kwargs...)
-        end # do block
-    end
+    L, ∇L = Flux.withgradient(hvae) do hvae_model
+        loss_function(hvae_model, x; loss_kwargs...)
+    end # do block
 
     # Update parameters
     Flux.Optimisers.update!(opt, hvae, ∇L[1])
@@ -2001,17 +1974,12 @@ function train!(
     loss_return::Bool=false,
 )
     # Compute VAE gradient
-    L, ∇L = CUDA.allowscalar() do
-        Flux.withgradient(hvae) do hvae_model
-            loss_function(hvae_model, x_in, x_out; loss_kwargs...)
-        end # do block
-    end
+    L, ∇L = Flux.withgradient(hvae) do hvae_model
+        loss_function(hvae_model, x_in, x_out; loss_kwargs...)
+    end # do block
 
     # Update parameters
     Flux.Optimisers.update!(opt, hvae, ∇L[1])
-
-    # Update metric
-    update_metric!(hvae)
 
     # Check if loss should be returned
     if loss_return
