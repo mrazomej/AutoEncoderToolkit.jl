@@ -1,4 +1,4 @@
-using AutoEncode.VAEs
+using AutoEncoderToolkit.VAEs
 
 @doc raw"""
         reparameterize(µ, σ; log::Bool=true)

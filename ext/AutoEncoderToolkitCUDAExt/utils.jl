@@ -8,7 +8,7 @@ import Random
 # Import library for basic math
 import LinearAlgebra
 
-using AutoEncode.utils
+using AutoEncoderToolkit.utils
 
 # ==============================================================================
 # Functions that extend the methods in the utils.jl file for GPU arrays

@@ -1,6 +1,6 @@
 using CUDA
 import ChainRulesCore
-using AutoEncode.utils
+using AutoEncoderToolkit.utils
 
 # ==============================================================================
 

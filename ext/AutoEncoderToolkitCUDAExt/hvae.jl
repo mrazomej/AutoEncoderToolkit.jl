@@ -1,5 +1,5 @@
 using CUDA
-using AutoEncode.HVAEs
+using AutoEncoderToolkit.HVAEs
 
 @doc raw"""
     train!(

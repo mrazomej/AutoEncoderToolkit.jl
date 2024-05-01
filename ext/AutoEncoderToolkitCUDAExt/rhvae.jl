@@ -9,7 +9,7 @@ import Zygote
 import LinearAlgebra
 import StatsBase
 
-using AutoEncode.RHVAEs
+using AutoEncoderToolkit.RHVAEs
 
 @doc raw"""
     G_inv(
