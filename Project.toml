@@ -1,4 +1,4 @@
-name = "AutoEncode"
+name = "AutoEncoderToolkit"
 uuid = "1575904b-3569-468b-ae7a-8569c4d6dae9"
 authors = ["Manuel Razo-Mejia"]
 version = "0.0.1"
@@ -23,7 +23,7 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 
 [extensions]
-AutoEncodeCUDAExt = "CUDA"
+AutoEncoderToolkitCUDAExt = "CUDA"
 
 [compat]
 CUDA = "^5.3.3"
