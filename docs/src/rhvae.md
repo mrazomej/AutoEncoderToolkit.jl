@@ -9,7 +9,7 @@ Riemannian metric tensor that is used to compute the kinetic energy of the
 dynamical system. This allows the RHVAE to sample the latent space more evenly
 while learning the curvature of the latent space.
 
-For the implementation of the RHVAE in `AutoEncode.jl`, the [`RHVAE`](@ref
+For the implementation of the RHVAE in `AutoEncoderToolkit.jl`, the [`RHVAE`](@ref
 RHVAEstruct) requires two arguments to construct: the original [`VAE`](@ref
 VAEstruct) as well as a separate neural network used to compute the metric
 tensor. To facilitate the dispatch of the necessary functions associated with
@@ -30,13 +30,13 @@ this second network, we also provide a [`MetricChain`](@ref MetricChain) struct.
 ## [`MetricChain` struct] (@id MetricChain)
 
 ```@docs
-AutoEncode.RHVAEs.MetricChain
+AutoEncoderToolkit.RHVAEs.MetricChain
 ```
 
 ## [`RHVAE` struct] (@id RHVAEstruct)
 
 ```@docs
-AutoEncode.RHVAEs.RHVAE
+AutoEncoderToolkit.RHVAEs.RHVAE
 ```
 
 ## Forward pass
@@ -44,25 +44,25 @@ AutoEncode.RHVAEs.RHVAE
 ### Metric Network
 
 ```@docs
-AutoEncode.RHVAEs.MetricChain(::AbstractArray)
+AutoEncoderToolkit.RHVAEs.MetricChain(::AbstractArray)
 ```
 
 ### RHVAE
 
 ```@docs
-AutoEncode.RHVAEs.RHVAE(::AbstractArray)
+AutoEncoderToolkit.RHVAEs.RHVAE(::AbstractArray)
 ```
 
 ## Loss function
 
 ```@docs
-AutoEncode.RHVAEs.loss
+AutoEncoderToolkit.RHVAEs.loss
 ```
 
 ## Training
 
 ```@docs
-AutoEncode.RHVAEs.train!
+AutoEncoderToolkit.RHVAEs.train!
 ```
 
 ## [Computing the gradient of the potential energy] (@id gradhamiltonian)
@@ -120,47 +120,47 @@ loss_kwargs = Dict(
 The default both for `cpu` and `gpu` devices is `:finite`.
 
 ```@docs
-AutoEncode.RHVAEs.∇hamiltonian_finite
-AutoEncode.RHVAEs.∇hamiltonian_TaylorDiff
-AutoEncode.RHVAEs.∇hamiltonian_ForwardDiff
+AutoEncoderToolkit.RHVAEs.∇hamiltonian_finite
+AutoEncoderToolkit.RHVAEs.∇hamiltonian_TaylorDiff
+AutoEncoderToolkit.RHVAEs.∇hamiltonian_ForwardDiff
 ```
 
 ## Other Functions
 ```@docs
-AutoEncode.RHVAEs.update_metric
-AutoEncode.RHVAEs.update_metric!
-AutoEncode.RHVAEs.G_inv
-AutoEncode.RHVAEs.metric_tensor
-AutoEncode.RHVAEs.riemannian_logprior
-AutoEncode.RHVAEs.hamiltonian
-AutoEncode.RHVAEs.∇hamiltonian
-AutoEncode.RHVAEs._leapfrog_first_step
-AutoEncode.RHVAEs._leapfrog_second_step
-AutoEncode.RHVAEs._leapfrog_third_step
-AutoEncode.RHVAEs.general_leapfrog_step
-AutoEncode.RHVAEs.general_leapfrog_tempering_step
-AutoEncode.RHVAEs._log_p̄
-AutoEncode.RHVAEs._log_q̄
-AutoEncode.RHVAEs.riemannian_hamiltonian_elbo
+AutoEncoderToolkit.RHVAEs.update_metric
+AutoEncoderToolkit.RHVAEs.update_metric!
+AutoEncoderToolkit.RHVAEs.G_inv
+AutoEncoderToolkit.RHVAEs.metric_tensor
+AutoEncoderToolkit.RHVAEs.riemannian_logprior
+AutoEncoderToolkit.RHVAEs.hamiltonian
+AutoEncoderToolkit.RHVAEs.∇hamiltonian
+AutoEncoderToolkit.RHVAEs._leapfrog_first_step
+AutoEncoderToolkit.RHVAEs._leapfrog_second_step
+AutoEncoderToolkit.RHVAEs._leapfrog_third_step
+AutoEncoderToolkit.RHVAEs.general_leapfrog_step
+AutoEncoderToolkit.RHVAEs.general_leapfrog_tempering_step
+AutoEncoderToolkit.RHVAEs._log_p̄
+AutoEncoderToolkit.RHVAEs._log_q̄
+AutoEncoderToolkit.RHVAEs.riemannian_hamiltonian_elbo
 ```
 
 ## Default initializations
 
-`AutoEncode.jl` provides default initializations for both the metric tensor
+`AutoEncoderToolkit.jl` provides default initializations for both the metric tensor
 network and the RHVAE. Although less flexible than defining your own initial
 networks, these can serve as a good starting point for your experiments.
 
 ```@docs
-AutoEncode.RHVAEs.MetricChain(
+AutoEncoderToolkit.RHVAEs.MetricChain(
     ::Int,
     ::Int,
     ::Vector{<:Int},
     ::Vector{<:Function},
     ::Function;
 )
-AutoEncode.RHVAEs.RHVAE(
-    ::AutoEncode.VAEs.VAE,
-    ::AutoEncode.RHVAEs.MetricChain,
+AutoEncoderToolkit.RHVAEs.RHVAE(
+    ::AutoEncoderToolkit.VAEs.VAE,
+    ::AutoEncoderToolkit.RHVAEs.MetricChain,
     ::AbstractArray{AbstractFloat},
     T::AbstractFloat,
     λ::AbstractFloat

@@ -1,12 +1,12 @@
-# AutoEncode.jl
+# AutoEncoderToolkit.jl
 
-Welcome to the `AutoEncode.jl` documentation. This package provides a simple
+Welcome to the `AutoEncoderToolkit.jl` documentation. This package provides a simple
 interface for training and using [Flux.jl](https://fluxml.ai)-based autoencoders
 and variational autoencoders in Julia.
 
 ## Installation
 
-You can install `AutoEncode.jl` using the Julia package manager. From the Julia
+You can install `AutoEncoderToolkit.jl` using the Julia package manager. From the Julia
 REPL, type `]` to enter the Pkg REPL mode and run:
 
 ```julia-repl
@@ -15,11 +15,11 @@ add AutoEncode
 
 ## Design
 
-The idea behind `AutoEncode.jl` is to take advantage of Julia's multiple
+The idea behind `AutoEncoderToolkit.jl` is to take advantage of Julia's multiple
 dispatch to provide a simple and flexible interface for training and using
 different types of autoencoders. The package is designed to be modular and allow
 the user to easily define and test custom encoder and decoder architectures.
-Moreover, when it comes to variational autoencoders, `AutoEncode.jl` takes a
+Moreover, when it comes to variational autoencoders, `AutoEncoderToolkit.jl` takes a
 probabilistic perspective, where the type of encoders and decoders defines (via
 multiple dispatch) the corresponding distribution used within the corresponding
 loss function.
@@ -29,7 +29,7 @@ convolutional layers in the encoder and deconvolutional layers in the decoder on
 the [`MNIST`](https://en.wikipedia.org/wiki/MNIST_database) dataset. You can
 easily do this as follows:
 
-Let's begin by defining the encoder. For this, we will use the `JointLogEncoder`
+Let's begin by defining the encoder. For this, we will use the `JointGaussianLogEncoder`
 type, which is a simple encoder that takes a `Flux.Chain` for the shared layers
 between the mean and log-variance layers and two `Flux.Dense` (or `Flux.Chain`)
 layers for the last layers of the encoder.
@@ -51,7 +51,7 @@ conv_layers = Flux.Chain(
         stride=2, pad=1
     ),
     # Flatten the output
-    AutoEncode.Flatten()
+    AutoEncoderToolkit.Flatten()
 )
 
 # Define layers for µ and log(σ)
@@ -59,11 +59,11 @@ conv_layers = Flux.Chain(
 logσ_layer = Flux.Dense(n_channels_init * 2 * 7 * 7, n_latent, Flux.identity)
 
 # build encoder
-encoder = AutoEncode.JointLogEncoder(conv_layers, µ_layer, logσ_layer)
+encoder = AutoEncoderToolkit.JointGaussianLogEncoder(conv_layers, µ_layer, logσ_layer)
 ```
 
 !!! note
-    The `Flatten` layer is a custom layer defined in `AutoEncode.jl` that
+    The `Flatten` layer is a custom layer defined in `AutoEncoderToolkit.jl` that
     flattens the output into a 1D vector. This flattening operation is necessary
     because the output of the convolutional layers is a 4D tensor, while the
     input to the `µ` and `log(σ)` layers is a 1D vector. The custom layer is 
@@ -79,7 +79,7 @@ deconv_layers = Flux.Chain(
     # Define linear layer out of latent space
     Flux.Dense(n_latent => n_channels_init * 2 * 7 * 7, Flux.identity),
     # Unflatten input using custom Reshape layer
-    AutoEncode.Reshape(7, 7, n_channels_init * 2, :),
+    AutoEncoderToolkit.Reshape(7, 7, n_channels_init * 2, :),
     # First transposed convolutional layer
     Flux.ConvTranspose(
         (4, 4), n_channels_init * 2 => n_channels_init, Flux.relu;
@@ -95,7 +95,7 @@ deconv_layers = Flux.Chain(
 )
 
 # Define decoder
-decoder = AutoEncode.BernoulliDecoder(deconv_layers)
+decoder = AutoEncoderToolkit.BernoulliDecoder(deconv_layers)
 ```
 
 !!! note
@@ -103,7 +103,7 @@ decoder = AutoEncode.BernoulliDecoder(deconv_layers)
     linear layer to the shape expected by the transposed convolutional layers.
     This custom layer is needed to be able to save the model and load it later.
 
-By defining the decoder as a `BernoulliDecoder`, `AutoEncode.jl` already knows
+By defining the decoder as a `BernoulliDecoder`, `AutoEncoderToolkit.jl` already knows
 the log-likehood function to use when training the model. We can then simply
 define our variational autoencoder by combining the encoder and decoder as
 
@@ -114,11 +114,11 @@ vae = encoder * decoder
 
 If for any reason we were curious to explore a different distribution for the
 decoder, for example, a `Normal` distribution with constant variance, it would
-be as simple as defining the decoder as a `SimpleDecoder`.
+be as simple as defining the decoder as a `SimpleGaussianDecoder`.
 
 ```julia
 # Define decoder with Normal likelihood function
-decoder = AutoEncode.SimpleDecoder(deconv_layers)
+decoder = AutoEncoderToolkit.SimpleGaussianDecoder(deconv_layers)
 
 # Re-defining the variational autoencoder
 vae = encoder * decoder
@@ -134,10 +134,10 @@ the latent space and the input data. We can easily take our `vae` model and
 convert it into a `MMDVAE`-type object from the `MMDVAEs` submodule as follows:
 
 ```julia
-mmdvae = AutoEncode.MMDVAEs.MMDVAE(vae)
+mmdvae = AutoEncoderToolkit.MMDVAEs.MMDVAE(vae)
 ```
 
-This is the power of `AutoEncode.jl` and Julia's multiple dispatch!
+This is the power of `AutoEncoderToolkit.jl` and Julia's multiple dispatch!
 
 ## Implemented Autoencoders
 
@@ -154,13 +154,13 @@ This is the power of `AutoEncode.jl` and Julia's multiple dispatch!
 !!! tip "Looking for contributors!" 
     If you are interested in contributing to the package to add a new model,
     please check the [GitHub
-    repository](https://github.com/mrazomej/AutoEncode.jl). We are always 
-    looking to expand the list of available models. And `AutoEncode.jl`'s 
+    repository](https://github.com/mrazomej/AutoEncoderToolkit.jl). We are always 
+    looking to expand the list of available models. And `AutoEncoderToolkit.jl`'s 
     structure should make it relatively easy.
 
 ## GPU support
 
-`AutoEncode.jl` supports GPU training out of the box for `CUDA.jl`-compatible
+`AutoEncoderToolkit.jl` supports GPU training out of the box for `CUDA.jl`-compatible
 GPUs. The `CUDA` functionality is provided as an extension. Therefore, to train
 a model on the GPU, simply import `CUDA` into the current environment, then move
 the model and data to the GPU. The rest of the training pipeline remains the

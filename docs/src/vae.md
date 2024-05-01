@@ -13,7 +13,7 @@ relative importance of the reconstruction loss and the KL divergence term in the
 loss function. By adjusting `β`, the user can control the trade-off between the
 reconstruction quality and the disentanglement of the latent space.
 
-In terms of implementation, the `VAE` struct in `AutoEncode.jl` is a simple
+In terms of implementation, the `VAE` struct in `AutoEncoderToolkit.jl` is a simple
 feedforward network composed of variational [encoder](@ref Encoders) and
 [decoder](@ref Decoders) parts. This means that the encoder has a log-posterior
 function and a KL divergence function associated with it, while the decoder has
@@ -34,19 +34,19 @@ a log-likehood function associated with it.
 ## [`VAE` struct] (@id VAEstruct)
 
 ```@docs
-AutoEncode.VAEs.VAE
+AutoEncoderToolkit.VAEs.VAE
 ```
 
 ## Forward pass
 
 ```@docs
-AutoEncode.VAEs.VAE(::AbstractArray)
+AutoEncoderToolkit.VAEs.VAE(::AbstractArray)
 ```
 
 ## Loss function
 
 ```@docs
-AutoEncode.VAEs.loss
+AutoEncoderToolkit.VAEs.loss
 ```
 
 !!! note
@@ -57,5 +57,5 @@ AutoEncode.VAEs.loss
 ## Training
 
 ```@docs
-AutoEncode.VAEs.train!
+AutoEncoderToolkit.VAEs.train!
 ```

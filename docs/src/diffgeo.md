@@ -11,7 +11,7 @@ we need to account for curvature and other non-Euclidean properties. For this,
 we can borrow concepts and tools from Riemannian geometry, now applied to the
 latent space of generative models.
 
-`AutoEncode.jl` aims to provide the set of necessary tools to study the geometry
+`AutoEncoderToolkit.jl` aims to provide the set of necessary tools to study the geometry
 of the latent space in the context of variational autoencoders generative
 models.
 
@@ -146,7 +146,7 @@ function $\gamma$ that minimizes the distance between two points $z_1$ and $z_2$
 is not straightforward. However, as first suggested by Chen et al. [1], we can
 repurpose the expressivity of neural networks to approximate almost any function
 to approximate the geodesic curve. This is the idea behind the Neural Geodesic
-module in `AutoEncode.jl`.
+module in `AutoEncoderToolkit.jl`.
 
 Briefly, to approximate the geodesic curve between two points $z_1$ and $z_2$
 in latent space, we define a neural network $g_\omega$ such that
@@ -171,7 +171,7 @@ L(g_\gamma(t)) \approx \frac{1}{n} \sum_{i=1}^n
 By setting the loss function to be this approximation of the length of the
 curve, we can train the neural network to approximate the geodesic curve.
 
-`AutoEncode.jl` provides the `NeuralGeodesic` struct to implement this idea. The
+`AutoEncoderToolkit.jl` provides the `NeuralGeodesic` struct to implement this idea. The
 struct takes three inputs:
 - The multi-layer perceptron (MLP) that approximates the geodesic curve.
 - The initial point in latent space.
@@ -180,34 +180,34 @@ struct takes three inputs:
 ### `NeuralGeodesic` struct
 
 ```@docs
-AutoEncode.diffgeo.NeuralGeodesics.NeuralGeodesic
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.NeuralGeodesic
 ```
 
 ### `NeuralGeodesic` forward pass
 
 ```@docs
-AutoEncode.diffgeo.NeuralGeodesics.NeuralGeodesic(::AbstractVector)
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.NeuralGeodesic(::AbstractVector)
 ```
 
 ### `NeuralGeodesic` loss function
 
 ```@docs
-AutoEncode.diffgeo.NeuralGeodesics.loss
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.loss
 ```
 
 ### `NeuralGeodesic` training
 
 ```@docs
-AutoEncode.diffgeo.NeuralGeodesics.train!
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.train!
 ```
 
 ### Other functions for `NeuralGeodesic`
 
 ```@docs
-AutoEncode.diffgeo.NeuralGeodesics.curve_velocity_TaylorDiff
-AutoEncode.diffgeo.NeuralGeodesics.curve_velocity_finitediff
-AutoEncode.diffgeo.NeuralGeodesics.curve_length
-AutoEncode.diffgeo.NeuralGeodesics.curve_energy
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.curve_velocity_TaylorDiff
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.curve_velocity_finitediff
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.curve_length
+AutoEncoderToolkit.diffgeo.NeuralGeodesics.curve_energy
 ```
 
 

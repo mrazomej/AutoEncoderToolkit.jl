@@ -6,7 +6,7 @@ latent space representation. HVAE combines ideas from Hamiltonian Monte Carlo,
 annealed importance sampling, and variational inference to improve the latent
 space representation of the VAE.
 
-For the implementation of the HVAE in `AutoEncode.jl`, the [`HVAE`](@ref
+For the implementation of the HVAE in `AutoEncoderToolkit.jl`, the [`HVAE`](@ref
 HVAEstruct) struct inherits directly from the [`VAE`](@ref VAEstruct) struct and
 adds the necessary functions to compute the Hamiltonian dynamics steps as part
 of the training protocol. An `HVAE` object is created by simply passing a `VAE`
@@ -29,25 +29,25 @@ entire structure.
 ## [`HVAE` struct] (@id HVAEstruct)
 
 ```@docs
-AutoEncode.HVAEs.HVAE
+AutoEncoderToolkit.HVAEs.HVAE
 ```
 
 ## Forward pass
 
 ```@docs
-AutoEncode.HVAEs.HVAE(::AbstractArray)
+AutoEncoderToolkit.HVAEs.HVAE(::AbstractArray)
 ```
 
 ## Loss function
 
 ```@docs
-AutoEncode.HVAEs.loss
+AutoEncoderToolkit.HVAEs.loss
 ```
 
 ## Training
 
 ```@docs
-AutoEncode.HVAEs.train!
+AutoEncoderToolkit.HVAEs.train!
 ```
 
 ## [Computing the gradient of the potential energy] (@id gradpotenergy)
@@ -106,20 +106,20 @@ loss_kwargs = Dict(
 The default both for `cpu` and `gpu` devices is `:finite`.
 
 ```@docs
-AutoEncode.HVAEs.∇potential_energy_finite
-AutoEncode.HVAEs.∇potential_energy_TaylorDiff
+AutoEncoderToolkit.HVAEs.∇potential_energy_finite
+AutoEncoderToolkit.HVAEs.∇potential_energy_TaylorDiff
 ```
 
 ## Other Functions
 
 ```@docs
-AutoEncode.HVAEs.potential_energy
-AutoEncode.HVAEs.∇potential_energy
-AutoEncode.HVAEs.leapfrog_step
-AutoEncode.HVAEs.quadratic_tempering
-AutoEncode.HVAEs.null_tempering
-AutoEncode.HVAEs.leapfrog_tempering_step
-AutoEncode.HVAEs._log_p̄
-AutoEncode.HVAEs._log_q̄
-AutoEncode.HVAEs.hamiltonian_elbo
+AutoEncoderToolkit.HVAEs.potential_energy
+AutoEncoderToolkit.HVAEs.∇potential_energy
+AutoEncoderToolkit.HVAEs.leapfrog_step
+AutoEncoderToolkit.HVAEs.quadratic_tempering
+AutoEncoderToolkit.HVAEs.null_tempering
+AutoEncoderToolkit.HVAEs.leapfrog_tempering_step
+AutoEncoderToolkit.HVAEs._log_p̄
+AutoEncoderToolkit.HVAEs._log_q̄
+AutoEncoderToolkit.HVAEs.hamiltonian_elbo
 ```

@@ -7,7 +7,7 @@ space representation and the input data. In particular, the MMD-VAE uses the
 Maximum-Mean Discrepancy (MMD) as a measure of the "distance" between the latent
 space distribution and the input data distribution.
 
-For the implementation of the MMD-VAE in `AutoEncode.jl`, the [`MMDVAE`](@ref
+For the implementation of the MMD-VAE in `AutoEncoderToolkit.jl`, the [`MMDVAE`](@ref
 MMDVAEstruct) struct inherits directly from the [`VAE`](@ref VAEstruct) struct
 and adds the necessary functions to compute the extra terms in the loss
 function. An `MMDVAE` object is created by simply passing a `VAE` object to the
@@ -24,31 +24,31 @@ structure.
 ## [`MMDVAE` struct] (@id MMDVAEstruct)
 
 ```@docs
-AutoEncode.MMDVAEs.MMDVAE{AutoEncode.VAEs.VAE}
+AutoEncoderToolkit.MMDVAEs.MMDVAE{AutoEncoderToolkit.VAEs.VAE}
 ```
 
 ## Forward pass
 
 ```@docs
-AutoEncode.MMDVAEs.MMDVAE(::AbstractArray)
+AutoEncoderToolkit.MMDVAEs.MMDVAE(::AbstractArray)
 ```
 
 ## Loss function
 
 ```@docs
-AutoEncode.MMDVAEs.loss
+AutoEncoderToolkit.MMDVAEs.loss
 ```
 
 ## Training
 
 ```@docs
-AutoEncode.MMDVAEs.train!
+AutoEncoderToolkit.MMDVAEs.train!
 ```
 
 ## Other Functions
 
 ```@docs
-AutoEncode.MMDVAEs.gaussian_kernel
-AutoEncode.MMDVAEs.mmd_div
-AutoEncode.MMDVAEs.logP_mmd_ratio
+AutoEncoderToolkit.MMDVAEs.gaussian_kernel
+AutoEncoderToolkit.MMDVAEs.mmd_div
+AutoEncoderToolkit.MMDVAEs.logP_mmd_ratio
 ```

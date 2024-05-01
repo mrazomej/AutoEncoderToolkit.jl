@@ -9,13 +9,13 @@ of two parts: an [`Encoder`](@ref "Encoder") and a [`Decoder`](@ref "Decoder").
 ## Autoencoder struct `AE`
 
 ```@docs
-AutoEncode.AEs.AE
+AutoEncoderToolkit.AEs.AE
 ```
 
 ## Forward pass
 
 ```@docs
-AutoEncode.AEs.AE(::AbstractArray)
+AutoEncoderToolkit.AEs.AE(::AbstractArray)
 ```
 
 ## Loss function
@@ -23,11 +23,11 @@ AutoEncode.AEs.AE(::AbstractArray)
 ### MSE loss
 
 ```@docs
-AutoEncode.AEs.mse_loss
+AutoEncoderToolkit.AEs.mse_loss
 ```
 
 ## Training
 
 ```@docs
-AutoEncode.AEs.train!
+AutoEncoderToolkit.AEs.train!
 ```

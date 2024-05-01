@@ -1,6 +1,6 @@
 # Encoders & Decoders
 
-`AutoEncode.jl` provides a set of predefined encoders and decoders that can be
+`AutoEncoderToolkit.jl` provides a set of predefined encoders and decoders that can be
 used to define custom (variational) autoencoder architectures.
 
 ## Encoders
@@ -14,29 +14,29 @@ types):
     - `AbstractVariationalEncoder`
         - `AbstractGaussianEncoder`
             - `AbstractGaussianLinearEncoder`
-                - [`JointEncoder` 🧱](@ref JointEncoder)
+                - [`JointGaussianEncoder` 🧱](@ref JointGaussianEncoder)
             - `AbstractGaussianLogEncoder`
-                - [`JointLogEncoder` 🧱](@ref JointLogEncoder)
+                - [`JointGaussianLogEncoder` 🧱](@ref JointGaussianLogEncoder)
 
 ### [`Encoder`] (@id Encoder)
 
 ```@docs
-AutoEncode.Encoder
-AutoEncode.Encoder(::AbstractArray)
+AutoEncoderToolkit.Encoder
+AutoEncoderToolkit.Encoder(::AbstractArray)
 ```
 
-### [`JointEncoder`] (@id JointEncoder)
+### [`JointGaussianEncoder`] (@id JointGaussianEncoder)
 
 ```@docs
-AutoEncode.JointEncoder
-AutoEncode.JointEncoder(::AbstractArray)
+AutoEncoderToolkit.JointGaussianEncoder
+AutoEncoderToolkit.JointGaussianEncoder(::AbstractArray)
 ```
 
-### [`JointLogEncoder`] (@id JointLogEncoder)
+### [`JointGaussianLogEncoder`] (@id JointGaussianLogEncoder)
 
 ```@docs
-AutoEncode.JointLogEncoder
-AutoEncode.JointLogEncoder(::AbstractArray)
+AutoEncoderToolkit.JointGaussianLogEncoder
+AutoEncoderToolkit.JointGaussianLogEncoder(::AbstractArray)
 ```
 
 ## Decoders
@@ -52,59 +52,59 @@ types):
         - [`CategoricalDecoder` 🧱](@ref CategoricalDecoder)
         - `AbstractGaussianDecoder`
             - `AbstractGaussianLinearDecoder`
-                - [`JointDecoder` 🧱](@ref JointDecoder)
-                - [`SplitDecoder` 🧱](@ref SplitDecoder)
+                - [`JointGaussianDecoder` 🧱](@ref JointGaussianDecoder)
+                - [`SplitGaussianDecoder` 🧱](@ref SplitGaussianDecoder)
             - `AbstractGaussianLogDecoder`
-                - [`JointLogDecoder` 🧱](@ref JointLogDecoder)
-                - [`SplitLogDecoder` 🧱](@ref SplitLogDecoder)
+                - [`JointGaussianLogDecoder` 🧱](@ref JointGaussianLogDecoder)
+                - [`SplitGaussianLogDecoder` 🧱](@ref SplitGaussianLogDecoder)
 
 ### [`Decoder`] (@id Decoder)
 
 ```@docs
-AutoEncode.Decoder
-AutoEncode.Decoder(::AbstractArray)
+AutoEncoderToolkit.Decoder
+AutoEncoderToolkit.Decoder(::AbstractArray)
 ```
 
 ### [`BernoulliDecoder`] (@id BernoulliDecoder)
 
 ```@docs
-AutoEncode.BernoulliDecoder
-AutoEncode.BernoulliDecoder(::AbstractArray)
+AutoEncoderToolkit.BernoulliDecoder
+AutoEncoderToolkit.BernoulliDecoder(::AbstractArray)
 ```
 
 ### [`CategoricalDecoder`] (@id CategoricalDecoder)
 
 ```@docs
-AutoEncode.CategoricalDecoder
-AutoEncode.CategoricalDecoder(::AbstractArray)
+AutoEncoderToolkit.CategoricalDecoder
+AutoEncoderToolkit.CategoricalDecoder(::AbstractArray)
 ```
 
-### [`JointDecoder`] (@id JointDecoder)
+### [`JointGaussianDecoder`] (@id JointGaussianDecoder)
 
 ```@docs
-AutoEncode.JointDecoder
-AutoEncode.JointDecoder(::AbstractArray)
+AutoEncoderToolkit.JointGaussianDecoder
+AutoEncoderToolkit.JointGaussianDecoder(::AbstractArray)
 ```
 
-### [`JointLogDecoder`] (@id JointLogDecoder)
+### [`JointGaussianLogDecoder`] (@id JointGaussianLogDecoder)
 
 ```@docs
-AutoEncode.JointLogDecoder
-AutoEncode.JointLogDecoder(::AbstractArray)
+AutoEncoderToolkit.JointGaussianLogDecoder
+AutoEncoderToolkit.JointGaussianLogDecoder(::AbstractArray)
 ```
 
-### [`SplitDecoder`] (@id SplitDecoder)
+### [`SplitGaussianDecoder`] (@id SplitGaussianDecoder)
 
 ```@docs
-AutoEncode.SplitDecoder
-AutoEncode.SplitDecoder(::AbstractArray)
+AutoEncoderToolkit.SplitGaussianDecoder
+AutoEncoderToolkit.SplitGaussianDecoder(::AbstractArray)
 ```
 
-### [`SplitLogDecoder`] (@id SplitLogDecoder)
+### [`SplitGaussianLogDecoder`] (@id SplitGaussianLogDecoder)
 
 ```@docs
-AutoEncode.SplitLogDecoder
-AutoEncode.SplitLogDecoder(::AbstractArray)
+AutoEncoderToolkit.SplitGaussianLogDecoder
+AutoEncoderToolkit.SplitGaussianLogDecoder(::AbstractArray)
 ```
 
 ## Default initializations
@@ -116,20 +116,20 @@ quick prototyping.
 ### Encoder initializations
 
 ```@docs
-AutoEncode.Encoder(
+AutoEncoderToolkit.Encoder(
     ::Int, ::Int, ::Vector{<:Int}, ::Vector{<:Function}, ::Function
 )
 ```
 
 ```@docs
-AutoEncode.JointLogEncoder( 
+AutoEncoderToolkit.JointGaussianLogEncoder( 
     ::Int, 
     ::Int, 
     ::Vector{<:Int}, 
     ::Vector{<:Function}, 
     ::Function;
 )
-AutoEncode.JointLogEncoder(
+AutoEncoderToolkit.JointGaussianLogEncoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -139,7 +139,7 @@ AutoEncode.JointLogEncoder(
 ```
 
 ```@docs
-AutoEncode.JointEncoder(
+AutoEncoderToolkit.JointGaussianEncoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -151,7 +151,7 @@ AutoEncode.JointEncoder(
 ### Decoder initializations
 
 ```@docs
-AutoEncode.Decoder(
+AutoEncoderToolkit.Decoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -161,7 +161,7 @@ AutoEncode.Decoder(
 ```
 
 ```@docs
-AutoEncode.SimpleDecoder(
+AutoEncoderToolkit.SimpleGaussianDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -171,14 +171,14 @@ AutoEncode.SimpleDecoder(
 ```
 
 ```@docs
-AutoEncode.JointLogDecoder(
+AutoEncoderToolkit.JointGaussianLogDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
     ::Vector{<:Function},
     ::Function;
 )
-AutoEncode.JointLogDecoder(
+AutoEncoderToolkit.JointGaussianLogDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -188,14 +188,14 @@ AutoEncode.JointLogDecoder(
 ```
 
 ```@docs
-AutoEncode.JointDecoder(
+AutoEncoderToolkit.JointGaussianDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
     ::Vector{<:Function},
     ::Function;
 )
-AutoEncode.JointDecoder(
+AutoEncoderToolkit.JointGaussianDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -205,18 +205,7 @@ AutoEncode.JointDecoder(
 ```
 
 ```@docs
-AutoEncode.SplitLogDecoder(
-    ::Int,
-    ::Int,
-    ::Vector{<:Int},
-    ::Vector{<:Function},
-    ::Vector{<:Int},
-    ::Vector{<:Function};
-)
-```
-
-```@docs
-AutoEncode.SplitDecoder(
+AutoEncoderToolkit.SplitGaussianLogDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -227,7 +216,18 @@ AutoEncode.SplitDecoder(
 ```
 
 ```@docs
-AutoEncode.BernoulliDecoder(
+AutoEncoderToolkit.SplitGaussianDecoder(
+    ::Int,
+    ::Int,
+    ::Vector{<:Int},
+    ::Vector{<:Function},
+    ::Vector{<:Int},
+    ::Vector{<:Function};
+)
+```
+
+```@docs
+AutoEncoderToolkit.BernoulliDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -237,14 +237,14 @@ AutoEncode.BernoulliDecoder(
 ```
 
 ```@docs
-AutoEncode.CategoricalDecoder(
+AutoEncoderToolkit.CategoricalDecoder(
     ::AbstractVector{<:Int},
     ::Int,
     ::Vector{<:Int},
     ::Vector{<:Function},
     ::Function;
 )
-AutoEncode.CategoricalDecoder(
+AutoEncoderToolkit.CategoricalDecoder(
     ::Int,
     ::Int,
     ::Vector{<:Int},
@@ -255,27 +255,27 @@ AutoEncode.CategoricalDecoder(
 
 ## Probabilistic functions
 
-Given the probability-centered design of `AutoEncode.jl`, each variational
+Given the probability-centered design of `AutoEncoderToolkit.jl`, each variational
 encoder and decoder has an associated probabilistic function used when computing
 the evidence lower bound (ELBO). The following functions are available:
 
 ```@docs
-AutoEncode.encoder_logposterior
+AutoEncoderToolkit.encoder_logposterior
 ```
 
 ```@docs
-AutoEncode.encoder_kl
+AutoEncoderToolkit.encoder_kl
 ```
 
 ```@docs
-AutoEncode.spherical_logprior
+AutoEncoderToolkit.spherical_logprior
 ```
 
 ## Defining custom encoder and decoder types
 
 !!! note
     We will omit all docstrings in the following examples for brevity. However,
-    every struct and function in `AutoEncode.jl` is well-documented.
+    every struct and function in `AutoEncoderToolkit.jl` is well-documented.
 
 Let us imagine your particular task requires a custom encoder or decoder type.
 For example, let's imagine that for a particular application, you need a decoder
@@ -291,7 +291,7 @@ end # struct
 ```
 
 With this struct defined, we need to define the forward-pass function for our
-custom `PoissonDecoder`. All decoders in `AutoEncode.jl` return a `NamedTuple`
+custom `PoissonDecoder`. All decoders in `AutoEncoderToolkit.jl` return a `NamedTuple`
 with the corresponding parameters of the distribution that defines them. In this
 case, the Poisson distribution is defined by a single parameter $\lambda$. Thus,
 we have a forward-pass of the form
@@ -356,4 +356,4 @@ log of the factorial of `x_i`.
     performing batch training.
 
 With these two functions defined, our `PoissonDecoder` is ready to be used with
-any of the different VAE flavors included in `AutoEncode.jl`!
+any of the different VAE flavors included in `AutoEncoderToolkit.jl`!

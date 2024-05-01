@@ -11,7 +11,7 @@ function for this separate network then takes the form of a variational lower
 bound on the mutual information between the latent space and the input data.
 
 Because of the need of this separate network, the [`InfoMaxVAE`](@ref
-InfoMaxVAE) struct in `AutoEncode.jl` takes two arguments to construct: the
+InfoMaxVAE) struct in `AutoEncoderToolkit.jl` takes two arguments to construct: the
 original [`VAE`](@ref VAEstruct) struct and a network to compute the mutual
 information. To properly deploy all relevant functions associated with this
 second network, we also provide a [`MutualInfoChain`](@ref MutualInfoChain)
@@ -31,13 +31,13 @@ functions: one for the [`MutualInfoChain`](@ref miloss) and one for the
 ## [`MutualInfoChain` struct] (@id MutualInfoChain)
 
 ```@docs
-AutoEncode.InfoMaxVAEs.MutualInfoChain
+AutoEncoderToolkit.InfoMaxVAEs.MutualInfoChain
 ```
 
 ## [`InfoMaxVAE` struct] (@id InfoMaxVAE)
 
 ```@docs
-AutoEncode.InfoMaxVAEs.InfoMaxVAE
+AutoEncoderToolkit.InfoMaxVAEs.InfoMaxVAE
 ```
 
 ## Forward pass
@@ -45,48 +45,48 @@ AutoEncode.InfoMaxVAEs.InfoMaxVAE
 ### Mutual Information Network
 
 ```@docs
-AutoEncode.InfoMaxVAEs.MutualInfoChain(::AbstractArray, ::AbstractVecOrMat)
+AutoEncoderToolkit.InfoMaxVAEs.MutualInfoChain(::AbstractArray, ::AbstractVecOrMat)
 
 ```
 
 ### InfoMax VAE
 ```@docs
-AutoEncode.InfoMaxVAEs.InfoMaxVAE(::AbstractArray)
+AutoEncoderToolkit.InfoMaxVAEs.InfoMaxVAE(::AbstractArray)
 ```
 
 ## [Loss functions] 
 
 ### [Mutual Information Network] (@id miloss)
 ```@docs
-AutoEncode.InfoMaxVAEs.miloss
+AutoEncoderToolkit.InfoMaxVAEs.miloss
 ```
 
 ### [InfoMax VAE] (@id infomaxloss)
 ```@docs
-AutoEncode.InfoMaxVAEs.infomaxloss
+AutoEncoderToolkit.InfoMaxVAEs.infomaxloss
 ```
 
 ## Training
 
 ```@docs
-AutoEncode.InfoMaxVAEs.train!
+AutoEncoderToolkit.InfoMaxVAEs.train!
 ```
 
 ## Other Functions
 
 ```@docs
-AutoEncode.InfoMaxVAEs.shuffle_latent
-AutoEncode.InfoMaxVAEs.variational_mutual_info
+AutoEncoderToolkit.InfoMaxVAEs.shuffle_latent
+AutoEncoderToolkit.InfoMaxVAEs.variational_mutual_info
 ```
 
 ## Default initializations
 
-`AutoEncode.jl` provides default initializations for the `MutualInfoChain`.
+`AutoEncoderToolkit.jl` provides default initializations for the `MutualInfoChain`.
 Although it gives the user less flexibility, it can be useful for quick
 prototyping.
 
 ```@docs
-AutoEncode.InfoMaxVAEs.MutualInfoChain(
+AutoEncoderToolkit.InfoMaxVAEs.MutualInfoChain(
     ::Union{Int,Vector{<:Int}},
     ::Int,
     ::Vector{<:Int},
