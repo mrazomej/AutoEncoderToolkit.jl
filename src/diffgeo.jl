@@ -15,8 +15,8 @@ import Flux
 using Clustering: kmedoids
 
 # Import Abstract Types
-using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder,
-    SplitLogDecoder, JointDecoder, SplitDecoder,
+using ..AutoEncoderToolkit: JointGaussianLogEncoder, SimpleGaussianDecoder, JointGaussianLogDecoder,
+    SplitGaussianLogDecoder, JointGaussianDecoder, SplitGaussianDecoder,
     AbstractDeterministicDecoder, AbstractVariationalDecoder,
     AbstractVariationalEncoder, AbstractDecoder
 

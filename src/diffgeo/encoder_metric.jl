@@ -110,7 +110,7 @@ end # function
 # ------------------------------------------------------------------------------ 
 
 """
-    encoder_metric_builder(encoder::JointLogEncoder, 
+    encoder_metric_builder(encoder::JointGaussianLogEncoder, 
     data::AbstractMatrix{Float32}; λ::Number=0.0001f0, 
     τ::Number=eps(Float32)) -> Function
 
@@ -123,7 +123,7 @@ weights are determined by the exponential Mahalanobis kernel between z and each
 data point's latent mean.
 
 # Arguments
-- `encoder::JointLogEncoder`: A VAE model encoder that maps data to the latent
+- `encoder::JointGaussianLogEncoder`: A VAE model encoder that maps data to the latent
   space.
 - `data`: The dataset in the form of a matrix, with each column representing a
   data point.
@@ -160,7 +160,7 @@ where:
 
 # Examples
 ```julia
-# Assuming `encoder` is a pre-trained JointLogEncoder and `data` is your 
+# Assuming `encoder` is a pre-trained JointGaussianLogEncoder and `data` is your 
 # dataset:
 G = encoder_metric_builder(encoder, data)
 # Compute the metric for a given latent vector
@@ -172,7 +172,7 @@ metric_matrix = G(some_latent_vector)
 > Autoencoders. Preprint at http://arxiv.org/abs/2209.07370 (2022).
 """
 function encoder_metric_builder(
-    encoder::JointLogEncoder,
+    encoder::JointGaussianLogEncoder,
     data::AbstractMatrix{Float32};
     ρ::Union{Nothing,Float32}=nothing,
     λ::Number=0.0001f0,
@@ -232,7 +232,7 @@ end # function
 
 """
     encoder_metric_builder(
-        encoder::JointLogEncoder,
+        encoder::JointGaussianLogEncoder,
         data::AbstractMatrix{Float32},
         kmedoids_idx::Vector{<:Int};
         ρ::Union{Nothing, Float32}=nothing,
@@ -251,7 +251,7 @@ the exponential Mahalanobis kernel between z and each data point's latent mean
 from the sub-sampled set.
 
 # Arguments
-- `encoder::JointLogEncoder`: A VAE model encoder that maps data to the latent
+- `encoder::JointGaussianLogEncoder`: A VAE model encoder that maps data to the latent
   space.
 - `data`: The dataset in the form of a matrix, with each column representing a
   data point.
@@ -290,7 +290,7 @@ where:
 
 # Examples
 ```julia
-# Assuming `encoder` is a pre-trained JointLogEncoder, `data` is your dataset,
+# Assuming `encoder` is a pre-trained JointGaussianLogEncoder, `data` is your dataset,
 # and `kmedoids_idx` contains indices from a k-medoids clustering:
 G = encoder_metric_builder(encoder, data, kmedoids_idx)
 # Compute the metric for a given latent vector
@@ -302,7 +302,7 @@ metric_matrix = G(some_latent_vector)
 > Autoencoders. Preprint at http://arxiv.org/abs/2209.07370 (2022).
 """
 function encoder_metric_builder(
-    encoder::JointLogEncoder,
+    encoder::JointGaussianLogEncoder,
     data::AbstractMatrix{Float32},
     kmedoids_idx::Vector{<:Int};
     ρ::Union{Nothing,Float32}=nothing,

@@ -4,11 +4,11 @@ import Flux
 ##
 
 # Import Abstract Types
-using ..AutoEncode: AbstractAutoEncoder, AbstractDeterministicAutoEncoder,
+using ..AutoEncoderToolkit: AbstractAutoEncoder, AbstractDeterministicAutoEncoder,
     AbstractDeterministicEncoder, AbstractDeterministicDecoder
 
 # Import Concrete Types
-using ..AutoEncode: Encoder, Decoder
+using ..AutoEncoderToolkit: Encoder, Decoder
 
 ##
 

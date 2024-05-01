@@ -18,25 +18,25 @@ using ChainRulesCore: @ignore_derivatives
 # Import Abstract Types
 
 # Import Abstract Types
-using ..AutoEncode: AbstractVariationalAutoEncoder,
+using ..AutoEncoderToolkit: AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractGaussianEncoder,
     AbstractGaussianLogEncoder,
     AbstractVariationalDecoder, AbstractGaussianDecoder,
     AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder
 
 # Import Concrete Encoder Types
-using ..AutoEncode: JointLogEncoder
+using ..AutoEncoderToolkit: JointGaussianLogEncoder
 
 # Import Concrete Decoder Types
-using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
-    JointLogDecoder, SplitLogDecoder,
-    JointDecoder, SplitDecoder
+using ..AutoEncoderToolkit: BernoulliDecoder, SimpleGaussianDecoder,
+    JointGaussianLogDecoder, SplitGaussianLogDecoder,
+    JointGaussianDecoder, SplitGaussianDecoder
 
 # Import Concrete VAE type
-using ..AutoEncode: VAE
+using ..AutoEncoderToolkit: VAE
 
 # Import log-probability functions
-using ..AutoEncode: decoder_loglikelihood, spherical_logprior,
+using ..AutoEncoderToolkit: decoder_loglikelihood, spherical_logprior,
     encoder_logposterior, encoder_kl, Flatten
 
 # Import functions from other modules
@@ -209,7 +209,7 @@ function MutualInfoChain(
         # Define data layer as a chain of layers including a Flatten layer and
         # a Dense layer with identity activation
         data_layer = Flux.Chain(
-            AutoEncode.Flatten,
+            AutoEncoderToolkit.Flatten,
             Flux.Dense(n_input => n_input, Flux.identity; init=init)
         )
     end # if

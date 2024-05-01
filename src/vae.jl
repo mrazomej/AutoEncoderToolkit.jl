@@ -9,22 +9,22 @@ import StatsBase
 import Distributions
 
 # Import Abstract Types
-using ..AutoEncode: AbstractVariationalAutoEncoder,
+using ..AutoEncoderToolkit: AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractGaussianEncoder,
     AbstractGaussianLogEncoder,
     AbstractVariationalDecoder, AbstractGaussianDecoder,
     AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder
 
 # Import Concrete Encoder Types
-using ..AutoEncode: JointLogEncoder
+using ..AutoEncoderToolkit: JointGaussianLogEncoder
 
 # Import Concrete Decoder Types
-using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
-    JointLogDecoder, SplitLogDecoder,
-    JointDecoder, SplitDecoder
+using ..AutoEncoderToolkit: BernoulliDecoder, SimpleGaussianDecoder,
+    JointGaussianLogDecoder, SplitGaussianLogDecoder,
+    JointGaussianDecoder, SplitGaussianDecoder
 
 # Import functions
-using ..AutoEncode: encoder_kl, encoder_logposterior, decoder_loglikelihood
+using ..AutoEncoderToolkit: encoder_kl, encoder_logposterior, decoder_loglikelihood
 
 # Export functions to use elsewhere
 export reparameterize

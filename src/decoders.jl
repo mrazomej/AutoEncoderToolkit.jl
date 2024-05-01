@@ -265,11 +265,11 @@ end # function
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 # ==============================================================================
-# struct SimpleDecoder <: AbstractGaussianDecoder
+# struct SimpleGaussianDecoder <: AbstractGaussianDecoder
 # ==============================================================================
 
 @doc raw"""
-    SimpleDecoder <: AbstractGaussianDecoder
+    SimpleGaussianDecoder <: AbstractGaussianDecoder
 
 A straightforward decoder structure for variational autoencoders (VAEs) that
 contains only a single decoder network.
@@ -279,25 +279,26 @@ contains only a single decoder network.
   space and map it to the output (or reconstructed) space.
 
 # Description
-`SimpleDecoder` represents a basic VAE decoder without explicit components for
-the latent space's mean (`µ`) or log standard deviation (`logσ`). It's commonly
-used when the VAE's latent space distribution is implicitly defined, and there's
-no need for separate paths or operations on the mean or log standard deviation.
+`SimpleGaussianDecoder` represents a basic VAE decoder without explicit
+components for the latent space's mean (`µ`) or log standard deviation (`logσ`).
+It's commonly used when the VAE's latent space distribution is implicitly
+defined, and there's no need for separate paths or operations on the mean or log
+standard deviation.
 """
-struct SimpleDecoder <: AbstractGaussianDecoder
+struct SimpleGaussianDecoder <: AbstractGaussianDecoder
     decoder::Flux.Chain
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor SimpleDecoder
+Flux.@functor SimpleGaussianDecoder
 
 @doc raw"""
-    SimpleDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+    SimpleGaussianDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 output_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `SimpleDecoder` object designed for variational
-autoencoders (VAEs). This function sets up a straightforward decoder network
-that maps from a latent space to an output space.
+Constructs and initializes a `SimpleGaussianDecoder` object designed for
+variational autoencoders (VAEs). This function sets up a straightforward decoder
+network that maps from a latent space to an output space.
 
 # Arguments
 - `n_input::Int`: Dimensionality of the output data (or the data to be
@@ -314,14 +315,14 @@ that maps from a latent space to an output space.
   parameters.
 
 # Returns
-A `SimpleDecoder` object with the specified architecture and initialized
+A `SimpleGaussianDecoder` object with the specified architecture and initialized
 weights.
 
 # Description
-This function constructs a `SimpleDecoder` object, setting up its decoder
-network based on the provided specifications. The architecture begins with a
-dense layer mapping from the latent space, goes through a sequence of middle
-layers if specified, and finally maps to the output space.
+This function constructs a `SimpleGaussianDecoder` object, setting up its
+decoder network based on the provided specifications. The architecture begins
+with a dense layer mapping from the latent space, goes through a sequence of
+middle layers if specified, and finally maps to the output space.
 
 The function ensures that there are appropriate activation functions provided
 for each layer in the `decoder_neurons` and checks for potential mismatches in
@@ -334,7 +335,7 @@ n_latent = 64
 decoder_neurons = [128, 256]
 decoder_activation = [relu, relu]
 output_activation = sigmoid
-decoder = SimpleDecoder(
+decoder = SimpleGaussianDecoder(
     n_input, n_latent, decoder_neurons, decoder_activation, output_activation
 )
 ```
@@ -343,7 +344,7 @@ decoder = SimpleDecoder(
 Ensure that the lengths of decoder_neurons and decoder_activation match,
 excluding the output layer.
 """
-function SimpleDecoder(
+function SimpleGaussianDecoder(
     n_input::Int,
     n_latent::Int,
     decoder_neurons::Vector{<:Int},
@@ -383,20 +384,20 @@ function SimpleDecoder(
     end # if
 
     # Initialize simple decoder
-    return SimpleDecoder(Flux.Chain(decoder...))
+    return SimpleGaussianDecoder(Flux.Chain(decoder...))
 end # function
 
 @doc raw"""
-    (decoder::SimpleDecoder)(z::AbstractVecOrMat)
+    (decoder::SimpleGaussianDecoder)(z::AbstractVecOrMat)
     
 
-Maps the given latent representation `z` through the `SimpleDecoder` network to
-reconstruct the original input.
+Maps the given latent representation `z` through the `SimpleGaussianDecoder`
+network to reconstruct the original input.
 
 # Arguments
-- `z::AbstractArray`: The latent space representation to be decoded.
-  This can be a vector or a matrix, where each column represents a separate
-  sample from the latent space of a VAE.
+- `z::AbstractArray`: The latent space representation to be decoded. This can be
+  a vector or a matrix, where each column represents a separate sample from the
+  latent space of a VAE.
 
 # Returns
 - A NamedTuple `(µ=µ,)` where `µ` is an array representing the output of the
@@ -405,31 +406,31 @@ reconstruct the original input.
 
 # Description
 This function processes the latent space representation `z` using the neural
-network defined in the `SimpleDecoder` struct. The aim is to decode or
+network defined in the `SimpleGaussianDecoder` struct. The aim is to decode or
 reconstruct the original input from this representation.
 
 # Example
 ```julia
-decoder = SimpleDecoder(...)
+decoder = SimpleGaussianDecoder(...)
 z = ... # some latent space representation
 output = decoder(z)
 ```
 # Note
 
 Ensure that the latent space representation z matches the expected input
-dimensionality for the SimpleDecoder.
+dimensionality for the SimpleGaussianDecoder.
 """
-function (decoder::SimpleDecoder)(z::AbstractArray)
+function (decoder::SimpleGaussianDecoder)(z::AbstractArray)
     # Run input to decoder network
     return (µ=decoder.decoder(z),)
 end # function
 
 # ==============================================================================
-# struct JointLogDecoder <: AbstractVariationalDecoder
+# struct JointGaussianLogDecoder <: AbstractGaussianLogDecoder
 # ==============================================================================
 
 @doc raw"""
-    JointLogDecoder <: AbstractGaussianLogDecoder
+    JointGaussianLogDecoder <: AbstractGaussianLogDecoder
 
 An extended decoder structure for VAEs that incorporates separate layers for
 mapping from the latent space to both its mean (`µ`) and log standard deviation
@@ -444,24 +445,24 @@ mapping from the latent space to both its mean (`µ`) and log standard deviation
   to the log standard deviation of the latent space.
 
 # Description
-`JointLogDecoder` is tailored for VAE architectures where the same decoder network
-is used initially, and then splits into two separate paths for determining both
-the mean and log standard deviation of the latent space.
+`JointGaussianLogDecoder` is tailored for VAE architectures where the same
+decoder network is used initially, and then splits into two separate paths for
+determining both the mean and log standard deviation of the latent space.
 """
-struct JointLogDecoder <: AbstractGaussianLogDecoder
+struct JointGaussianLogDecoder <: AbstractGaussianLogDecoder
     decoder::Flux.Chain
     µ::Flux.Dense
     logσ::Flux.Dense
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor JointLogDecoder
+Flux.@functor JointGaussianLogDecoder
 
 @doc raw"""
-    JointLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+    JointGaussianLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 latent_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `JointLogDecoder` object for variational
+Constructs and initializes a `JointGaussianLogDecoder` object for variational
 autoencoders (VAEs). This function sets up a decoder network that first
 processes the latent space and then maps it separately to both its mean (`µ`)
 and log standard deviation (`logσ`).
@@ -482,16 +483,16 @@ and log standard deviation (`logσ`).
   parameters.
 
 # Returns
-A `JointLogDecoder` object with the specified architecture and initialized
-weights.
+A `JointGaussianLogDecoder` object with the specified architecture and
+initialized weights.
 
 # Description
-This function constructs a `JointLogDecoder` object, setting up its primary
-decoder network based on the provided specifications. The architecture begins
-with a dense layer mapping from the latent space and goes through a sequence of
-middle layers if specified. After processing the latent space through the
-primary decoder, it then maps separately to both its mean (`µ`) and log standard
-deviation (`logσ`).
+This function constructs a `JointGaussianLogDecoder` object, setting up its
+primary decoder network based on the provided specifications. The architecture
+begins with a dense layer mapping from the latent space and goes through a
+sequence of middle layers if specified. After processing the latent space
+through the primary decoder, it then maps separately to both its mean (`µ`) and
+log standard deviation (`logσ`).
 
 # Example
 ```julia
@@ -500,7 +501,7 @@ n_latent = 64
 decoder_neurons = [128, 256]
 decoder_activation = [relu, relu]
 output_activation = tanh
-decoder = JointLogDecoder(
+decoder = JointGaussianLogDecoder(
     n_input, n_latent, decoder_neurons, decoder_activation, output_activation
 )
 ```
@@ -508,7 +509,7 @@ decoder = JointLogDecoder(
 # Note
 Ensure that the lengths of decoder_neurons and decoder_activation match.
 """
-function JointLogDecoder(
+function JointGaussianLogDecoder(
     n_input::Int,
     n_latent::Int,
     decoder_neurons::Vector{<:Int},
@@ -554,14 +555,14 @@ function JointLogDecoder(
     )
 
     # Initialize joint decoder
-    return JointLogDecoder(decoder_chain, µ_layer, logσ_layer)
+    return JointGaussianLogDecoder(decoder_chain, µ_layer, logσ_layer)
 end
 
 @doc raw"""
-    JointLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+    JointGaussianLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 latent_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `JointLogDecoder` object for variational
+Constructs and initializes a `JointGaussianLogDecoder` object for variational
 autoencoders (VAEs). This function sets up a decoder network that first
 processes the latent space and then maps it separately to both its mean (`µ`)
 and log standard deviation (`logσ`).
@@ -582,16 +583,16 @@ and log standard deviation (`logσ`).
   parameters.
 
 # Returns
-A `JointLogDecoder` object with the specified architecture and initialized
-weights.
+A `JointGaussianLogDecoder` object with the specified architecture and
+initialized weights.
 
 # Description
-This function constructs a `JointLogDecoder` object, setting up its primary
-decoder network based on the provided specifications. The architecture begins
-with a dense layer mapping from the latent space and goes through a sequence of
-middle layers if specified. After processing the latent space through the
-primary decoder, it then maps separately to both its mean (`µ`) and log standard
-deviation (`logσ`).
+This function constructs a `JointGaussianLogDecoder` object, setting up its
+primary decoder network based on the provided specifications. The architecture
+begins with a dense layer mapping from the latent space and goes through a
+sequence of middle layers if specified. After processing the latent space
+through the primary decoder, it then maps separately to both its mean (`µ`) and
+log standard deviation (`logσ`).
 
 # Example
 ```julia
@@ -600,7 +601,7 @@ n_latent = 64
 decoder_neurons = [128, 256]
 decoder_activation = [relu, relu]
 output_activation = [tanh, identity]
-decoder = JointLogDecoder(
+decoder = JointGaussianLogDecoder(
     n_input, n_latent, decoder_neurons, decoder_activation, latent_activation
 )
 ```
@@ -608,7 +609,7 @@ decoder = JointLogDecoder(
 # Note
 Ensure that the lengths of decoder_neurons and decoder_activation match.
 """
-function JointLogDecoder(
+function JointGaussianLogDecoder(
     n_input::Int,
     n_latent::Int,
     decoder_neurons::Vector{<:Int},
@@ -654,44 +655,43 @@ function JointLogDecoder(
     )
 
     # Initialize joint decoder
-    return JointLogDecoder(decoder_chain, µ_layer, logσ_layer)
+    return JointGaussianLogDecoder(decoder_chain, µ_layer, logσ_layer)
 end
 
 @doc raw"""
-        (decoder::JointLogDecoder)(z::AbstractArray)
+        (decoder::JointGaussianLogDecoder)(z::AbstractArray)
 
-Maps the given latent representation `z` through the `JointLogDecoder` network
-to produce both the mean (`µ`) and log standard deviation (`logσ`).
+Maps the given latent representation `z` through the `JointGaussianLogDecoder`
+network to produce both the mean (`µ`) and log standard deviation (`logσ`).
 
 # Arguments
-- `z::AbstractArray`: The latent space representation to be decoded.
-  If array, the last dimension contains each of the latent space
-  representations.
+- `z::AbstractArray`: The latent space representation to be decoded. If array,
+  the last dimension contains each of the latent space representations.
   
 # Returns
 - A NamedTuple `(µ=µ, logσ=logσ,)` where:
     - `µ::Array`: The mean representation obtained from the decoder.
-    - `logσ::Array`: The log standard deviation representation
-      obtained from the decoder.
+    - `logσ::Array`: The log standard deviation representation obtained from the
+      decoder.
 
 # Description
 This function processes the latent space representation `z` using the primary
-neural network of the `JointLogDecoder` struct. It then separately maps the
-output of this network to the mean and log standard deviation using the `µ` and
-`logσ` dense layers, respectively.
+neural network of the `JointGaussianLogDecoder` struct. It then separately maps
+the output of this network to the mean and log standard deviation using the `µ`
+and `logσ` dense layers, respectively.
 
 # Example
 ```julia
-decoder = JointLogDecoder(...)
+decoder = JointGaussianLogDecoder(...)
 z = ... # some latent space representation
 output = decoder(z)
 ```
 
 # Note
 Ensure that the latent space representation z matches the expected input
-dimensionality for the JointLogDecoder.
+dimensionality for the JointGaussianLogDecoder.
 """
-function (decoder::JointLogDecoder)(z::AbstractArray)
+function (decoder::JointGaussianLogDecoder)(z::AbstractArray)
     # Run input through the primary decoder network
     h = decoder.decoder(z)
     # Map to mean
@@ -702,11 +702,11 @@ function (decoder::JointLogDecoder)(z::AbstractArray)
 end # function
 
 # ==============================================================================
-# struct JointDecoder <: AbstractVariationalDecoder
+# struct JointGaussianDecoder <: AbstractGaussianLinearDecoder
 # ==============================================================================
 
 @doc raw"""
-    JointDecoder <: AbstractGaussianLinearDecoder
+    JointGaussianDecoder <: AbstractGaussianLinearDecoder
 
 An extended decoder structure for VAEs that incorporates separate layers for
 mapping from the latent space to both its mean (`µ`) and standard deviation
@@ -721,24 +721,24 @@ mapping from the latent space to both its mean (`µ`) and standard deviation
   the standard deviation of the latent space.
 
 # Description
-`JointDecoder` is tailored for VAE architectures where the same decoder network
-is used initially, and then splits into two separate paths for determining both
-the mean and standard deviation of the latent space.
+`JointGaussianDecoder` is tailored for VAE architectures where the same decoder
+network is used initially, and then splits into two separate paths for
+determining both the mean and standard deviation of the latent space.
 """
-struct JointDecoder <: AbstractGaussianLinearDecoder
+struct JointGaussianDecoder <: AbstractGaussianLinearDecoder
     decoder::Flux.Chain
     µ::Flux.Dense
     σ::Flux.Dense
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor JointDecoder
+Flux.@functor JointGaussianDecoder
 
 @doc raw"""
-    JointDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+    JointGaussianDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 latent_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `JointLogDecoder` object for variational
+Constructs and initializes a `JointGaussianLogDecoder` object for variational
 autoencoders (VAEs). This function sets up a decoder network that first
 processes the latent space and then maps it separately to both its mean (`µ`)
 and log standard deviation (`logσ`).
@@ -759,15 +759,16 @@ and log standard deviation (`logσ`).
   parameters.
 
 # Returns
-A `JointDecoder` object with the specified architecture and initialized weights.
+A `JointGaussianDecoder` object with the specified architecture and initialized
+weights.
 
 # Description
-This function constructs a `JointDecoder` object, setting up its primary decoder
-network based on the provided specifications. The architecture begins with a
-dense layer mapping from the latent space and goes through a sequence of middle
-layers if specified. After processing the latent space through the primary
-decoder, it then maps separately to both its mean (`µ`) and standard deviation
-(`σ`).
+This function constructs a `JointGaussianDecoder` object, setting up its primary
+decoder network based on the provided specifications. The architecture begins
+with a dense layer mapping from the latent space and goes through a sequence of
+middle layers if specified. After processing the latent space through the
+primary decoder, it then maps separately to both its mean (`µ`) and standard
+deviation (`σ`).
 
 # Example
 ```julia
@@ -776,7 +777,7 @@ n_latent = 64
 decoder_neurons = [128, 256]
 decoder_activation = [relu, relu]
 output_activation = tanh
-decoder = JointDecoder(
+decoder = JointGaussianDecoder(
     n_input, n_latent, decoder_neurons, decoder_activation, output_activation
 )
 ```
@@ -784,7 +785,7 @@ decoder = JointDecoder(
 # Note
 Ensure that the lengths of decoder_neurons and decoder_activation match.
 """
-function JointDecoder(
+function JointGaussianDecoder(
     n_input::Int,
     n_latent::Int,
     decoder_neurons::Vector{<:Int},
@@ -830,17 +831,17 @@ function JointDecoder(
     )
 
     # Initialize joint decoder
-    return JointDecoder(decoder_chain, µ_layer, logσ_layer)
+    return JointGaussianDecoder(decoder_chain, µ_layer, logσ_layer)
 end
 
 @doc raw"""
-    JointDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
+    JointGaussianDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
                 latent_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `JointDecoder` object for variational autoencoders
-(VAEs). This function sets up a decoder network that first processes the latent
-space and then maps it separately to both its mean (`µ`) and standard deviation
-(`σ`).
+Constructs and initializes a `JointGaussianDecoder` object for variational
+autoencoders (VAEs). This function sets up a decoder network that first
+processes the latent space and then maps it separately to both its mean (`µ`)
+and standard deviation (`σ`).
 
 # Arguments
 - `n_input::Int`: Dimensionality of the output data (or the data to be
@@ -858,15 +859,16 @@ space and then maps it separately to both its mean (`µ`) and standard deviation
   parameters.
 
 # Returns
-A `JointDecoder` object with the specified architecture and initialized weights.
+A `JointGaussianDecoder` object with the specified architecture and initialized
+weights.
 
 # Description
-This function constructs a `JointDecoder` object, setting up its primary decoder
-network based on the provided specifications. The architecture begins with a
-dense layer mapping from the latent space and goes through a sequence of middle
-layers if specified. After processing the latent space through the primary
-decoder, it then maps separately to both its mean (`µ`) and standard deviation
-(`σ`).
+This function constructs a `JointGaussianDecoder` object, setting up its primary
+decoder network based on the provided specifications. The architecture begins
+with a dense layer mapping from the latent space and goes through a sequence of
+middle layers if specified. After processing the latent space through the
+primary decoder, it then maps separately to both its mean (`µ`) and standard
+deviation (`σ`).
 
 # Example
 ```julia
@@ -875,7 +877,7 @@ n_latent = 64
 decoder_neurons = [128, 256]
 decoder_activation = [relu, relu]
 latent_activation = [tanh, softplus]
-decoder = JointDecoder(
+decoder = JointGaussianDecoder(
     n_input, n_latent, decoder_neurons, decoder_activation, latent_activation
 )
 ```
@@ -883,7 +885,7 @@ decoder = JointDecoder(
 # Note
 Ensure that the lengths of decoder_neurons and decoder_activation match.
 """
-function JointDecoder(
+function JointGaussianDecoder(
     n_input::Int,
     n_latent::Int,
     decoder_neurons::Vector{<:Int},
@@ -929,45 +931,44 @@ function JointDecoder(
     )
 
     # Initialize joint decoder
-    return JointDecoder(decoder_chain, µ_layer, σ_layer)
+    return JointGaussianDecoder(decoder_chain, µ_layer, σ_layer)
 end
 
 @doc raw"""
-        (decoder::JointDecoder)(z::AbstractArray)
+        (decoder::JointGaussianDecoder)(z::AbstractArray)
 
-Maps the given latent representation `z` through the `JointDecoder` network to
-produce both the mean (`µ`) and standard deviation (`σ`).
+Maps the given latent representation `z` through the `JointGaussianDecoder`
+network to produce both the mean (`µ`) and standard deviation (`σ`).
 
 # Arguments
-- `z::AbstractArray`: The latent space representation to be decoded.
-  If array, the last dimension contains each of the latent space representations
-  to be decoded.
+- `z::AbstractArray`: The latent space representation to be decoded. If array,
+  the last dimension contains each of the latent space representations to be
+  decoded.
 
 # Returns
 - A NamedTuple `(µ=µ, σ=σ,)` where:
-    - `µ::AbstractArray`: The mean representation obtained from the
-      decoder.
-    - `σ::AbstractArray`: The standard deviation representation
-      obtained from the decoder.
+    - `µ::AbstractArray`: The mean representation obtained from the decoder.
+    - `σ::AbstractArray`: The standard deviation representation obtained from
+      the decoder.
 
 # Description
 This function processes the latent space representation `z` using the primary
-neural network of the `JointDecoder` struct. It then separately maps the output
-of this network to the mean and standard deviation using the `µ` and `σ` dense
-layers, respectively.
+neural network of the `JointGaussianDecoder` struct. It then separately maps the
+output of this network to the mean and standard deviation using the `µ` and `σ`
+dense layers, respectively.
 
 # Example
 ```julia
-decoder = JointDecoder(...)
+decoder = JointGaussianDecoder(...)
 z = ... # some latent space representation
 output = decoder(z)
 ```
 
 # Note
 Ensure that the latent space representation z matches the expected input
-dimensionality for the JointDecoder.
+dimensionality for the JointGaussianDecoder.
 """
-function (decoder::JointDecoder)(z::AbstractArray)
+function (decoder::JointGaussianDecoder)(z::AbstractArray)
     # Run input through the primary decoder network
     h = decoder.decoder(z)
     # Map to mean
@@ -978,11 +979,11 @@ function (decoder::JointDecoder)(z::AbstractArray)
 end # function
 
 # ==============================================================================
-# struct SplitLogDecoder <: AbstractGaussianLogDecoder
+# struct SplitGaussianLogDecoder <: AbstractGaussianLogDecoder
 # ==============================================================================
 
 @doc raw"""
-    SplitLogDecoder <: AbstractGaussianLogDecoder
+    SplitGaussianLogDecoder <: AbstractGaussianLogDecoder
 
 A specialized decoder structure for VAEs that uses distinct neural networks for
 determining the mean (`µ`) and log standard deviation (`logσ`) of the latent
@@ -995,24 +996,24 @@ space.
   latent space and mapping it to its log standard deviation.
 
 # Description
-`SplitLogDecoder` is designed for VAE architectures where separate decoder
-networks are preferred for computing the mean and log standard deviation,
-ensuring that each has its own distinct set of parameters and transformation
-logic.
+`SplitGaussianLogDecoder` is designed for VAE architectures where separate
+decoder networks are preferred for computing the mean and log standard
+deviation, ensuring that each has its own distinct set of parameters and
+transformation logic.
 """
-struct SplitLogDecoder <: AbstractGaussianLogDecoder
+struct SplitGaussianLogDecoder <: AbstractGaussianLogDecoder
     µ::Flux.Chain
     logσ::Flux.Chain
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor SplitLogDecoder
+Flux.@functor SplitGaussianLogDecoder
 
 @doc raw"""
-    SplitLogDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
+    SplitGaussianLogDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
                 logσ_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `SplitLogDecoder` object for variational
+Constructs and initializes a `SplitGaussianLogDecoder` object for variational
 autoencoders (VAEs). This function sets up two distinct decoder networks, one
 dedicated for determining the mean (`µ`) and the other for the log standard
 deviation (`logσ`) of the latent space.
@@ -1035,15 +1036,15 @@ deviation (`logσ`) of the latent space.
   parameters.
 
 # Returns
-A `SplitLogDecoder` object with two distinct networks initialized with the
-specified architectures and weights.
+A `SplitGaussianLogDecoder` object with two distinct networks initialized with
+the specified architectures and weights.
 
 # Description
-This function constructs a `SplitLogDecoder` object, setting up two separate
-decoder networks based on the provided specifications. The first network,
-dedicated to determining the mean (`µ`), and the second for the log standard
-deviation (`logσ`), both begin with a dense layer mapping from the latent space
-and go through a sequence of middle layers if specified.
+This function constructs a `SplitGaussianLogDecoder` object, setting up two
+separate decoder networks based on the provided specifications. The first
+network, dedicated to determining the mean (`µ`), and the second for the log
+standard deviation (`logσ`), both begin with a dense layer mapping from the
+latent space and go through a sequence of middle layers if specified.
 
 # Example
 ```julia
@@ -1052,7 +1053,7 @@ n_latent = 64
 µ_activation = [relu, relu]
 logσ_neurons = [128, 256]
 logσ_activation = [relu, relu]
-decoder = SplitLogDecoder(
+decoder = SplitGaussianLogDecoder(
     n_latent, µ_neurons, µ_activation, logσ_neurons, logσ_activation
 )
 ```
@@ -1063,7 +1064,7 @@ decoder = SplitLogDecoder(
 - If µ_neurons[end] or logσ_neurons[end] do not match n_input, the function
   automatically changes this number to match the right dimensionality
 """
-function SplitLogDecoder(
+function SplitGaussianLogDecoder(
     n_input::Int,
     n_latent::Int,
     µ_neurons::Vector{<:Int},
@@ -1130,46 +1131,46 @@ function SplitLogDecoder(
     end # for
 
     # Initialize split decoder
-    return SplitLogDecoder(Flux.Chain(µ_layers...), Flux.Chain(logσ_layers...))
+    return SplitGaussianLogDecoder(Flux.Chain(µ_layers...), Flux.Chain(logσ_layers...))
 end # function
 
 @doc raw"""
-        (decoder::SplitLogDecoder)(z::AbstractArray)
+        (decoder::SplitGaussianLogDecoder)(z::AbstractArray)
 
 Maps the given latent representation `z` through the separate networks of the
-`SplitLogDecoder` to produce both the mean (`µ`) and log standard deviation
-(`logσ`).
+`SplitGaussianLogDecoder` to produce both the mean (`µ`) and log standard
+deviation (`logσ`).
 
 # Arguments
-- `z::AbstractArray`: The latent space representation to be decoded.
-  If array, the last dimension contains each of the latent space representations
-  to be decoded.
+- `z::AbstractArray`: The latent space representation to be decoded. If array,
+  the last dimension contains each of the latent space representations to be
+  decoded.
   
 # Returns
 - A NamedTuple `(µ=µ, logσ=logσ,)` where:
-    - `µ::AbstractArray`: The mean representation obtained using the
-      dedicated `decoder_µ` network.
-    - `logσ::AbstractArray`: The log standard deviation representation
-      obtained using the dedicated `decoder_logσ` network.
+    - `µ::AbstractArray`: The mean representation obtained using the dedicated
+      `decoder_µ` network.
+    - `logσ::AbstractArray`: The log standard deviation representation obtained
+      using the dedicated `decoder_logσ` network.
 
 # Description
 This function processes the latent space representation `z` through two distinct
-neural networks within the `SplitLogDecoder` struct. The `decoder_µ` network is
-used to produce the mean representation, while the `decoder_logσ` network is
-utilized for the log standard deviation.
+neural networks within the `SplitGaussianLogDecoder` struct. The `decoder_µ`
+network is used to produce the mean representation, while the `decoder_logσ`
+network is utilized for the log standard deviation.
 
 # Example
 ```julia
-decoder = SplitLogDecoder(...)
+decoder = SplitGaussianLogDecoder(...)
 z = ... # some latent space representation
 output = decoder(z))
 ```
 
 # Note
 Ensure that the latent space representation z matches the expected input
-dimensionality for both networks in the SplitLogDecoder.
+dimensionality for both networks in the SplitGaussianLogDecoder.
 """
-function (decoder::SplitLogDecoder)(z::AbstractArray)
+function (decoder::SplitGaussianLogDecoder)(z::AbstractArray)
     # Map through the decoder dedicated to the mean
     µ = decoder.µ(z)
     # Map through the decoder dedicated to the log standard deviation
@@ -1178,11 +1179,11 @@ function (decoder::SplitLogDecoder)(z::AbstractArray)
 end # function
 
 # ==============================================================================
-# struct SplitDecoder <: AbstractGaussianLinearDecoder
+# struct SplitGaussianDecoder <: AbstractGaussianLinearDecoder
 # ==============================================================================
 
 @doc raw"""
-    SplitDecoder <: AbstractGaussianLinearDecoder
+    SplitGaussianDecoder <: AbstractGaussianLinearDecoder
 
 A specialized decoder structure for VAEs that uses distinct neural networks for
 determining the mean (`µ`) and standard deviation (`logσ`) of the latent space.
@@ -1194,27 +1195,27 @@ determining the mean (`µ`) and standard deviation (`logσ`) of the latent space
   space and mapping it to its standard deviation.
 
 # Description
-`SplitDecoder` is designed for VAE architectures where separate decoder
+`SplitGaussianDecoder` is designed for VAE architectures where separate decoder
 networks are preferred for computing the mean and log standard deviation,
 ensuring that each has its own distinct set of parameters and transformation
 logic.
 """
-struct SplitDecoder <: AbstractGaussianLinearDecoder
+struct SplitGaussianDecoder <: AbstractGaussianLinearDecoder
     µ::Flux.Chain
     σ::Flux.Chain
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
-Flux.@functor SplitDecoder
+Flux.@functor SplitGaussianDecoder
 
 @doc raw"""
-    SplitDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
+    SplitGaussianDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
                 logσ_activation; init=Flux.glorot_uniform)
 
-Constructs and initializes a `SplitDecoder` object for variational autoencoders
-(VAEs). This function sets up two distinct decoder networks, one dedicated for
-determining the mean (`µ`) and the other for the standard deviation (`σ`) of the
-latent space.
+Constructs and initializes a `SplitGaussianDecoder` object for variational
+autoencoders (VAEs). This function sets up two distinct decoder networks, one
+dedicated for determining the mean (`µ`) and the other for the standard
+deviation (`σ`) of the latent space.
 
 # Arguments
 - `n_input::Int`: Dimensionality of the output data (or the data to be
@@ -1234,15 +1235,15 @@ latent space.
   parameters.
 
 # Returns
-A `SplitDecoder` object with two distinct networks initialized with the
+A `SplitGaussianDecoder` object with two distinct networks initialized with the
 specified architectures and weights.
 
 # Description
-This function constructs a `SplitDecoder` object, setting up two separate
-decoder networks based on the provided specifications. The first network,
-dedicated to determining the mean (`µ`), and the second for the standard
-deviation (`σ`), both begin with a dense layer mapping from the latent space and
-go through a sequence of middle layers if specified.
+This function constructs a `SplitGaussianDecoder` object, setting up two
+separate decoder networks based on the provided specifications. The first
+network, dedicated to determining the mean (`µ`), and the second for the
+standard deviation (`σ`), both begin with a dense layer mapping from the latent
+space and go through a sequence of middle layers if specified.
 
 # Example
 ```julia
@@ -1251,7 +1252,7 @@ n_latent = 64
 µ_activation = [relu, relu]
 σ_neurons = [128, 256]
 σ_activation = [relu, relu]
-decoder = SplitDecoder(
+decoder = SplitGaussianDecoder(
     n_latent, µ_neurons, µ_activation, σ_neurons, σ_activation
 )
 ```
@@ -1265,7 +1266,7 @@ decoder = SplitDecoder(
   such as `softplus` are needed to guarantee the positivity of the standard
   deviation.
 """
-function SplitDecoder(
+function SplitGaussianDecoder(
     n_input::Int,
     n_latent::Int,
     µ_neurons::Vector{<:Int},
@@ -1334,45 +1335,46 @@ function SplitDecoder(
     end # for
 
     # Initialize split decoder
-    return SplitDecoder(Flux.Chain(µ_layers...), Flux.Chain(σ_layers...))
+    return SplitGaussianDecoder(Flux.Chain(µ_layers...), Flux.Chain(σ_layers...))
 end # function
 
 @doc raw"""
-        (decoder::SplitDecoder)(z::AbstractArray)
+        (decoder::SplitGaussianDecoder)(z::AbstractArray)
 
 Maps the given latent representation `z` through the separate networks of the
-`SplitDecoder` to produce both the mean (`µ`) and standard deviation (`σ`).
+`SplitGaussianDecoder` to produce both the mean (`µ`) and standard deviation
+(`σ`).
 
 # Arguments
-- `z::AbstractArray`: The latent space representation to be decoded.
-  If array, the last dimension contains each of the latent space representations
-  to be decoded.
+- `z::AbstractArray`: The latent space representation to be decoded. If array,
+  the last dimension contains each of the latent space representations to be
+  decoded.
 
 # Returns
 - A NamedTuple `(µ=µ, σ=σ,)` where:
-    - `µ::AbstractArray`: The mean representation obtained using the
-      dedicated `decoder_µ` network.
-    - `σ::AbstractArray`: The standard deviation representation
-      obtained using the dedicated `decoder_σ` network.
+    - `µ::AbstractArray`: The mean representation obtained using the dedicated
+      `decoder_µ` network.
+    - `σ::AbstractArray`: The standard deviation representation obtained using
+      the dedicated `decoder_σ` network.
 
 # Description
 This function processes the latent space representation `z` through two distinct
-neural networks within the `SplitDecoder` struct. The `decoder_µ` network is
-used to produce the mean representation, while the `decoder_σ` network is
-utilized for the standard deviation.
+neural networks within the `SplitGaussianDecoder` struct. The `decoder_µ`
+network is used to produce the mean representation, while the `decoder_σ`
+network is utilized for the standard deviation.
 
 # Example
 ```julia
-decoder = SplitDecoder(...)
+decoder = SplitGaussianDecoder(...)
 z = ... # some latent space representation
 output = decoder(z)
 ```
 
 # Note
 Ensure that the latent space representation z matches the expected input
-dimensionality for both networks in the SplitDecoder.
+dimensionality for both networks in the SplitGaussianDecoder.
 """
-function (decoder::SplitDecoder)(z::AbstractArray)
+function (decoder::SplitGaussianDecoder)(z::AbstractArray)
     # Map through the decoder dedicated to the mean
     µ = decoder.µ(z)
     # Map through the decoder dedicated to the standard deviation
@@ -2346,7 +2348,7 @@ end # function
     decoder_loglikelihood(
         x::AbstractArray,
         z::AbstractVector,
-        decoder::SimpleDecoder,
+        decoder::SimpleGaussianDecoder,
         decoder_output::NamedTuple;
         σ::Number=1.0f0,
     )
@@ -2363,7 +2365,7 @@ standard deviation.
   used to generate the decoder output. This argument is not used in the
   computation of the log-likelihood since the decoder output is already
   provided. This is only used to know which method to call.
-- `decoder::SimpleDecoder`: The decoder of the VAE, which is used to compute the
+- `decoder::SimpleGaussianDecoder`: The decoder of the VAE, which is used to compute the
   mean of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   mean of the Gaussian distribution.
@@ -2390,7 +2392,7 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 function decoder_loglikelihood(
     x::AbstractArray,
     z::AbstractVector,
-    decoder::SimpleDecoder,
+    decoder::SimpleGaussianDecoder,
     decoder_output::NamedTuple;
     σ::Number=1.0f0,
 )
@@ -2409,7 +2411,7 @@ end # function
     decoder_loglikelihood(
         x::AbstractArray,
         z::AbstractMatrix,
-        decoder::SimpleDecoder,
+        decoder::SimpleGaussianDecoder,
         decoder_output::NamedTuple;
         σ::Number=1.0f0,
     )
@@ -2426,7 +2428,7 @@ standard deviation.
   used to generate the decoder output. This argument is not used in the
   computation of the log-likelihood since the decoder output is already
   provided. This is only used to know which method to call.
-- `decoder::SimpleDecoder`: The decoder of the VAE, which is used to compute the
+- `decoder::SimpleGaussianDecoder`: The decoder of the VAE, which is used to compute the
   mean of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   mean of the Gaussian distribution.
@@ -2453,7 +2455,7 @@ Ensure the dimensions of `x` match the expected input dimensionality of the
 function decoder_loglikelihood(
     x::AbstractArray,
     z::AbstractMatrix,
-    decoder::SimpleDecoder,
+    decoder::SimpleGaussianDecoder,
     decoder_output::NamedTuple;
     σ::Number=1.0f0,
 )
@@ -2477,7 +2479,7 @@ end # function
     decoder_loglikelihood(
         x::AbstractArray,
         z::AbstractVector,
-        decoder::SimpleDecoder,
+        decoder::SimpleGaussianDecoder,
         decoder_output::NamedTuple,
         index::Int;
         σ::Number=1.0f0,
@@ -2494,7 +2496,7 @@ mean given by the decoder and a specified standard deviation.
   generate the decoder output. This argument is not used in the computation of
   the log-likelihood since the decoder output is already provided. This is only
   used to know which method to call.
-- `decoder::SimpleDecoder`: The decoder of the VAE, which is used to compute the
+- `decoder::SimpleGaussianDecoder`: The decoder of the VAE, which is used to compute the
   mean of the Gaussian distribution.
 - `decoder_output::NamedTuple`: The output of the decoder, which includes the
   mean of the Gaussian distribution for multiple data points.
@@ -2525,7 +2527,7 @@ and `decoder_output`.
 function decoder_loglikelihood(
     x::AbstractArray,
     z::AbstractVector,
-    decoder::SimpleDecoder,
+    decoder::SimpleGaussianDecoder,
     decoder_output::NamedTuple,
     index::Int;
     σ::Number=1.0f0,

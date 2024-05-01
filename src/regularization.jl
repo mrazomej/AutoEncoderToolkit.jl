@@ -1,5 +1,5 @@
 # Import Abstract Types
-using ..AutoEncode: JointLogEncoder, SimpleDecoder, JointLogDecoder, SplitLogDecoder
+using ..AutoEncoderToolkit: JointGaussianLogEncoder, SimpleGaussianDecoder, JointGaussianLogDecoder, SplitGaussianLogDecoder
 
 # ==============================================================================
 

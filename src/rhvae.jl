@@ -17,25 +17,25 @@ import Distributions
 using EllipsisNotation
 
 # Import Abstract Types
-using ..AutoEncode: AbstractVariationalAutoEncoder,
+using ..AutoEncoderToolkit: AbstractVariationalAutoEncoder,
     AbstractVariationalEncoder, AbstractGaussianEncoder,
     AbstractGaussianLogEncoder,
     AbstractVariationalDecoder, AbstractGaussianDecoder,
     AbstractGaussianLogDecoder, AbstractGaussianLinearDecoder
 
 # Import Concrete Encoder Types
-using ..AutoEncode: JointLogEncoder
+using ..AutoEncoderToolkit: JointGaussianLogEncoder
 
 # Import Concrete Decoder Types
-using ..AutoEncode: BernoulliDecoder, SimpleDecoder,
-    JointLogDecoder, SplitLogDecoder,
-    JointDecoder, SplitDecoder
+using ..AutoEncoderToolkit: BernoulliDecoder, SimpleGaussianDecoder,
+    JointGaussianLogDecoder, SplitGaussianLogDecoder,
+    JointGaussianDecoder, SplitGaussianDecoder
 
 # Import Concrete VAE type
-using ..AutoEncode: VAE
+using ..AutoEncoderToolkit: VAE
 
 # Import log-probability functions
-using ..AutoEncode: decoder_loglikelihood, spherical_logprior,
+using ..AutoEncoderToolkit: decoder_loglikelihood, spherical_logprior,
     encoder_logposterior
 
 # Import functions from other modules

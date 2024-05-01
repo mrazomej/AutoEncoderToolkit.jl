@@ -6,7 +6,7 @@ import SimpleChains
 
 # Import Abstract Types
 
-using ..AutoEncode: AbstractAutoEncoder, AbstractDeterministicAutoEncoder
+using ..AutoEncoderToolkit: AbstractAutoEncoder, AbstractDeterministicAutoEncoder
 
 ##
 

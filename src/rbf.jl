@@ -11,9 +11,9 @@ import Distributions
 # Import Clustering algorithms
 import Clustering
 
-using ..AutoEncode: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
-    AbstractVariationalDecoder, JointLogEncoder, SimpleDecoder, JointLogDecoder,
-    SplitLogDecoder, JointDecoder, SplitDecoder, VAE
+using ..AutoEncoderToolkit: AbstractVariationalAutoEncoder, AbstractVariationalEncoder,
+    AbstractVariationalDecoder, JointGaussianLogEncoder, SimpleGaussianDecoder, JointGaussianLogDecoder,
+    SplitGaussianLogDecoder, JointGaussianDecoder, SplitGaussianDecoder, VAE
 
 ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # > Arvanitidis, G., Hansen, L. K. & Hauberg, S. Latent Space Oddity: on the
@@ -39,7 +39,7 @@ crucial for defining the RBFs used in modeling the data-dependent variance of
 the VAE's decoder.
 
 # Arguments
-- `encoder::JointLogEncoder`: An instance of a trained encoder.
+- `encoder::JointGaussianLogEncoder`: An instance of a trained encoder.
 - `data::AbstractMatrix{Float32}`: The input data matrix, where each column
   represents a single observation in the original feature space.
 - `n_centers::Int`: The desired number of centers to find in the latent space
@@ -65,7 +65,7 @@ rbf_centers = latent_rbf_centers(vae.encoder, data, n_centers)
 ```
 """
 function latent_rbf_centers(
-    encoder::JointLogEncoder,
+    encoder::JointGaussianLogEncoder,
     data::AbstractMatrix{Float32},
     n_centers::Int;
     assigment::Bool=true
@@ -206,7 +206,7 @@ Flux.@functor RBFlayer (weights,)
 
 @doc raw"""
     RBFlayer(
-        vae::VAE{<:JointLogEncoder,<:Union{JointLogDecoder,SplitLogDecoder}},
+        vae::VAE{<:JointGaussianLogEncoder,<:Union{JointGaussianLogDecoder,SplitGaussianLogDecoder}},
         x::AbstractMatrix{Float32},
         n_centers::Int,
         a::AbstractFloat;
@@ -223,8 +223,8 @@ space representations. It then performs k-means clustering to determine the
 centers for the RBF network and calculates the corresponding bandwidths.
 
 # Arguments
-- `vae::VAE`: A VAE model with a `JointLogEncoder` encoder and either a
-  `JointLogDecoder` or `SplitLogDecoder` decoder.
+- `vae::VAE`: A VAE model with a `JointGaussianLogEncoder` encoder and either a
+  `JointGaussianLogDecoder` or `SplitGaussianLogDecoder` decoder.
 - `x::AbstractMatrix{Float32}`: The input data matrix, where each column
   represents a single observation in the original feature space.
 - `n_centers::Int`: The number of RBF centers to find in the latent space.
@@ -262,13 +262,13 @@ rbf_layer = RBFlayer(vae_model, input_data, number_of_centers, 0.1)
   the shape `(input_dim, n_centers)`.
 """
 function RBFlayer(
-    vae::VAE{JointLogEncoder,D},
+    vae::VAE{JointGaussianLogEncoder,D},
     x::AbstractMatrix{Float32},
     n_centers::Int,
     a::AbstractFloat;
     bias::Union{Nothing,<:AbstractVector{Float32}}=nothing,
     init::Function=Flux.glorot_uniform
-) where {D<:Union{JointLogDecoder,SplitLogDecoder}}
+) where {D<:Union{JointGaussianLogDecoder,SplitGaussianLogDecoder}}
     # Map data to latent space
     encoder_µ, encoder_logσ = vae.encoder(x)
 
@@ -402,7 +402,7 @@ force the variance to bound the data manifold.
 An RBFVAE can be defined with any encoder and decoder. However, to properly
 train the RBF network, the procedure assumes that the decoder includes learning
 the reconstruction variance. In that sense, all the RBF network does is to build
-a "cage" around the data manifold. Thus, we recommend avoiding `SimpleDecoder`
+a "cage" around the data manifold. Thus, we recommend avoiding `SimpleGaussianDecoder`
 as the decoders.
 """
 mutable struct RBFVAE{
@@ -413,7 +413,10 @@ mutable struct RBFVAE{
     rbf::R
 end # struct
 
-# Mark function as Flux.Functors.@functor so that Flux.jl allows for training
+# Mark function as Flux.Functors.@functor so that Flux.jl allows for training In
+# this case, we will only train the RBF network as the VAE is assumed to be
+# pre-trained. Therefore, we indicate to @functor the fields that can be
+# trained.
 Flux.@functor RBFVAE (rbf,)
 
 # ------------------------------------------------------------------------------ 
@@ -491,7 +494,7 @@ function (rbfvae::RBFVAE)(
 end # function
 
 # ==============================================================================
-# Loss RBFVAE.VAE{JointLogEncoder,Union{JointLogDecoder,SplitLogDecoder}}
+# Loss RBFVAE.VAE{JointGaussianLogEncoder,Union{JointGaussianLogDecoder,SplitGaussianLogDecoder}}
 # ==============================================================================
 
 @doc raw"""
@@ -546,7 +549,7 @@ function loss(
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
-) where {D<:Union{JointLogDecoder,SplitLogDecoder}}
+) where {D<:Union{JointGaussianLogDecoder,SplitGaussianLogDecoder}}
     # Forward Pass (run input through reconstruct function with n_samples)
     vae_outputs = vae(x; latent=true, n_samples=n_samples)
 
@@ -573,7 +576,7 @@ function loss(
 end # function
 
 # ==============================================================================
-# Loss RBFVAE.VAE{JointLogEncoder,Union{JointDecoder,SplitDecoder}}
+# Loss RBFVAE.VAE{JointGaussianLogEncoder,Union{JointGaussianDecoder,SplitGaussianDecoder}}
 # ==============================================================================
 
 @doc raw"""
@@ -628,7 +631,7 @@ function loss(
     n_samples::Int=1,
     regularization::Union{Function,Nothing}=nothing,
     reg_strength::Float32=1.0f0
-) where {D<:Union{JointDecoder,SplitDecoder}}
+) where {D<:Union{JointGaussianDecoder,SplitGaussianDecoder}}
     # Forward Pass (run input through reconstruct function with n_samples)
     vae_outputs = vae(x; latent=true, n_samples=n_samples)
 
@@ -717,8 +720,8 @@ function train!(
     loss_kwargs::Union{NamedTuple,Dict}=Dict()
 )
     # Compute VAE gradient
-    ∇loss_ = Flux.gradient(rbfvae.rbf) do rbf_model
-        loss_function(rbfvae.vae, rbf_model, x; loss_kwargs...)
+    ∇loss_ = Flux.gradient(rbfvae) do rbf_model
+        loss_function(rbf_model.vae, rbf_model.rbf, x; loss_kwargs...)
     end # do block
     # Update parameters
     Flux.Optimisers.update!(opt, rbfvae, ∇loss_[1])
