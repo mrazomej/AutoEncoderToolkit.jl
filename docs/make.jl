@@ -1,8 +1,8 @@
 using Documenter
-using AutoEncode
+using AutoEncoderToolkit
 
 makedocs(
-    sitename="AutoEncode",
+    sitename="AutoEncoderToolkit",
     format=Documenter.HTML(),
     # modules=[AutoEncode],
     pages=[
@@ -23,5 +23,5 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 deploydocs(
-    repo="github.com/mrazomej/AutoEncode.jl"
+    repo="github.com/mrazomej/AutoEncoderToolkit.jl"
 )
