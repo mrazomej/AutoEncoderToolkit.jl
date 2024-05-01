@@ -51,6 +51,7 @@ types):
         - [`BernoulliDecoder` 🧱](@ref BernoulliDecoder)
         - [`CategoricalDecoder` 🧱](@ref CategoricalDecoder)
         - `AbstractGaussianDecoder`
+            - [`SimpleGaussianDecoder` 🧱](@ref SimpleGaussianDecoder)
             - `AbstractGaussianLinearDecoder`
                 - [`JointGaussianDecoder` 🧱](@ref JointGaussianDecoder)
                 - [`SplitGaussianDecoder` 🧱](@ref SplitGaussianDecoder)
@@ -77,6 +78,13 @@ AutoEncoderToolkit.BernoulliDecoder(::AbstractArray)
 ```@docs
 AutoEncoderToolkit.CategoricalDecoder
 AutoEncoderToolkit.CategoricalDecoder(::AbstractArray)
+```
+
+### [`SimpleGaussianDecoder`] (@id SimpleGaussianDecoder)
+
+```@docs
+AutoEncoderToolkit.SimpleGaussianDecoder
+AutoEncoderToolkit.SimpleGaussianDecoder(::AbstractArray)
 ```
 
 ### [`JointGaussianDecoder`] (@id JointGaussianDecoder)
