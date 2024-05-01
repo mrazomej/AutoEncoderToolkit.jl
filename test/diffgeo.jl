@@ -1,8 +1,8 @@
-println("\nTesting AutoEncode.diffgeo.NeuralGeodesics module...\n")
-# Import AutoEncode.jl module to be tested
-import AutoEncode
-import AutoEncode.diffgeo.NeuralGeodesics
-import AutoEncode.RHVAEs: RHVAE, metric_tensor
+println("\nTesting AutoEncoderToolkit.diffgeo.NeuralGeodesics module...\n")
+# Import AutoEncoderToolkit.jl module to be tested
+import AutoEncoderToolkit
+import AutoEncoderToolkit.diffgeo.NeuralGeodesics
+import AutoEncoderToolkit.RHVAEs: RHVAE, metric_tensor
 
 # Import Flux library
 import Flux
@@ -182,8 +182,8 @@ decoder_activation = repeat([Flux.relu], n_hidden)
 metric_neurons = repeat([n_neuron], n_hidden)
 metric_activation = repeat([Flux.relu], n_hidden)
 
-# Initialize JointLogEncoder
-joint_log_encoder = AutoEncode.JointLogEncoder(
+# Initialize JointGaussianLogEncoder
+joint_log_encoder = AutoEncoderToolkit.JointGaussianLogEncoder(
     n_input,
     latent_dim,
     encoder_neurons,
@@ -191,8 +191,8 @@ joint_log_encoder = AutoEncode.JointLogEncoder(
     latent_activation,
 )
 
-# Initialize SimpleDecoder
-simple_decoder = AutoEncode.SimpleDecoder(
+# Initialize SimpleGaussianDecoder
+simple_decoder = AutoEncoderToolkit.SimpleGaussianDecoder(
     n_input,
     latent_dim,
     decoder_neurons,
@@ -201,7 +201,7 @@ simple_decoder = AutoEncode.SimpleDecoder(
 )
 
 # Define Metric MLP
-metric_chain = AutoEncode.RHVAEs.MetricChain(
+metric_chain = AutoEncoderToolkit.RHVAEs.MetricChain(
     n_input,
     latent_dim,
     metric_neurons,
@@ -210,14 +210,14 @@ metric_chain = AutoEncode.RHVAEs.MetricChain(
 )
 
 # Initialize RHVAE
-rhvae = AutoEncode.RHVAEs.RHVAE(
+rhvae = AutoEncoderToolkit.RHVAEs.RHVAE(
     joint_log_encoder * simple_decoder,
     metric_chain,
     randn(Float32, n_input, n_input),
     0.8f0,
     0.01f0
 )
-AutoEncode.RHVAEs.update_metric!(rhvae)
+AutoEncoderToolkit.RHVAEs.update_metric!(rhvae)
 
 ## =============================================================================
 

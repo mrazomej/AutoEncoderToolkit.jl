@@ -2,9 +2,9 @@
 println("\nTesting VAEs module...\n")
 ##
 
-# Import AutoEncode.jl module to be tested
-import AutoEncode.VAEs
-import AutoEncode.regularization
+# Import AutoEncoderToolkit.jl module to be tested
+import AutoEncoderToolkit.VAEs
+import AutoEncoderToolkit.regularization
 # Import Flux library
 import Flux
 
@@ -110,8 +110,8 @@ logσ_activation = repeat([Flux.relu], n_hidden)
 
 
 println("Defining encoders...")
-# Initialize JointLogEncoder
-joint_log_encoder = VAEs.JointLogEncoder(
+# Initialize JointGaussianLogEncoder
+joint_log_encoder = VAEs.JointGaussianLogEncoder(
     n_input,
     n_latent,
     encoder_neurons,
@@ -132,8 +132,8 @@ bernoulli_decoder = VAEs.BernoulliDecoder(
     Flux.sigmoid
 )
 
-# Initialize SimpleDecoder
-simple_decoder = VAEs.SimpleDecoder(
+# Initialize SimpleGaussianDecoder
+simple_decoder = VAEs.SimpleGaussianDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -141,8 +141,8 @@ simple_decoder = VAEs.SimpleDecoder(
     output_activation
 )
 
-# Initialize JointLogDecoder
-joint_log_decoder = VAEs.JointLogDecoder(
+# Initialize JointGaussianLogDecoder
+joint_log_decoder = VAEs.JointGaussianLogDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -150,8 +150,8 @@ joint_log_decoder = VAEs.JointLogDecoder(
     output_activation
 )
 
-# Initialize SplitLogDecoder
-split_log_decoder = VAEs.SplitLogDecoder(
+# Initialize SplitGaussianLogDecoder
+split_log_decoder = VAEs.SplitGaussianLogDecoder(
     n_input,
     n_latent,
     µ_neurons,
@@ -160,8 +160,8 @@ split_log_decoder = VAEs.SplitLogDecoder(
     logσ_activation,
 )
 
-# Initialize JointDecoder
-joint_decoder = VAEs.JointDecoder(
+# Initialize JointGaussianDecoder
+joint_decoder = VAEs.JointGaussianDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -169,8 +169,8 @@ joint_decoder = VAEs.JointDecoder(
     output_activations
 )
 
-# Initialize SplitDecoder
-split_decoder = VAEs.SplitDecoder(
+# Initialize SplitGaussianDecoder
+split_decoder = VAEs.SplitGaussianDecoder(
     n_input,
     n_latent,
     µ_neurons,
@@ -180,13 +180,13 @@ split_decoder = VAEs.SplitDecoder(
 )
 
 @testset "Type checking" begin
-    @test typeof(joint_log_encoder) == VAEs.JointLogEncoder
+    @test typeof(joint_log_encoder) == VAEs.JointGaussianLogEncoder
     @test typeof(bernoulli_decoder) == VAEs.BernoulliDecoder
-    @test typeof(simple_decoder) == VAEs.SimpleDecoder
-    @test typeof(joint_log_decoder) == VAEs.JointLogDecoder
-    @test typeof(split_log_decoder) == VAEs.SplitLogDecoder
-    @test typeof(joint_decoder) == VAEs.JointDecoder
-    @test typeof(split_decoder) == VAEs.SplitDecoder
+    @test typeof(simple_decoder) == VAEs.SimpleGaussianDecoder
+    @test typeof(joint_log_decoder) == VAEs.JointGaussianLogDecoder
+    @test typeof(split_log_decoder) == VAEs.SplitGaussianLogDecoder
+    @test typeof(joint_decoder) == VAEs.JointGaussianDecoder
+    @test typeof(split_decoder) == VAEs.SplitGaussianDecoder
     @test typeof(joint_log_encoder * simple_decoder) <: VAEs.VAE
 end # @testset "Type checking"
 

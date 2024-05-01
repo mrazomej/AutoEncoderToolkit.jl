@@ -1,8 +1,8 @@
 println("\nTesting MMDVAEs.jl module...\n")
-# Import AutoEncode.jl module to be tested
-import AutoEncode.MMDVAEs
-import AutoEncode.VAEs
-import AutoEncode.regularization
+# Import AutoEncoderToolkit.jl module to be tested
+import AutoEncoderToolkit.MMDVAEs
+import AutoEncoderToolkit.VAEs
+import AutoEncoderToolkit.regularization
 
 # Import Flux library
 import Flux
@@ -32,10 +32,10 @@ Random.seed!(42)
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = VAEs.JointLogEncoder(
+    encoder = VAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = VAEs.SimpleDecoder(
+    decoder = VAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -45,7 +45,7 @@ Random.seed!(42)
     mmdvae = MMDVAEs.MMDVAE(vae)
 
     @testset "Type checking" begin
-        @test typeof(mmdvae) <: MMDVAEs.MMDVAE{VAEs.VAE{VAEs.JointLogEncoder,VAEs.SimpleDecoder}}
+        @test typeof(mmdvae) <: MMDVAEs.MMDVAE{VAEs.VAE{VAEs.JointGaussianLogEncoder,VAEs.SimpleGaussianDecoder}}
     end
 
     @testset "Forward pass" begin
@@ -113,10 +113,10 @@ end # @testset "Kernel functions"
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = VAEs.JointLogEncoder(
+    encoder = VAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = VAEs.SimpleDecoder(
+    decoder = VAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -149,10 +149,10 @@ end # @testset "logP_mmd_ratio"
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = VAEs.JointLogEncoder(
+    encoder = VAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = VAEs.SimpleDecoder(
+    decoder = VAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -193,10 +193,10 @@ end # @testset "loss functions"
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = VAEs.JointLogEncoder(
+    encoder = VAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = VAEs.SimpleDecoder(
+    decoder = VAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -242,10 +242,10 @@ end # @testset "MMDVAE gradient"
 #     output_activation = Flux.identity
 
 #     # Define encoder and decoder
-#     encoder = VAEs.JointLogEncoder(
+#     encoder = VAEs.JointGaussianLogEncoder(
 #         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
 #     )
-#     decoder = VAEs.SimpleDecoder(
+#     decoder = VAEs.SimpleGaussianDecoder(
 #         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
 #     )
 #     # Define VAE

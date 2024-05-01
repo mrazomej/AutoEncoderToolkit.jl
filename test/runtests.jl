@@ -1,7 +1,7 @@
-using AutoEncode
+using AutoEncoderToolkit
 using Test
 
-@testset "AutoEncode.jl" begin
+@testset "AutoEncoderToolkit.jl" begin
     # Test utils
     include("utils.jl")
 

@@ -1,8 +1,8 @@
 println("\nTesting InfoMaxVAEs.jl...\n")
-# Import AutoEncode.jl module to be tested
-import AutoEncode.InfoMaxVAEs
-import AutoEncode.VAEs
-import AutoEncode
+# Import AutoEncoderToolkit.jl module to be tested
+import AutoEncoderToolkit.InfoMaxVAEs
+import AutoEncoderToolkit.VAEs
+import AutoEncoderToolkit
 
 # Import Flux library
 import Flux
@@ -78,10 +78,10 @@ end # @testset "MutualInfoChain struct"
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = InfoMaxVAEs.JointLogEncoder(
+    encoder = InfoMaxVAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = InfoMaxVAEs.SimpleDecoder(
+    decoder = InfoMaxVAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -97,7 +97,7 @@ end # @testset "MutualInfoChain struct"
 
     @testset "Type checking" begin
         @test typeof(infomaxvae) <: InfoMaxVAEs.InfoMaxVAE{
-            VAEs.VAE{AutoEncode.JointLogEncoder,AutoEncode.SimpleDecoder}
+            VAEs.VAE{AutoEncoderToolkit.JointGaussianLogEncoder,AutoEncoderToolkit.SimpleGaussianDecoder}
         }
     end
 
@@ -139,10 +139,10 @@ end # @testset "InfoMaxVAE struct"
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = VAEs.JointLogEncoder(
+    encoder = VAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = VAEs.SimpleDecoder(
+    decoder = VAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -196,10 +196,10 @@ end # @testset "Variational Mutual Information"
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = VAEs.JointLogEncoder(
+    encoder = VAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = VAEs.SimpleDecoder(
+    decoder = VAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -247,10 +247,10 @@ end # @testset "Loss functions"
     output_activation = Flux.identity
 
     # Define encoder and decoder
-    encoder = VAEs.JointLogEncoder(
+    encoder = VAEs.JointGaussianLogEncoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
-    decoder = VAEs.SimpleDecoder(
+    decoder = VAEs.SimpleGaussianDecoder(
         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
     )
     # Define VAE
@@ -319,10 +319,10 @@ end # @testset "InfoMaxVAE training"
 #     output_activation = Flux.identity
 
 #     # Define encoder and decoder
-#     encoder = VAEs.JointLogEncoder(
+#     encoder = VAEs.JointGaussianLogEncoder(
 #         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
 #     )
-#     decoder = VAEs.SimpleDecoder(
+#     decoder = VAEs.SimpleGaussianDecoder(
 #         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
 #     )
 #     # Define VAE

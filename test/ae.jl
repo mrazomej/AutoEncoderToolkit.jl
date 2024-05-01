@@ -1,7 +1,7 @@
-println("\nTesting AutoEncode.jl module...\n")
-# Import AutoEncode.jl module to be tested
-import AutoEncode.AEs
-import AutoEncode: Encoder, Decoder
+println("\nTesting AutoEncoderToolkit.jl module...\n")
+# Import AutoEncoderToolkit.jl module to be tested
+import AutoEncoderToolkit.AEs
+import AutoEncoderToolkit: Encoder, Decoder
 
 # Import Flux library
 import Flux

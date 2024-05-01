@@ -2,10 +2,10 @@
 println("\nTesting RHVAEs module:\n")
 ##
 
-# Import AutoEncode.jl module to be tested
-using AutoEncode.RHVAEs
-import AutoEncode.VAEs
-import AutoEncode.utils
+# Import AutoEncoderToolkit.jl module to be tested
+using AutoEncoderToolkit.RHVAEs
+import AutoEncoderToolkit.VAEs
+import AutoEncoderToolkit.utils
 # Import Flux library
 import Flux
 
@@ -94,8 +94,8 @@ metric_activation = repeat([Flux.relu], n_hidden)
 
 
 println("Defining encoders...")
-# Initialize JointLogEncoder
-joint_log_encoder = VAEs.JointLogEncoder(
+# Initialize JointGaussianLogEncoder
+joint_log_encoder = VAEs.JointGaussianLogEncoder(
     n_input,
     n_latent,
     encoder_neurons,
@@ -107,8 +107,8 @@ joint_log_encoder = VAEs.JointLogEncoder(
 
 println("Defining decoders...")
 
-# Initialize SimpleDecoder
-simple_decoder = VAEs.SimpleDecoder(
+# Initialize SimpleGaussianDecoder
+simple_decoder = VAEs.SimpleGaussianDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -116,8 +116,8 @@ simple_decoder = VAEs.SimpleDecoder(
     output_activation
 )
 
-# Initialize JointLogDecoder
-joint_log_decoder = VAEs.JointLogDecoder(
+# Initialize JointGaussianLogDecoder
+joint_log_decoder = VAEs.JointGaussianLogDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -125,8 +125,8 @@ joint_log_decoder = VAEs.JointLogDecoder(
     output_activation
 )
 
-# Initialize SplitLogDecoder
-split_log_decoder = VAEs.SplitLogDecoder(
+# Initialize SplitGaussianLogDecoder
+split_log_decoder = VAEs.SplitGaussianLogDecoder(
     n_input,
     n_latent,
     µ_neurons,
@@ -135,8 +135,8 @@ split_log_decoder = VAEs.SplitLogDecoder(
     logσ_activation,
 )
 
-# Initialize JointDecoder
-joint_decoder = VAEs.JointDecoder(
+# Initialize JointGaussianDecoder
+joint_decoder = VAEs.JointGaussianDecoder(
     n_input,
     n_latent,
     decoder_neurons,
@@ -144,8 +144,8 @@ joint_decoder = VAEs.JointDecoder(
     output_activations
 )
 
-# Initialize SplitDecoder
-split_decoder = VAEs.SplitDecoder(
+# Initialize SplitGaussianDecoder
+split_decoder = VAEs.SplitGaussianDecoder(
     n_input,
     n_latent,
     µ_neurons,

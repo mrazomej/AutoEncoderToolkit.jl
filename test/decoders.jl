@@ -1,7 +1,7 @@
 println("\nTesting decoders...\n")
 
-# Import AutoEncode.jl module to be tested
-using AutoEncode
+# Import AutoEncoderToolkit.jl module to be tested
+using AutoEncoderToolkit
 
 # Import necessary libraries for testing
 using Flux
@@ -15,7 +15,7 @@ import StatsBase
     # For reproducibility
     Random.seed!(42)
     # Create a Decoder instance with sample parameters
-    decoder = AutoEncode.Decoder(
+    decoder = AutoEncoderToolkit.Decoder(
         4 * 4, 2, [10, 10], [relu, relu], sigmoid
     )
 
@@ -34,12 +34,12 @@ end
 
 ## =============================================================================
 
-@testset "SimpleDecoder" begin
+@testset "SimpleGaussianDecoder" begin
     # For reproducibility
     Random.seed!(42)
 
-    # Create a SimpleDecoder instance with sample parameters
-    decoder = AutoEncode.SimpleDecoder(
+    # Create a SimpleGaussianDecoder instance with sample parameters
+    decoder = AutoEncoderToolkit.SimpleGaussianDecoder(
         28 * 28, 64, [256, 128], [relu, relu], tanh
     )
 
@@ -58,9 +58,9 @@ end
 
 ## =============================================================================
 
-@testset "JointLogDecoder" begin
-    # Create a JointLogDecoder instance with sample parameters
-    decoder = AutoEncode.JointLogDecoder(
+@testset "JointGaussianLogDecoder" begin
+    # Create a JointGaussianLogDecoder instance with sample parameters
+    decoder = AutoEncoderToolkit.JointGaussianLogDecoder(
         28 * 28, 64, [256, 128], [relu, relu], [tanh, identity]
     )
 
@@ -80,9 +80,9 @@ end
 
 ## =============================================================================
 
-@testset "JointDecoder" begin
-    # Create a JointDecoder instance with sample parameters
-    decoder = AutoEncode.JointDecoder(
+@testset "JointGaussianDecoder" begin
+    # Create a JointGaussianDecoder instance with sample parameters
+    decoder = AutoEncoderToolkit.JointGaussianDecoder(
         28 * 28, 64, [256, 128], [relu, relu], [tanh, softplus]
     )
 
@@ -102,9 +102,9 @@ end
 
 ## =============================================================================
 
-@testset "SplitLogDecoder" begin
-    # Create a SplitLogDecoder instance with sample parameters
-    decoder = AutoEncode.SplitLogDecoder(
+@testset "SplitGaussianLogDecoder" begin
+    # Create a SplitGaussianLogDecoder instance with sample parameters
+    decoder = AutoEncoderToolkit.SplitGaussianLogDecoder(
         28 * 28, 64, [256, 128], [relu, relu], [256, 128], [relu, relu]
     )
 
@@ -124,9 +124,9 @@ end
 
 ## =============================================================================
 
-@testset "SplitDecoder" begin
-    # Create a SplitDecoder instance with sample parameters
-    decoder = AutoEncode.SplitDecoder(
+@testset "SplitGaussianDecoder" begin
+    # Create a SplitGaussianDecoder instance with sample parameters
+    decoder = AutoEncoderToolkit.SplitGaussianDecoder(
         28 * 28, 64, [256, 128], [relu, relu], [256, 128], [relu, softplus]
     )
 
@@ -148,7 +148,7 @@ end
 
 @testset "BernoulliDecoder" begin
     # Create a BernoulliDecoder instance with sample parameters
-    decoder = AutoEncode.BernoulliDecoder(
+    decoder = AutoEncoderToolkit.BernoulliDecoder(
         28 * 28, 64, [256, 128], [relu, relu], sigmoid
     )
 
@@ -172,7 +172,7 @@ end
 
 @testset "CategoricalDecoder" begin
     # Create a CategoricalDecoder instance with sample parameters
-    decoder = AutoEncode.CategoricalDecoder(
+    decoder = AutoEncoderToolkit.CategoricalDecoder(
         [4, 4], 2, [256, 128], [relu, relu], softmax
     )
     # Generate random input data
@@ -192,7 +192,7 @@ end
 @testset "decoder_loglikelihood" begin
     @testset "BernoulliDecoder" begin
         # Create a BernoulliDecoder instance with sample parameters
-        decoder = AutoEncode.BernoulliDecoder(
+        decoder = AutoEncoderToolkit.BernoulliDecoder(
             28 * 28, 64, [256, 128], [relu, relu], sigmoid
         )
 
@@ -205,7 +205,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -222,7 +222,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -233,7 +233,7 @@ end
 
     @testset "CategoricalDecoder" begin
         # Create a CategoricalDecoder instance with sample parameters
-        decoder = AutoEncode.CategoricalDecoder(
+        decoder = AutoEncoderToolkit.CategoricalDecoder(
             10, 64, [256, 128], [relu, relu], softmax
         )
 
@@ -246,7 +246,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -263,7 +263,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -272,9 +272,9 @@ end
         end
     end
 
-    @testset "SimpleDecoder" begin
-        # Create a SimpleDecoder instance with sample parameters
-        decoder = AutoEncode.SimpleDecoder(
+    @testset "SimpleGaussianDecoder" begin
+        # Create a SimpleGaussianDecoder instance with sample parameters
+        decoder = AutoEncoderToolkit.SimpleGaussianDecoder(
             28 * 28, 64, [256, 128], [relu, relu], tanh
         )
 
@@ -287,7 +287,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -304,7 +304,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -313,9 +313,9 @@ end
         end
     end
 
-    @testset "JointLogDecoder" begin
-        # Create a JointLogDecoder instance with sample parameters
-        decoder = AutoEncode.JointLogDecoder(
+    @testset "JointGaussianLogDecoder" begin
+        # Create a JointGaussianLogDecoder instance with sample parameters
+        decoder = AutoEncoderToolkit.JointGaussianLogDecoder(
             28 * 28, 64, [256, 128], [relu, relu], [tanh, identity]
         )
 
@@ -328,7 +328,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -345,7 +345,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -354,9 +354,9 @@ end
         end
     end
 
-    @testset "SplitLogDecoder" begin
-        # Create a SplitLogDecoder instance with sample parameters
-        decoder = AutoEncode.SplitLogDecoder(
+    @testset "SplitGaussianLogDecoder" begin
+        # Create a SplitGaussianLogDecoder instance with sample parameters
+        decoder = AutoEncoderToolkit.SplitGaussianLogDecoder(
             28 * 28, 64, [256, 128], [relu, relu], [256, 128], [relu, relu]
         )
 
@@ -369,7 +369,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -386,7 +386,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -395,9 +395,9 @@ end
         end
     end
 
-    @testset "JointDecoder" begin
-        # Create a JointDecoder instance with sample parameters
-        decoder = AutoEncode.JointDecoder(
+    @testset "JointGaussianDecoder" begin
+        # Create a JointGaussianDecoder instance with sample parameters
+        decoder = AutoEncoderToolkit.JointGaussianDecoder(
             28 * 28, 64, [256, 128], [relu, relu], [tanh, softplus]
         )
 
@@ -410,7 +410,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -427,7 +427,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -436,9 +436,9 @@ end
         end
     end
 
-    @testset "SplitDecoder" begin
-        # Create a SplitDecoder instance with sample parameters
-        decoder = AutoEncode.SplitDecoder(
+    @testset "SplitGaussianDecoder" begin
+        # Create a SplitGaussianDecoder instance with sample parameters
+        decoder = AutoEncoderToolkit.SplitGaussianDecoder(
             28 * 28, 64, [256, 128], [relu, relu], [256, 128], [relu, softplus]
         )
 
@@ -451,7 +451,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 
@@ -468,7 +468,7 @@ end
             decoder_output = decoder(z)
 
             # Compute the log-likelihood
-            loglikelihood = AutoEncode.decoder_loglikelihood(
+            loglikelihood = AutoEncoderToolkit.decoder_loglikelihood(
                 x, z, decoder, decoder_output
             )
 

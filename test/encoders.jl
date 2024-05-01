@@ -1,6 +1,6 @@
 println("\nTestin Encoders...\n")
-# Import AutoEncode.jl module to be tested
-using AutoEncode
+# Import AutoEncoderToolkit.jl module to be tested
+using AutoEncoderToolkit
 
 # Import necessary libraries for testing
 using Flux
@@ -12,7 +12,7 @@ import StatsBase
 
 @testset "Encoder" begin
     # Create an Encoder instance with sample parameters
-    encoder = AutoEncode.Encoder(784, 64, [256, 128], [relu, relu], tanh)
+    encoder = AutoEncoderToolkit.Encoder(784, 64, [256, 128], [relu, relu], tanh)
 
     # Generate random input data
     x = randn(Float32, 784, 10)
@@ -26,10 +26,10 @@ end
 
 ## =============================================================================
 
-@testset "JointLogEncoder" begin
+@testset "JointGaussianLogEncoder" begin
     @testset "with single activation function" begin
-        # Create a JointLogEncoder instance with sample parameters
-        encoder = AutoEncode.JointLogEncoder(
+        # Create a JointGaussianLogEncoder instance with sample parameters
+        encoder = AutoEncoderToolkit.JointGaussianLogEncoder(
             784, 64, [256, 128], [relu, relu], tanh
         )
 
@@ -48,8 +48,8 @@ end
     end
 
     @testset "with separate activation functions" begin
-        # Create a JointLogEncoder instance with sample parameters
-        encoder = AutoEncode.JointLogEncoder(
+        # Create a JointGaussianLogEncoder instance with sample parameters
+        encoder = AutoEncoderToolkit.JointGaussianLogEncoder(
             784, 64, [256, 128], [relu, relu], [tanh, identity]
         )
 
@@ -70,9 +70,9 @@ end
 
 ## =============================================================================
 
-@testset "JointEncoder" begin
-    # Create a JointEncoder instance with sample parameters
-    encoder = AutoEncode.JointEncoder(
+@testset "JointGaussianEncoder" begin
+    # Create a JointGaussianEncoder instance with sample parameters
+    encoder = AutoEncoderToolkit.JointGaussianEncoder(
         784, 64, [256, 128], [relu, relu], [tanh, softplus]
     )
 
@@ -98,7 +98,7 @@ end
         z = randn(Float32, 64)
 
         # Compute the log-prior
-        logprior = AutoEncode.spherical_logprior(z)
+        logprior = AutoEncoderToolkit.spherical_logprior(z)
 
         # Check if the log-prior is a scalar
         @test logprior isa Float32
@@ -109,7 +109,7 @@ end
         z = randn(Float32, 64, 10)
 
         # Compute the log-prior
-        logprior = AutoEncode.spherical_logprior(z)
+        logprior = AutoEncoderToolkit.spherical_logprior(z)
 
         # Check if the log-prior is a vector
         @test logprior isa Vector{Float32}
@@ -121,8 +121,8 @@ end
 
 @testset "encoder_logposterior" begin
     @testset "with vector input" begin
-        # Create a JointLogEncoder instance with sample parameters
-        encoder = AutoEncode.JointLogEncoder(
+        # Create a JointGaussianLogEncoder instance with sample parameters
+        encoder = AutoEncoderToolkit.JointGaussianLogEncoder(
             784, 64, [256, 128], [relu, relu], tanh
         )
 
@@ -136,7 +136,7 @@ end
         z = randn(Float32, 64)
 
         # Compute the log-posterior
-        logposterior = AutoEncode.encoder_logposterior(
+        logposterior = AutoEncoderToolkit.encoder_logposterior(
             z, encoder, encoder_output
         )
 
@@ -145,8 +145,8 @@ end
     end
 
     @testset "with matrix input" begin
-        # Create a JointLogEncoder instance with sample parameters
-        encoder = AutoEncode.JointLogEncoder(
+        # Create a JointGaussianLogEncoder instance with sample parameters
+        encoder = AutoEncoderToolkit.JointGaussianLogEncoder(
             784, 64, [256, 128], [relu, relu], tanh
         )
 
@@ -160,7 +160,7 @@ end
         z = randn(Float32, 64, 10)
 
         # Compute the log-posterior
-        logposterior = AutoEncode.encoder_logposterior(
+        logposterior = AutoEncoderToolkit.encoder_logposterior(
             z, encoder, encoder_output
         )
 
@@ -170,8 +170,8 @@ end
     end
 
     @testset "with single index" begin
-        # Create a JointLogEncoder instance with sample parameters
-        encoder = AutoEncode.JointLogEncoder(
+        # Create a JointGaussianLogEncoder instance with sample parameters
+        encoder = AutoEncoderToolkit.JointGaussianLogEncoder(
             784, 64, [256, 128], [relu, relu], tanh
         )
 
@@ -185,7 +185,7 @@ end
         z = randn(Float32, 64)
 
         # Compute the log-posterior for a single index
-        logposterior = AutoEncode.encoder_logposterior(
+        logposterior = AutoEncoderToolkit.encoder_logposterior(
             z, encoder, encoder_output, 5
         )
 
@@ -197,8 +197,8 @@ end
 ## =============================================================================
 
 @testset "encoder_kl" begin
-    # Create a JointLogEncoder instance with sample parameters
-    encoder = AutoEncode.JointLogEncoder(
+    # Create a JointGaussianLogEncoder instance with sample parameters
+    encoder = AutoEncoderToolkit.JointGaussianLogEncoder(
         784, 64, [256, 128], [relu, relu], tanh
     )
 
@@ -209,7 +209,7 @@ end
     encoder_output = encoder(x)
 
     # Compute the KL divergence
-    kl_div = AutoEncode.encoder_kl(encoder, encoder_output)
+    kl_div = AutoEncoderToolkit.encoder_kl(encoder, encoder_output)
 
     # Check if the KL divergence is a vector
     @test kl_div isa Vector{Float32}

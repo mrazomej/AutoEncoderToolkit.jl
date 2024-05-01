@@ -3,8 +3,8 @@ println("\nTesting utils module:\n")
 
 ## =============================================================================
 
-# Import AutoEncode.jl module to be tested
-using AutoEncode.utils
+# Import AutoEncoderToolkit.jl module to be tested
+using AutoEncoderToolkit.utils
 
 # Import NearstNeighbors for locality_sampler tests
 import NearestNeighbors
