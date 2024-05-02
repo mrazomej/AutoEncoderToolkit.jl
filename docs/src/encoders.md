@@ -1,4 +1,4 @@
-# Encoders & Decoders
+# [Encoders & Decoders] (@id encodersdecoders)
 
 `AutoEncoderToolkit.jl` provides a set of predefined encoders and decoders that can be
 used to define custom (variational) autoencoder architectures.

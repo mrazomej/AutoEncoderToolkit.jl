@@ -7,7 +7,9 @@ makedocs(
     # modules=[AutoEncode],
     pages=[
         "Home" => "index.md",
+        "Quick Start" => "quickstart.md",
         "Encoders & Decoders" => "encoders.md",
+        "Custom Layers" => "layers.md",
         "Deterministic Autoencoders" => "ae.md",
         "VAE / β-VAE" => "vae.md",
         "MMD-VAE (InfoVAE)" => "mmdvae.md",
@@ -15,6 +17,7 @@ makedocs(
         "HVAE" => "hvae.md",
         "RHVAE" => "rhvae.md",
         "Differential Geometry" => "diffgeo.md",
+        "Utilities" => "utils.md",
     ],
     remotes=nothing
 )

@@ -10,7 +10,7 @@ You can install `AutoEncoderToolkit.jl` using the Julia package manager. From th
 REPL, type `]` to enter the Pkg REPL mode and run:
 
 ```julia-repl
-add AutoEncode
+add AutoEncoderToolkit
 ```
 
 ## Design
