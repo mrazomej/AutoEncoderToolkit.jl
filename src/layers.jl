@@ -11,7 +11,7 @@ A custom layer for Flux that reshapes its input to a specified shape.
 
 This layer is useful when you need to change the dimensions of your data within
 a Flux model. Unlike the built-in reshape operation in Julia, this custom layer
-can be saved and loaded using the BSON package.
+can be saved and loaded using packages such as BSON or JLD2.
 
 # Arguments
 - `shape`: The target shape. This can be any tuple of integers and colons.
@@ -29,7 +29,7 @@ julia> r(rand(5, 2))
 
 # Note
 When saving and loading the model, make sure to include Reshape in the list of
-layers to be processed by BSON. 
+layers to be processed by BSON or JLD2.
 """
 struct Reshape
     shape  # The target shape for the reshape operation
@@ -59,11 +59,10 @@ function Reshape(args...)
 end
 
 @doc raw"""
-    apply(r::Reshape, x)
+(r::Reshape)(x)
 
-Defines the behavior of the Reshape layer when used in a model. This function is
-called during the forward pass of the model. It reshapes the input `x` to the
-target `shape` stored in the Reshape instance `r`.
+This function is called during the forward pass of the model. It reshapes the
+input `x` to the target `shape` stored in the Reshape instance `r`.
 
 # Arguments
 - `r::Reshape`: An instance of the Reshape struct.
@@ -77,7 +76,7 @@ target `shape` stored in the Reshape instance `r`.
 julia> r = Reshape(10, :)
 Reshape((10, :))
 
-julia> apply(r, rand(5, 2))
+julia> r(rand(5, 2))
 10×1 Matrix{Float64}:
  ...
 ```
@@ -101,7 +100,7 @@ A custom layer for Flux that flattens its input into a 1D vector.
 
 This layer is useful when you need to change the dimensions of your data within
 a Flux model. Unlike the built-in flatten operation in Julia, this custom layer
-can be saved and loaded using the BSON package.
+can be saved and loaded by packages such as BSON and JLD2.
 
 # Examples
 ```julia
@@ -112,16 +111,15 @@ julia> f(rand(5, 2))
 ```
 # Note 
 When saving and loading the model, make sure to include Flatten in the list of
-layers to be processed by BSON. 
+layers to be processed by BSON or JLD2.
 """
 struct Flatten end
 
 @doc raw""" 
     (f::Flatten)(x)
 
-Defines the behavior of the Flatten layer when used in a model. This function is
-called during the forward pass of the model. It flattens the input x into a 1D
-vector.
+This function is called during the forward pass of the model. It flattens the
+input x into a 1D vector.
 
 # Arguments
 - `f::Flatten`: An instance of the Flatten struct.
@@ -169,8 +167,7 @@ end
 @doc raw"""
     (σ::ActivationOverDims)(x)
 
-Defines the behavior of the ActivationOverDims layer when used in a model. This
-function is called during the forward pass of the model. It applies the
+This function is called during the forward pass of the model. It applies the
 activation function `σ.σ` over the dimensions `σ.dims` of the input `x`.
 
 # Arguments
@@ -184,7 +181,7 @@ activation function `σ.σ` over the dimensions `σ.dims` of the input `x`.
 # Note
 This custom layer can be saved and loaded using the BSON package. When saving
 and loading the model, make sure to include `ActivationOverDims` in the list of
-layers to be processed by BSON.
+layers to be processed by BSON or JLD2.
 """
 function (σ::ActivationOverDims)(x)
     return σ.σ(x, dims=σ.dims)

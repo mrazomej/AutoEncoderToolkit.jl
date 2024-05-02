@@ -66,7 +66,7 @@ Simple function to define different learning rates at specified epochs.
   range. Must be the same length as `epoch_change`
 
 # Returns
-- `η::Abstr`
+- `η::AbstractFloat`: Learning rate for the current epoch.
 """
 function step_scheduler(
     epoch::Int,
