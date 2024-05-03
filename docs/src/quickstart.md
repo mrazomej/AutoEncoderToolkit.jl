@@ -382,8 +382,149 @@ Let's now look ath the resulting coordinates in latent space.
 ![](./figs/vae_latent.svg)
 
 The different labels are clearly not well separated. This is expected since we
-only trained the model for a few epochs. To improve the separation, we could
-either train for longer or use the `β` keyword argument in the `loss` function
-to decrease the weight of the KL divergence term.
+only trained the model for a few epochs. 
+
+!!! tip
+    To improve the separation, we could either train for longer and/or use the
+    `β` keyword argument in the `loss` function to decrease the weight of the KL
+    divergence term.
 
 ## RHVAE Model
+
+Let's now train a [`RHVAE`](@ref RHVAEsmodule) model. The process is very
+similar to the `VAE` model with the main difference that the [`RHVAE`](@ref
+RHVAE) type has some extra requirements. Let's quickly look at the docstring for
+this type. In particular, let's look at the docstring for the default
+constructor.
+
+```
+RHVAE(
+      vae::VAE, 
+      metric_chain::MetricChain, 
+      centroids_data::AbstractArray, 
+      T::Number, 
+      λ::Number
+  )
+
+  Construct a Riemannian Hamiltonian Variational Autoencoder (RHVAE) from a standard VAE and a metric chain.
+
+  Arguments
+  ≡≡≡≡≡≡≡≡≡
+
+    •  vae::VAE: A standard Variational Autoencoder (VAE) model.
+
+    •  metric_chain::MetricChain: A chain of metrics to be used for the Riemannian Hamiltonian Monte Carlo (RHMC) sampler.
+
+    •  centroids_data::AbstractArray: An array of data centroids. Each column represents a centroid. N is a subtype of Number.
+
+    •  T::N: The temperature parameter for the inverse metric tensor. N is a subtype of Number.
+
+    •  λ::N: The regularization parameter for the inverse metric tensor. N is a subtype of Number.
+
+  Returns
+  ≡≡≡≡≡≡≡
+
+    •  A new RHVAE object.
+
+  Description
+  ≡≡≡≡≡≡≡≡≡≡≡
+
+  The constructor initializes the latent centroids and the metric tensor M to their default values. The latent centroids are initialized to a zero matrix of
+  the same size as centroids_data, and M is initialized to a 3D array of identity matrices, one for each centroid.
+```
+
+From this we can see that we need to provide a `VAE` model--we can use the same
+model we defined earlier--a [`MetricChain`](@ref MetricChainstruct) type, an
+array of centroids, and two hyperparameters `T` and `λ`. The `MetricChain` type
+is another multi-layer perceptron specifically used to compute a
+lower-triangular matrix used for the metric tensor for the Riemannian manifold
+fit to the latent space. More specifically, when training an `RHVAE` model, the
+inverse of the metric tensor is also learned. This inverse metric tensor
+``\mathbf{G}^{-1}(z)`` is of the form
+
+```math
+\mathbf{G}^{-1}(z)=\sum_{i=1}^N L_{\psi_i} L_{\psi_i}^{\top} \exp \left(-\frac{\left\|z-c_i\right\|_2^2}{T^2}\right)+\lambda I_d
+\tag{1}
+```
+
+where ``L_{\psi_i} \equiv L_{\psi_i}(x)`` is the lower-triangular matrix
+computed by the `MetricChain` type given the corresponding data input ``x``
+associated with the latent coordinate ``z``. ``c_i`` is one of the ``N``
+centroids in latent space used as anchoring points for the metric tensor. The
+hyperparameters ``T`` and ``\lambda`` are used to control the temperature of the
+inverse metric tensor and an additional regularization term, respectively.
+
+Looking at the requirements for [`MetricChain`](@ref MetricChainstruct) we see
+three components:
+
+1. An `mlp` field that is a multi-layer perceptron.
+2. A `diag` field that is a dense layers used to compute the diagonal of the
+   lower triangular matrix returned by `MetricChain`.
+3. a `lower` field that is a dense layer used to compute the elements below the
+   diagonal of the lower triangular matrix.
+
+Let's define these elements and build the `MetricChain`.
+
+!!! warning
+    For `MetricChain` to build a proper lower triangular matrix, the `diag`
+    layer must return the same dimensionality as the latent space. The `lower`
+    layer must return the number of elements in the lower triangular matrix
+    below the diagonal. This is given by `n_latent * (n_latent - 1) ÷ 2`.
+
+```julia
+# Define convolutional layers
+mlp_conv_layers = Flux.Chain(
+    # Flatten the input using custom Flatten layer
+    AET.Flatten(),
+    # First layer
+    Flux.Dense(28 * 28 => 400, Flux.relu),
+    # Second layer
+    Flux.Dense(400 => 400, Flux.relu),
+    # Third layer
+    Flux.Dense(400 => 400, Flux.relu),
+)
+
+# Define layers for the diagonal and lower triangular part of the covariance
+# matrix
+diag = Flux.Dense(400 => n_latent, Flux.identity)
+lower = Flux.Dense(
+    400 => n_latent * (n_latent - 1) ÷ 2, Flux.identity
+)
+
+# Build metric chain
+metric_chain = AET.RHVAEs.MetricChain(mlp_conv_layers, diag, lower)
+```
+
+Next, we need to define the centroids. These are the ``c_i`` in equation (1)
+used as anchoring points for the metric tensor. Their latent space coordinates
+will be updated as the model trains, but the corresponding data points must be
+fixed. In a way, these centroids is a subset of the data used to define the
+`RHVAE` structure itself. One possibility is to use the entire training data as
+centroids. But this can get computationally very expensive. Instead, we can use
+either k-means or k-medoids to define a smaller set of centroids. For this,
+`AutoEncoderToolkit.jl` provides [functions to select these centroids.](@ref
+centroidutils). For this example, we will use k-medoids to define the centroids.
+
+```julia
+# Define number of centroids
+n_centroids = 64 
+
+# Select centroids via k-medoids
+centroids_data = AET.utils.centroids_kmedoids(train_data, n_centroids)
+```
+
+Finally, we are just missing the hyperparameters `T` and `λ`, and we can then
+define the `RHVAE` model.
+
+!!! note
+    Here we are using the same `vae` model we defined earlier assuming it hasn't
+    been previously trained. If it has been trained, we could load it from disk.
+
+```julia
+# Define RHVAE hyper-parameters
+T = 0.4f0 # Temperature
+λ = 1.0f-2 # Regularization parameter
+
+# Define RHVAE model
+rhvae = AET.RHVAEs.RHVAE(vae, metric_chain, centroids_data, T, λ)
+```

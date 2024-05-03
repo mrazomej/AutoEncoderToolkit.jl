@@ -27,7 +27,7 @@ this second network, we also provide a [`MetricChain`](@ref MetricChain) struct.
 > Chadebec, C., Mantoux, C. & Allassonnière, S. Geometry-Aware Hamiltonian
 > Variational Auto-Encoder. Preprint at http://arxiv.org/abs/2010.11518 (2020).
 
-## [`MetricChain` struct] (@id MetricChain)
+## [`MetricChain` struct] (@id MetricChainstruct)
 
 ```@docs
 AutoEncoderToolkit.RHVAEs.MetricChain
@@ -41,7 +41,7 @@ AutoEncoderToolkit.RHVAEs.RHVAE
 
 ## Forward pass
 
-### Metric Network
+### [Metric Network] (@id MetricChain)
 
 ```@docs
 AutoEncoderToolkit.RHVAEs.MetricChain(::AbstractArray)
