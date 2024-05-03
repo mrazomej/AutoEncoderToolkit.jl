@@ -170,4 +170,66 @@ JLD2.jldsave(
     val_mse=val_mse,
     val_loss=val_loss,
 )</code></pre><h3 id="Exploring-the-results"><a class="docs-heading-anchor" href="#Exploring-the-results">Exploring the results</a><a id="Exploring-the-results-1"></a><a class="docs-heading-anchor-permalink" href="#Exploring-the-results" title="Permalink"></a></h3><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>For the plots below, we do not provide the code to generate them. We assume the user is familiar with plotting in <code>Julia</code>. If you are not, we recommend checking the <a href="https://docs.makie.org/stable/"><code>Makie.jl</code></a> documentation.</p></div></div><p>Let&#39;s look at the training diagnostics to see how the training went.</p><p><img src="../figs/vae_train.svg" alt/></p><p>We can see that the training loss, the cross-entropy, and the mean squared error decreased as the training progressed on both the training and validation data.</p><p>Next, let&#39;s look at the resulting latent space. In particular, let&#39;s encode the training data and plot the coordinates in the latent space. To encode the data we have two options:</p><ol><li><p>Directly encode the data using the encoder. This returns a <code>NamedTuple</code>, where for our <code>JointGaussianLogEncoder</code> the fields are <code>μ</code> and <code>logσ</code>.</p><pre><code class="language-julia hljs"># Map training data to latent space
-train_latent = vae.encoder(train_data)</code></pre><p>We could take as the latent space coordinates the mean of the distribution.</p></li><li><p>Perform the forward pass of the VAE model with the optional keyword argument <code>latent=true</code>. This returns a <code>NamedTuple</code> with the fields <code>encoder</code>, <code>decoder</code>, and <code>z</code>. The <code>z</code> field contains the sampled latent space coordinates obtained when performing the reparameterization trick.</p><pre><code class="language-julia hljs">train_outputs = vae(train_data; latent=true)</code></pre></li></ol><p>Let&#39;s now look ath the resulting coordinates in latent space.</p><p><img src="../figs/vae_latent.svg" alt/></p><p>The different labels are clearly not well separated. This is expected since we only trained the model for a few epochs. To improve the separation, we could either train for longer or use the <code>β</code> keyword argument in the <code>loss</code> function to decrease the weight of the KL divergence term.</p><h2 id="RHVAE-Model"><a class="docs-heading-anchor" href="#RHVAE-Model">RHVAE Model</a><a id="RHVAE-Model-1"></a><a class="docs-heading-anchor-permalink" href="#RHVAE-Model" title="Permalink"></a></h2></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../encoders/">Encoders &amp; Decoders »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.4.1 on <span class="colophon-date" title="Thursday 2 May 2024 18:42">Thursday 2 May 2024</span>. Using Julia version 1.10.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+train_latent = vae.encoder(train_data)</code></pre><p>We could take as the latent space coordinates the mean of the distribution.</p></li><li><p>Perform the forward pass of the VAE model with the optional keyword argument <code>latent=true</code>. This returns a <code>NamedTuple</code> with the fields <code>encoder</code>, <code>decoder</code>, and <code>z</code>. The <code>z</code> field contains the sampled latent space coordinates obtained when performing the reparameterization trick.</p><pre><code class="language-julia hljs">train_outputs = vae(train_data; latent=true)</code></pre></li></ol><p>Let&#39;s now look ath the resulting coordinates in latent space.</p><p><img src="../figs/vae_latent.svg" alt/></p><p>The different labels are clearly not well separated. This is expected since we only trained the model for a few epochs. </p><div class="admonition is-success"><header class="admonition-header">Tip</header><div class="admonition-body"><p>To improve the separation, we could either train for longer and/or use the <code>β</code> keyword argument in the <code>loss</code> function to decrease the weight of the KL divergence term.</p></div></div><h2 id="RHVAE-Model"><a class="docs-heading-anchor" href="#RHVAE-Model">RHVAE Model</a><a id="RHVAE-Model-1"></a><a class="docs-heading-anchor-permalink" href="#RHVAE-Model" title="Permalink"></a></h2><p>Let&#39;s now train a <a href="../rhvae/#RHVAEsmodule"><code>RHVAE</code></a> model. The process is very similar to the <code>VAE</code> model with the main difference that the <a href="../rhvae/#RHVAE"><code>RHVAE</code></a> type has some extra requirements. Let&#39;s quickly look at the docstring for this type. In particular, let&#39;s look at the docstring for the default constructor.</p><pre><code class="nohighlight hljs">RHVAE(
+      vae::VAE, 
+      metric_chain::MetricChain, 
+      centroids_data::AbstractArray, 
+      T::Number, 
+      λ::Number
+  )
+
+  Construct a Riemannian Hamiltonian Variational Autoencoder (RHVAE) from a standard VAE and a metric chain.
+
+  Arguments
+  ≡≡≡≡≡≡≡≡≡
+
+    •  vae::VAE: A standard Variational Autoencoder (VAE) model.
+
+    •  metric_chain::MetricChain: A chain of metrics to be used for the Riemannian Hamiltonian Monte Carlo (RHMC) sampler.
+
+    •  centroids_data::AbstractArray: An array of data centroids. Each column represents a centroid. N is a subtype of Number.
+
+    •  T::N: The temperature parameter for the inverse metric tensor. N is a subtype of Number.
+
+    •  λ::N: The regularization parameter for the inverse metric tensor. N is a subtype of Number.
+
+  Returns
+  ≡≡≡≡≡≡≡
+
+    •  A new RHVAE object.
+
+  Description
+  ≡≡≡≡≡≡≡≡≡≡≡
+
+  The constructor initializes the latent centroids and the metric tensor M to their default values. The latent centroids are initialized to a zero matrix of
+  the same size as centroids_data, and M is initialized to a 3D array of identity matrices, one for each centroid.</code></pre><p>From this we can see that we need to provide a <code>VAE</code> model–we can use the same model we defined earlier–a <a href="../rhvae/#MetricChainstruct"><code>MetricChain</code></a> type, an array of centroids, and two hyperparameters <code>T</code> and <code>λ</code>. The <code>MetricChain</code> type is another multi-layer perceptron specifically used to compute a lower-triangular matrix used for the metric tensor for the Riemannian manifold fit to the latent space. More specifically, when training an <code>RHVAE</code> model, the inverse of the metric tensor is also learned. This inverse metric tensor <span>$\mathbf{G}^{-1}(z)$</span> is of the form</p><p class="math-container">\[\mathbf{G}^{-1}(z)=\sum_{i=1}^N L_{\psi_i} L_{\psi_i}^{\top} \exp \left(-\frac{\left\|z-c_i\right\|_2^2}{T^2}\right)+\lambda I_d
+\tag{1}\]</p><p>where <span>$L_{\psi_i} \equiv L_{\psi_i}(x)$</span> is the lower-triangular matrix computed by the <code>MetricChain</code> type given the corresponding data input <span>$x$</span> associated with the latent coordinate <span>$z$</span>. <span>$c_i$</span> is one of the <span>$N$</span> centroids in latent space used as anchoring points for the metric tensor. The hyperparameters <span>$T$</span> and <span>$\lambda$</span> are used to control the temperature of the inverse metric tensor and an additional regularization term, respectively.</p><p>Looking at the requirements for <a href="../rhvae/#MetricChainstruct"><code>MetricChain</code></a> we see three components:</p><ol><li>An <code>mlp</code> field that is a multi-layer perceptron.</li><li>A <code>diag</code> field that is a dense layers used to compute the diagonal of the lower triangular matrix returned by <code>MetricChain</code>.</li><li>a <code>lower</code> field that is a dense layer used to compute the elements below the diagonal of the lower triangular matrix.</li></ol><p>Let&#39;s define these elements and build the <code>MetricChain</code>.</p><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>For <code>MetricChain</code> to build a proper lower triangular matrix, the <code>diag</code> layer must return the same dimensionality as the latent space. The <code>lower</code> layer must return the number of elements in the lower triangular matrix below the diagonal. This is given by <code>n_latent * (n_latent - 1) ÷ 2</code>.</p></div></div><pre><code class="language-julia hljs"># Define convolutional layers
+mlp_conv_layers = Flux.Chain(
+    # Flatten the input using custom Flatten layer
+    AET.Flatten(),
+    # First layer
+    Flux.Dense(28 * 28 =&gt; 400, Flux.relu),
+    # Second layer
+    Flux.Dense(400 =&gt; 400, Flux.relu),
+    # Third layer
+    Flux.Dense(400 =&gt; 400, Flux.relu),
+)
+
+# Define layers for the diagonal and lower triangular part of the covariance
+# matrix
+diag = Flux.Dense(400 =&gt; n_latent, Flux.identity)
+lower = Flux.Dense(
+    400 =&gt; n_latent * (n_latent - 1) ÷ 2, Flux.identity
+)
+
+# Build metric chain
+metric_chain = AET.RHVAEs.MetricChain(mlp_conv_layers, diag, lower)</code></pre><p>Next, we need to define the centroids. These are the <span>$c_i$</span> in equation (1) used as anchoring points for the metric tensor. Their latent space coordinates will be updated as the model trains, but the corresponding data points must be fixed. In a way, these centroids is a subset of the data used to define the <code>RHVAE</code> structure itself. One possibility is to use the entire training data as centroids. But this can get computationally very expensive. Instead, we can use either k-means or k-medoids to define a smaller set of centroids. For this, <code>AutoEncoderToolkit.jl</code> provides <a href="../utils/#centroidutils">functions to select these centroids.</a>. For this example, we will use k-medoids to define the centroids.</p><pre><code class="language-julia hljs"># Define number of centroids
+n_centroids = 64 
+
+# Select centroids via k-medoids
+centroids_data = AET.utils.centroids_kmedoids(train_data, n_centroids)</code></pre><p>Finally, we are just missing the hyperparameters <code>T</code> and <code>λ</code>, and we can then define the <code>RHVAE</code> model.</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>Here we are using the same <code>vae</code> model we defined earlier assuming it hasn&#39;t been previously trained. If it has been trained, we could load it from disk.</p></div></div><pre><code class="language-julia hljs"># Define RHVAE hyper-parameters
+T = 0.4f0 # Temperature
+λ = 1.0f-2 # Regularization parameter
+
+# Define RHVAE model
+rhvae = AET.RHVAEs.RHVAE(vae, metric_chain, centroids_data, T, λ)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../encoders/">Encoders &amp; Decoders »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.4.1 on <span class="colophon-date" title="Friday 3 May 2024 21:08">Friday 3 May 2024</span>. Using Julia version 1.10.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
