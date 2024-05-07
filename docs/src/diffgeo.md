@@ -138,7 +138,7 @@ the curve would take the same functional form, except that the metric tensor
 would be given by the identity matrix. This is why the metric tensor can be 
 thought of as a position-dependent scale-bar.
 
-## Neural Geodesic Networks
+## [Neural Geodesic Networks] (@id neuralgeodesic)
 
 Computing a geodesic on a Riemannian manifold is a non-trivial task, especially
 when the manifold is parametrized by a neural network. Thus, knowing the 
