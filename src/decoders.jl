@@ -1877,7 +1877,7 @@ function decoder_loglikelihood(
     # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
-    loglikelihood = -Flux.Losses.logitbinarycrossentropy(p, x; agg=sum)
+    loglikelihood = -Flux.Losses.binarycrossentropy(p, x; agg=sum)
 
     return loglikelihood
 end
@@ -1935,7 +1935,7 @@ function decoder_loglikelihood(
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
     loglikelihood = -sum(
-        Flux.Losses.logitbinarycrossentropy(p, x; agg=identity),
+        Flux.Losses.binarycrossentropy(p, x; agg=identity),
         dims=1:ndims(p)-1
     )
 
@@ -1998,7 +1998,7 @@ function decoder_loglikelihood(
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
     loglikelihood = [
         begin
-            -Flux.Losses.logitbinarycrossentropy(p[.., i], x[.., i]; agg=sum)
+            -Flux.Losses.binarycrossentropy(p[.., i], x[.., i]; agg=sum)
         end
         for i in axes(z, 2)
     ] |> Flux.gpu
@@ -2064,7 +2064,7 @@ function decoder_loglikelihood(
     # Compute log-likelihood. Note: The log-likelihood of a Bernoulli
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
-    loglikelihood = -Flux.Losses.logitbinarycrossentropy(
+    loglikelihood = -Flux.Losses.binarycrossentropy(
         p, x[.., index]; agg=sum
     )
 
@@ -2129,7 +2129,7 @@ function decoder_loglikelihood(
 
     # Compute log-likelihood. Note: The log-likelihood of a Categorical
     # decoder is given by the cross-entropy loss
-    loglikelihood = -Flux.Losses.logitcrossentropy(p, x; agg=sum, dims=dims)
+    loglikelihood = -Flux.Losses.crossentropy(p, x; agg=sum, dims=dims)
 
     return loglikelihood
 end
@@ -2193,7 +2193,7 @@ function decoder_loglikelihood(
     # distribution is given as follows:
     # loglikelihood = sum(x .* log.(p) .+ (1 .- x) .* log.(1 .- p))
     loglikelihood = -sum(
-        Flux.Losses.logitcrossentropy(p, x; agg=identity),
+        Flux.Losses.crossentropy(p, x; agg=identity),
         dims=1:ndims(p)-1
     )
 
@@ -2262,7 +2262,7 @@ function decoder_loglikelihood(
     # decoder is given by the cross-entropy loss
     loglikelihood = [
         begin
-            -Flux.Losses.logitcrossentropy(
+            -Flux.Losses.crossentropy(
                 p[.., i], x[.., i]; agg=sum, dims=dims
             )
         end
@@ -2334,7 +2334,7 @@ function decoder_loglikelihood(
 
     # Compute log-likelihood. Note: The log-likelihood of a Categorical
     # decoder is given by the cross-entropy loss
-    loglikelihood = -Flux.Losses.logitcrossentropy(
+    loglikelihood = -Flux.Losses.crossentropy(
         p, x[.., index]; agg=sum, dims=dims
     )
 
