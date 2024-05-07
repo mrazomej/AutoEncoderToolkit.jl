@@ -464,7 +464,7 @@ loss is defined as the integral over the curve, computed using the provided
   velocity of the curve. Default is `curve_velocity_TaylorDiff`. Also accepts
   `curve_velocity_finitediff`.
 - `curve_integral::Function=curve_length`: Function to compute the integral over
-  the curve. Default is `curve_length`. Also accepts `curve_energy`.
+  the curve. Default is `curve_energy`. Also accepts `curve_length`.
 
 # Returns
 - `Loss::Number`: The computed loss for the given curve.
@@ -482,7 +482,7 @@ function loss(
     rhvae::RHVAE,
     t::AbstractVector;
     curve_velocity::Function=curve_velocity_finitediff,
-    curve_integral::Function=curve_length,
+    curve_integral::Function=curve_energy,
 )
     # Compute the geodesic curve
     z_mat = curve(t)
