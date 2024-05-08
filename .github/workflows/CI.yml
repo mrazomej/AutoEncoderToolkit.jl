@@ -61,4 +61,5 @@ jobs:
       - uses: codecov/codecov-action@v4.3.1
         if: contains(fromJson('["1", "1.9"]'), matrix.version) && matrix.os == 'ubuntu-latest'
         with:
+          file: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
