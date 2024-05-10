@@ -79,21 +79,21 @@ defined by the decoder with parameters $\theta$, $q_\phi(z|x)$ is the posterior
 distribution of the latent variable given the data defined by the encoder with
 parameters $\phi$, and $D_{KL}(q_\phi(z|x) || p(z))$ is the Kullback-Leibler
 divergence between the posterior and the prior distribution of the latent space.
-For a particular training, by defining the decoder type as either
-`BernoulliDecoder` or `SimpleGaussianDecoder`, the user can decide whether the
-output of the decoder, defined by the $p_\theta(x|z)$ distribution, is assumed
-to be drawn from a Bernoulli distribution or a Gaussian distribution with
-constant diagonal covariance, respectively. This design choice allows for the
-quick prototyping of different architectures without the overhead of defining
-new specific losses for each type of decoder.
+By defining the decoder type as either `BernoulliDecoder` or
+`SimpleGaussianDecoder`, the user can decide whether decoder outputs, i.e., the
+parameters of the likelihood distribution $p_\theta(x|z)$, are the parameters of
+a Bernoulli distribution or a Gaussian distribution with constant diagonal
+covariance, respectively. This design choice allows for the quick prototyping of
+different architectures without the overhead of defining new specific losses for
+each type of decoder.
 
 Furthermore, the design allows for the easy extension of the list of available
 encoders and decoders that can directly integrate to any of the existing list of
 VAE models. For example, let us assume that for a particular problem, the user
-wants to define a decoder whose output is a sample from independent Poisson
-distributions, each with a different parameter $\lambda_i$. In other words,
-on the decoder side, the decoder returns a vector of parameters $\lambda$ for
-each of the dimensions of the data. The user can define a new decoder type
+wants to define a decoder whose output are the parameters for independent
+Poisson distributions, each with a different parameter $\lambda_i$. In other
+words, on the decoder side, the decoder returns a vector of parameters $\lambda$
+for each of the dimensions of the data. The user can define a new decoder type
 
 ```julia
 struct PoissonDecoder <: AbstractVariationalDecoder
@@ -156,6 +156,14 @@ At the time of this writing, the package has implemented the following models:
 | InfoMax Variational Autoencoder (InfoMaxVAE)               | [@rezaabad2020] |
 | Hamiltonian Variational Autoencoder (HVAE)                 | [@caterini2018] |
 | Riemannian Hamiltonian Variational Autoencoder (RHVAE)     | [@chadebec2020] |
+
+Other than the deterministic autoencoder, all the models listed above use the
+same underlying `VAE` struct as part of their definition. Some of them, like the
+`InfoMaxVAE` and the `RHVAE`, require additional neural networks used during
+training or inference. However, other than those additional elements, the
+training routines for all models is virtually the same. This design choice
+allows the user to quickly explore different VAE models for their specific
+applications without the need to write new training routines for each model.
 
 Moreover, extending the list of VAE models is also straightforward as
 contributions to the package only need to focus on a general definition of the
