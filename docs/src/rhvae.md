@@ -16,7 +16,7 @@ tensor. To facilitate the dispatch of the necessary functions associated with
 this second network, we also provide a [`MetricChain`](@ref MetricChain) struct.
 
 !!! warning
-    HVAEs require the computation of nested gradients. This means that the
+    RHVAEs require the computation of nested gradients. This means that the
     AutoDiff framework must differentiate a function of an already AutoDiff
     differentiated function. This is known to be problematic for `Julia`'s
     AutoDiff backends. See [details below](@ref gradhamiltonian) to understand
