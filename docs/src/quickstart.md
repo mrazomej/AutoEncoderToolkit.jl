@@ -405,6 +405,101 @@ decoder_output = vae.decoder(prior_samples).p
 
 ![](./figs/vae_samples.svg)
 
+## InfoMaxVAE Model
+
+Let's now proceed to train an [`InfoMaxVAE`](@ref InfoMaxVAEsmodule) model. This
+model is a variational autoencoder that includes a term in the loss function to
+maximize a variational approximation of the mutual information between the
+latent space and the input data. This variational approximation of the mutual
+information is parametrized by a neural network that is trained jointly with the
+encoder and decoder. Thus, the [`InfoMaxVAE`](@ref InfoMaxVAE) object takes as
+input a `VAE` model as well as a [`MutualInfoChain`](@ref MutualInfoChain)
+object that defines the multi-layer perceptron used to compute the mutual
+information. Since we can use the exact same `VAE` model we defined earlier, all
+we need to do is define the `MutualInfoChain` object to build the `InfoMaxVAE`
+model.
+
+!!! note
+    Make sure to check the documentation for the [`MutualInfoChain`](@ref
+    MutualInfoChain) to know the requirements for this object. The main thing
+    for us in this example is that since the data input is a 4D tensor, we need
+    a custom layer to flatten the output of the encoder before passing it to the
+    multi-layer perceptron. Furthermore, the output of the multi-layer
+    perceptron must be a scalar.
+
+```julia
+# Define MutualInfochain elements
+
+data_layer = Flux.Chain(
+    AET.Flatten(),
+    Flux.Dense(28 * 28 => 28 * 28, Flux.identity),
+)
+
+latent_layer = Flux.Dense(n_latent => n_latent, Flux.identity)
+
+mlp = Flux.Chain(
+    Flux.Dense(28 * 28 + n_latent => 256, Flux.relu),
+    Flux.Dense(256 => 256, Flux.relu),
+    Flux.Dense(256 => 256, Flux.relu),
+    Flux.Dense(256 => 1, Flux.identity),
+)
+
+# Define MutualInfochain
+mi = AET.InfoMaxVAEs.MutualInfoChain(data_layer, latent_layer, mlp)
+```
+
+Next, we put together the `VAE` model and the `MutualInfoChain` to define the
+`InfoMaxVAE` model.
+
+```julia
+# Define InfoMaxVAE model
+infomaxvae = AET.InfoMaxVAEs.InfoMaxVAE(encoder * decoder, mi)
+```
+
+The `InfoMaxVAE` model has two loss functions: one for the mutual information
+and one for the VAE. But this is internally handled by the `InfoMaxVAEs.train!`
+function. So, training the model is as simple as training the `VAE` model.
+
+!!! tip
+    Notice that we can pass additional keyword arguments to the `train!`
+    function as keyword arguments for either the `miloss` or the `infomaxloss`.
+    In this case, we will pass the hyperparameters `α` and `β` to weigh the
+    mutual information term significantly more than the KL divergence term.
+
+```julia
+# Explicit setup of optimizer
+opt_infomaxvae = Flux.Train.setup(
+    Flux.Optimisers.Adam(η),
+    infomaxvae
+)
+
+# Define infomaxloss function kwargs
+loss_kwargs = Dict(:α => 10.0f0, :β => 1.0f0,)
+
+# Loop through epochs
+for epoch in 1:n_epoch
+    println("Epoch: $(epoch)\n")
+    # Loop through batches
+    for (i, x) in enumerate(train_loader)
+        println("Epoch: $(epoch) | Batch: $(i) / $(length(train_loader))")
+        # Train RHVAE
+        AET.InfoMaxVAEs.train!(
+            infomaxvae, x, opt_infomaxvae; infomaxloss_kwargs=loss_kwargs
+        )
+    end # for train_loader
+end # for n_epoch
+```
+
+Notice that we only needed to define the `MutualInfoChain` object and we were
+ready to train the `InfoMaxVAE` model. This is the power of the design of 
+`AutoEncoderToolkit.jl`!
+
+### Exploring the results
+
+Let's now look ath the resulting coordinates in latent space after 100 epochs of
+training.
+
+![](./figs/infomaxvae_latent.svg)
 
 ## RHVAE Model
 
