@@ -1,4 +1,4 @@
-module AutoEncodeCUDAExt
+module AutoEncoderToolkitCUDAExt
 
 # Import CUDA library
 using CUDA

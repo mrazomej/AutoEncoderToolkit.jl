@@ -199,7 +199,7 @@ function RHVAEs.train!(
     Flux.Optimisers.update!(opt, rhvae, ∇L[1])
 
     # Update metric
-    update_metric!(rhvae)
+    RHVAEs.update_metric!(rhvae)
 
     # Check if loss should be returned
     if loss_return
@@ -277,7 +277,7 @@ function RHVAEs.train!(
     Flux.Optimisers.update!(opt, rhvae, ∇L[1])
 
     # Update metric
-    update_metric!(rhvae)
+    RHVAEs.update_metric!(rhvae)
 
     # Check if loss should be returned
     if loss_return

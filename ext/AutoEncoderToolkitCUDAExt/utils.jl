@@ -249,7 +249,7 @@ GPU AbstractVector implementation of `unit_vectors`.
 function utils._unit_vectors(
     ::Type{T}, x::AbstractVector
 ) where {T<:CUDA.CuArray}
-    return [unit_vector(x, i) for i in 1:length(x)] |> Flux.gpu
+    return [utils.unit_vector(x, i) for i in 1:length(x)] |> Flux.gpu
 end # function
 
 # ------------------------------------------------------------------------------
@@ -263,7 +263,7 @@ function utils._unit_vectors(
     ::Type{T}, x::CUDA.CuMatrix
 ) where {T<:CUDA.CuArray}
     vectors = [
-        reduce(hcat, fill(unit_vector(x, i), size(x, 2)))
+        reduce(hcat, fill(utils.unit_vector(x, i), size(x, 2)))
         for i in 1:size(x, 1)
     ]
     return vectors |> Flux.gpu
@@ -296,14 +296,14 @@ function utils._finite_difference_gradient(
         # Define step size
         ε = √(eps(eltype(x)))
         # Generate unit vectors times step size for each element of x
-        Δx = unit_vectors(x) .* ε
+        Δx = utils.unit_vectors(x) .* ε
         # Compute the finite difference gradient for each element of x
         grad = (f.([x + δ for δ in Δx]) .- f(x)) ./ ε
     else
         # Define step size
         ε = ∛(eps(eltype(x)))
         # Generate unit vectors times step size for each element of x
-        Δx = unit_vectors(x) .* ε
+        Δx = utils.unit_vectors(x) .* ε
         # Compute the finite difference gradient for each element of x
         grad = (f.([x + δ for δ in Δx]) - f.([x - δ for δ in Δx])) ./ (2ε)
     end # if
