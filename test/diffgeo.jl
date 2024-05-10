@@ -297,32 +297,32 @@ end # @testset "NeuralGeodesic trainin
 # Got exception outside of a @test
 # BoundsError: attempt to access 16-element Vector{UInt8} at index [0]
 
-# @testset "NeuralGeodesic training" begin
-#     # Define activation function for hidden layers
-#     hidden_activation = repeat([Flux.relu], n_hidden)
+@testset "NeuralGeodesic training" begin
+    # Define activation function for hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
 
-#     # Define initial and end points of the geodesic curve
-#     z_init = randn(Float32, latent_dim)
-#     z_end = randn(Float32, latent_dim)
+    # Define initial and end points of the geodesic curve
+    z_init = randn(Float32, latent_dim)
+    z_end = randn(Float32, latent_dim)
 
-#     # Initialize the MLP
-#     mlp = Flux.Chain(
-#         Flux.Dense(1, n_neuron, hidden_activation[1]),
-#         [Flux.Dense(n_neuron, n_neuron, a) for a in hidden_activation[2:end]]...,
-#         Flux.Dense(n_neuron, latent_dim)
-#     )
+    # Initialize the MLP
+    mlp = Flux.Chain(
+        Flux.Dense(1, n_neuron, hidden_activation[1]),
+        [Flux.Dense(n_neuron, n_neuron, a) for a in hidden_activation[2:end]]...,
+        Flux.Dense(n_neuron, latent_dim)
+    )
 
-#     # Initialize the NeuralGeodesic
-#     curve = NeuralGeodesics.NeuralGeodesic(mlp, z_init, z_end)
+    # Initialize the NeuralGeodesic
+    curve = NeuralGeodesics.NeuralGeodesic(mlp, z_init, z_end)
 
-#     # Define vector of times
-#     t = collect(range(0.0f0, 1.0f0, length=10))
+    # Define vector of times
+    t = collect(range(0.0f0, 1.0f0, length=10))
 
-#     # Define optimizer
-#     opt = Flux.Train.setup(Flux.Optimisers.Adam(), curve)
+    # Define optimizer
+    opt = Flux.Train.setup(Flux.Optimisers.Adam(), curve)
 
-#     L = NeuralGeodesics.train!(curve, rhvae, t, opt; loss_return=true)
-#     @test isa(L, Number)
-# end # @testset "NeuralGeodesic training"
+    L = NeuralGeodesics.train!(curve, rhvae, t, opt; loss_return=true)
+    @test isa(L, Number)
+end # @testset "NeuralGeodesic training"
 
 println("\nAll tests passed!\n")

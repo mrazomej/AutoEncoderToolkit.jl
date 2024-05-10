@@ -304,56 +304,56 @@ end # @testset "InfoMaxVAE training"
 # Got exception outside of a @test
 # BoundsError: attempt to access 16-element Vector{UInt8} at index [0]
 
-# @testset "InfoMaxVAE training" begin
-#     # Define dimensionality of data
-#     data_dim = 10
-#     # Define dimensionality of latent space 
-#     latent_dim = 2
-#     # Define number of hidden layers in encoder/decoder
-#     n_hidden = 2
-#     # Define number of neurons in encoder/decoder hidden layers
-#     n_neuron = 10
-#     # Define activation function for encoder/decoder hidden layers
-#     hidden_activation = repeat([Flux.relu], n_hidden)
-#     # Define activation function for output of encoder
-#     output_activation = Flux.identity
+@testset "InfoMaxVAE training" begin
+    # Define dimensionality of data
+    data_dim = 10
+    # Define dimensionality of latent space 
+    latent_dim = 2
+    # Define number of hidden layers in encoder/decoder
+    n_hidden = 2
+    # Define number of neurons in encoder/decoder hidden layers
+    n_neuron = 10
+    # Define activation function for encoder/decoder hidden layers
+    hidden_activation = repeat([Flux.relu], n_hidden)
+    # Define activation function for output of encoder
+    output_activation = Flux.identity
 
-#     # Define encoder and decoder
-#     encoder = VAEs.JointGaussianLogEncoder(
-#         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
-#     )
-#     decoder = VAEs.SimpleGaussianDecoder(
-#         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
-#     )
-#     # Define VAE
-#     vae = VAEs.VAE(encoder, decoder)
+    # Define encoder and decoder
+    encoder = VAEs.JointGaussianLogEncoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    decoder = VAEs.SimpleGaussianDecoder(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
+    # Define VAE
+    vae = VAEs.VAE(encoder, decoder)
 
-#     # Define MutualInfoChain
-#     mi_chain = InfoMaxVAEs.MutualInfoChain(
-#         data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
-#     )
+    # Define MutualInfoChain
+    mi_chain = InfoMaxVAEs.MutualInfoChain(
+        data_dim, latent_dim, repeat([n_neuron], n_hidden), hidden_activation, output_activation
+    )
 
-#     # Initialize InfoMaxVAE
-#     infomaxvae = InfoMaxVAEs.InfoMaxVAE(vae, mi_chain)
+    # Initialize InfoMaxVAE
+    infomaxvae = InfoMaxVAEs.InfoMaxVAE(vae, mi_chain)
 
-#     # Define batch of data
-#     x = randn(Float32, data_dim, 10)
+    # Define batch of data
+    x = randn(Float32, data_dim, 10)
 
-#     # Explicit setup of optimizers
-#     opt_infomaxvae = Flux.Train.setup(Flux.Optimisers.Adam(), infomaxvae)
+    # Explicit setup of optimizers
+    opt_infomaxvae = Flux.Train.setup(Flux.Optimisers.Adam(), infomaxvae)
 
-#     @testset "with same input and output" begin
-#         L = InfoMaxVAEs.train!(infomaxvae, x, opt_infomaxvae; loss_return=true)
-#         @test L isa Tuple{<:Number,<:Number}
-#     end # @testset "with same input and output"
+    @testset "with same input and output" begin
+        L = InfoMaxVAEs.train!(infomaxvae, x, opt_infomaxvae; loss_return=true)
+        @test L isa Tuple{<:Number,<:Number}
+    end # @testset "with same input and output"
 
-#     @testset "with different input and output" begin
-#         x_out = randn(Float32, data_dim, 10)
-#         L = InfoMaxVAEs.train!(
-#             infomaxvae, x, x_out, opt_infomaxvae; loss_return=true
-#         )
-#         @test L isa Tuple{<:Number,<:Number}
-#     end # @testset "with different input and output"
-# end # @testset "InfoMaxVAE training"
+    @testset "with different input and output" begin
+        x_out = randn(Float32, data_dim, 10)
+        L = InfoMaxVAEs.train!(
+            infomaxvae, x, x_out, opt_infomaxvae; loss_return=true
+        )
+        @test L isa Tuple{<:Number,<:Number}
+    end # @testset "with different input and output"
+end # @testset "InfoMaxVAE training"
 
 println("\nAll tests passed!\n")

@@ -1567,30 +1567,30 @@ end # @testset "HVAE grad"
 # Got exception outside of a @test
 # BoundsError: attempt to access 16-element Vector{UInt8} at index [0]
 
-# @testset "RHVAE training" begin
-#     @testset "without regularization" begin
-#         # Loop through decoders
-#         for decoder in decoders
-#             # Build temporary RHVAE
-#             rhvae = RHVAEs.RHVAE(
-#                 joint_log_encoder * decoder,
-#                 metric_chain,
-#                 data,
-#                 T,
-#                 λ,
-#             )
+@testset "RHVAE training" begin
+    @testset "without regularization" begin
+        # Loop through decoders
+        for decoder in decoders
+            # Build temporary RHVAE
+            rhvae = RHVAEs.RHVAE(
+                joint_log_encoder * decoder,
+                metric_chain,
+                data,
+                T,
+                λ,
+            )
 
-#             # Explicit setup of optimizer
-#             opt_state = Flux.Train.setup(
-#                 Flux.Optimisers.Adam(1E-2),
-#                 rhvae
-#             )
+            # Explicit setup of optimizer
+            opt_state = Flux.Train.setup(
+                Flux.Optimisers.Adam(1E-2),
+                rhvae
+            )
 
-#             # Test training function
-#             L = RHVAEs.train!(rhvae, data, opt_state; loss_return=true)
-#             @test isa(L, Float32)
-#         end # for decoder in decoders
-#     end # @testset "without regularization"
-# end # @testset "RHVAE training"
+            # Test training function
+            L = RHVAEs.train!(rhvae, data, opt_state; loss_return=true)
+            @test isa(L, Float32)
+        end # for decoder in decoders
+    end # @testset "without regularization"
+end # @testset "RHVAE training"
 
 println("\nAll tests passed!\n")
