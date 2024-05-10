@@ -31,7 +31,7 @@ inference approach. This approach allows for the model to approximate the
 underlying low-dimensional structure that generated the observed data and
 generate new data samples by sampling from the learned latent space. Several
 variations of the original VAE have been proposed to extend its capabilities and
-tackle different problems. Here, we present `AutoEncoderToolkit.jl`, a Julia
+tackle different problems. Here, we present `AutoEncoderToolkit.jl`, a `Julia`
 package for training VAEs and its extensions. The package is built on top of the
 `Flux.jl` deep learning library [@innes2018] and provides a simple and flexible
 interface for training different flavors of VAEs. Furthermore, the package
@@ -67,12 +67,13 @@ and extended to quickly prototype different VAE architectures. In other words,
 independent of the design of the multi-layer perceptron used for either the
 encoder or the decoder, what defines their behavior is their associated
 probability distribution. For example, let us consider the loss function for the
-standard VAE model, given by the evidence lower bound (ELBO):
-$$
-\text{ELBO} = \left\langle \log p_\theta(x|z) \right\rangle_{q_\phi(z|x)} - 
-D_{KL}(q_\phi(z|x) || p(z)),
-\tag{1}
-$$
+standard VAE model, given by the evidence lower bound (ELBO): 
+$$ 
+\text{ELBO} = \left\langle \log p_\theta(x|z) \right\rangle_{q_\phi(z|x)} -
+D_{KL}(q_\phi(z|x)
+|| p(z)), 
+\tag{1} 
+$$ 
 where $p_\theta(x|z)$ is the likelihood of the data given the latent variable
 defined by the decoder with parameters $\theta$, $q_\phi(z|x)$ is the posterior
 distribution of the latent variable given the data defined by the encoder with
@@ -80,15 +81,16 @@ parameters $\phi$, and $D_{KL}(q_\phi(z|x) || p(z))$ is the Kullback-Leibler
 divergence between the posterior and the prior distribution of the latent space.
 For a particular training, by defining the decoder type as either
 `BernoulliDecoder` or `SimpleGaussianDecoder`, the user can decide whether the
-$p_\theta(x|z)$ is a Bernoulli distribution or a Gaussian distribution with
+output of the decoder, defined by the $p_\theta(x|z)$ distribution, is assumed
+to be drawn from a Bernoulli distribution or a Gaussian distribution with
 constant diagonal covariance, respectively. This design choice allows for the
 quick prototyping of different architectures without the overhead of defining
-new losses or training loops. 
+new specific losses for each type of decoder.
 
 Furthermore, the design allows for the easy extension of the list of available
 encoders and decoders that can directly integrate to any of the existing list of
 VAE models. For example, let us assume that for a particular problem, the user
-wants to use a decoder whose output is a sample from independent Poisson
+wants to define a decoder whose output is a sample from independent Poisson
 distributions, each with a different parameter $\lambda_i$. In other words,
 on the decoder side, the decoder returns a vector of parameters $\lambda$ for
 each of the dimensions of the data. The user can define a new decoder type
@@ -162,11 +164,32 @@ specific terms for each type of encoder or decoder.
 
 ## Differential geometry utilities
 
+In recent years, there has been a growing interest in understanding the
+geometric properties of the latent space learned by VAEs
+[@chadebec2022,@arvanitidis2021]. This is because the non-linearities of the
+encoder and decoder networks can induce complex geometries in the latent space,
+where the Euclidean distance between points in latent space does not necessarily
+reflect the true distance between the corresponding data points. Thus, tools
+from differential geometry such as geodesic distances, parallel transport, and
+curvature can provide deeper insights into the structure of the learned latent
+space. `AutoEncoderToolkit.jl` provides a set of utilities for the geometric
+analysis of the latent space. For example, at the time of this writing, the
+`NeuralGeodedics` module provides the tools to approximate geodesic curves
+between points in latent space for the Riemannian Hamiltonian VAE (RHVAE) model.
+This is achieved by utilizing a neural network to approximate the geodesic
+equation [@chen2018a] in the latent space using the explicit representation of
+the Riemannian metric learned by the RHVAE model [@chadebec2020].
+
 ## GPU support
 
 `AutoEncoderToolkit.jl` offers GPU support for `CUDA.jl`-compatible GPUs out of
-the box. To avoid the overhead of loading this dependency, the `CUDA`-specific
-functions are loaded as an extension once `CUDA.jl` is loaded. 
+the box. 
+
+## Documentation
+
+Documentation is available at
+(https://mrazomej.github.io/AutoEncoderToolkit.jl), where there are worked out
+examples and tutorials on how to use the package.
 
 # Acknowledgements
 
