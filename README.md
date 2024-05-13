@@ -4,17 +4,6 @@
 [![codecov](https://codecov.io/gh/mrazomej/AutoEncoderToolkit.jl/graph/badge.svg?token=9DKTMW94G5)](https://codecov.io/gh/mrazomej/AutoEncoderToolkit.jl)
 [![status](https://joss.theoj.org/papers/ef5c3f45415c56d77ae836cac422e0df/status.svg)](https://joss.theoj.org/papers/ef5c3f45415c56d77ae836cac422e0df)
 
-> **Note**: The build status above shows `failing` because some tests are
-> failing only when running on GitHub Actions. Locally, all tests pass. The
-> error  in Github Actions shows up when testing the computation of loss
-> function gradients as:
->
-> `Got exception outside of a @test`
->
-> `BoundsError: attempt to access 16-element Vector{UInt8} at index [0]`
->
-> PRs to fix this issue are welcome.
-
 Welcome to the `AutoEncoderToolkit.jl` GitHub repository. This package provides
 a simple interface for training and using [Flux.jl](https://fluxml.ai)-based
 autoencoders and variational autoencoders in Julia.
@@ -53,3 +42,20 @@ For more information, please refer to the
 | InfoMax-VAEs               | `InfoMaxVAEs` | Information Maximization Variational Autoencoders              |
 | Hamiltonian VAE            | `HVAEs`       | Hamiltonian Variational Autoencoders                           |
 | Riemannian Hamiltonian-VAE | `RHVAEs`      | Riemannian-Hamiltonian Variational Autoencoder                 |
+
+## Notes
+> Some tests are failing only when running on GitHub Actions. Locally, all tests
+> pass. The error  in Github Actions shows up when testing the computation of
+> loss function gradients as:
+>
+> `Got exception outside of a @test`
+>
+> `BoundsError: attempt to access 16-element Vector{UInt8} at index [0]`
+>
+> PRs to fix this issue are welcome.
+
+## License / Authors
+
+Released under the [MIT License](LICENSE).
+
+Author & Maintainer: [Manuel Razo-Mejia](https://mrazomej.github.io/)
