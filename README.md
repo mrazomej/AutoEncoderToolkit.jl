@@ -2,6 +2,7 @@
 
 [![Build Status](https://github.com/mrazomej/AutoEncoderToolkit.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mrazomej/AutoEncoderToolkit.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![codecov](https://codecov.io/gh/mrazomej/AutoEncoderToolkit.jl/graph/badge.svg?token=9DKTMW94G5)](https://codecov.io/gh/mrazomej/AutoEncoderToolkit.jl)
+[![status](https://joss.theoj.org/papers/ef5c3f45415c56d77ae836cac422e0df/status.svg)](https://joss.theoj.org/papers/ef5c3f45415c56d77ae836cac422e0df)
 
 > **Note**: The build status above shows `failing` because some tests are
 > failing only when running on GitHub Actions. Locally, all tests pass. The
