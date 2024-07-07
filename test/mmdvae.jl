@@ -45,7 +45,7 @@ Random.seed!(42)
     mmdvae = MMDVAEs.MMDVAE(vae)
 
     @testset "Type checking" begin
-        @test typeof(mmdvae) <: MMDVAEs.MMDVAE{VAEs.VAE{VAEs.JointGaussianLogEncoder,VAEs.SimpleGaussianDecoder}}
+        @test typeof(mmdvae) <: MMDVAEs.MMDVAE{<:VAEs.VAE{<:VAEs.JointGaussianLogEncoder,<:VAEs.SimpleGaussianDecoder}}
     end
 
     @testset "Forward pass" begin

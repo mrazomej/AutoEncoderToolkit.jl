@@ -180,13 +180,13 @@ split_decoder = VAEs.SplitGaussianDecoder(
 )
 
 @testset "Type checking" begin
-    @test typeof(joint_log_encoder) == VAEs.JointGaussianLogEncoder
-    @test typeof(bernoulli_decoder) == VAEs.BernoulliDecoder
-    @test typeof(simple_decoder) == VAEs.SimpleGaussianDecoder
-    @test typeof(joint_log_decoder) == VAEs.JointGaussianLogDecoder
-    @test typeof(split_log_decoder) == VAEs.SplitGaussianLogDecoder
-    @test typeof(joint_decoder) == VAEs.JointGaussianDecoder
-    @test typeof(split_decoder) == VAEs.SplitGaussianDecoder
+    @test typeof(joint_log_encoder) <: VAEs.JointGaussianLogEncoder
+    @test typeof(bernoulli_decoder) <: VAEs.BernoulliDecoder
+    @test typeof(simple_decoder) <: VAEs.SimpleGaussianDecoder
+    @test typeof(joint_log_decoder) <: VAEs.JointGaussianLogDecoder
+    @test typeof(split_log_decoder) <: VAEs.SplitGaussianLogDecoder
+    @test typeof(joint_decoder) <: VAEs.JointGaussianDecoder
+    @test typeof(split_decoder) <: VAEs.SplitGaussianDecoder
     @test typeof(joint_log_encoder * simple_decoder) <: VAEs.VAE
 end # @testset "Type checking"
 

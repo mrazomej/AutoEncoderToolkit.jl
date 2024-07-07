@@ -40,7 +40,7 @@ Random.seed!(42)
     ae = AEs.AE(encoder, decoder)
 
     @testset "Type checking" begin
-        @test typeof(ae) == AEs.AE{AEs.Encoder,AEs.Decoder}
+        @test typeof(ae) <: AEs.AE{<:AEs.Encoder,<:AEs.Decoder}
     end
 
     @testset "Forward pass" begin

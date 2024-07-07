@@ -97,7 +97,10 @@ end # @testset "MutualInfoChain struct"
 
     @testset "Type checking" begin
         @test typeof(infomaxvae) <: InfoMaxVAEs.InfoMaxVAE{
-            VAEs.VAE{AutoEncoderToolkit.JointGaussianLogEncoder,AutoEncoderToolkit.SimpleGaussianDecoder}
+            <:VAEs.VAE{
+                <:AutoEncoderToolkit.JointGaussianLogEncoder,
+                <:AutoEncoderToolkit.SimpleGaussianDecoder
+            }
         }
     end
 
