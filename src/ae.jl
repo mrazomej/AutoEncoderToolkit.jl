@@ -30,7 +30,7 @@ in between. The encoder compresses the input into a low-dimensional
 representation. The decoder tries to reconstruct the original input from the
 point in the latent space. 
 """
-mutable struct AE{
+struct AE{
     E<:AbstractDeterministicEncoder,
     D<:AbstractDeterministicDecoder
 } <: AbstractDeterministicAutoEncoder
