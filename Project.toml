@@ -1,7 +1,7 @@
 name = "AutoEncoderToolkit"
 uuid = "1575904b-3569-468b-ae7a-8569c4d6dae9"
 authors = ["Manuel Razo-Mejia"]
-version = "0.0.3"
+version = "0.1.0"
 
 [deps]
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
