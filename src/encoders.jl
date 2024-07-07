@@ -2,6 +2,8 @@
 import Flux
 # Import library to use Ellipsis Notation
 using EllipsisNotation
+# Import ConcreteStructs module
+using ConcreteStructs: @concrete
 
 # ==============================================================================
 # Encoder abstract types
@@ -124,7 +126,7 @@ abstract type AbstractGaussianLogEncoder <: AbstractGaussianEncoder end
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 @doc raw"""
-`struct Encoder`
+`struct Encoder{E<:Union{Flux.Chain,Flux.Dense}} <: AbstractDeterministicEncoder`
 
 Default encoder function for deterministic autoencoders. The `encoder` network
 is used to map the input data directly into the latent space representation.
@@ -138,12 +140,21 @@ is used to map the input data directly into the latent space representation.
 enc = Encoder(Flux.Chain(Dense(784, 400, relu), Dense(400, 20)))
 ```
 """
-struct Encoder <: AbstractDeterministicEncoder
-    encoder::Union{Flux.Chain,Flux.Dense}
-end # struct
+@concrete struct Encoder <: AbstractDeterministicEncoder
+    encoder
+end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor Encoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{Encoder{T}}) where {T}
+    print(io, "Encoder{…}")
+end
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     Encoder(n_input, n_latent, latent_activation, encoder_neurons, 
@@ -293,14 +304,23 @@ enc = JointGaussianLogEncoder(
 )
 ```
 """
-struct JointGaussianLogEncoder <: AbstractGaussianLogEncoder
-    encoder::Flux.Chain
-    µ::Union{Flux.Dense,Flux.Chain}
-    logσ::Union{Flux.Dense,Flux.Chain}
+@concrete struct JointGaussianLogEncoder <: AbstractGaussianLogEncoder
+    encoder
+    µ
+    logσ
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor JointGaussianLogEncoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{JointGaussianLogEncoder{E,M,L}}) where {E,M,L}
+    print(io, "JointGaussianLogEncoder{…}")
+end
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     JointGaussianLogEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 
@@ -539,14 +559,23 @@ enc = JointGaussianEncoder(
 )
 ```
 """
-struct JointGaussianEncoder <: AbstractGaussianLinearEncoder
-    encoder::Flux.Chain
-    µ::Flux.Dense
-    σ::Flux.Dense
+@concrete struct JointGaussianEncoder <: AbstractGaussianLinearEncoder
+    encoder
+    µ
+    σ
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor JointGaussianEncoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{JointGaussianEncoder{E,M,L}}) where {E,M,L}
+    print(io, "JointGaussianEncoder{…}")
+end
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     JointGaussianEncoder(n_input, n_latent, encoder_neurons, encoder_activation, 

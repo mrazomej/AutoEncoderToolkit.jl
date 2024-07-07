@@ -3,6 +3,8 @@ import Flux
 import TaylorDiff
 # Import library to use Ellipsis Notation
 using EllipsisNotation
+# Import ConcreteStructs module
+using ConcreteStructs: @concrete
 
 ## ============================================================================
 # Abstract Decoder Types
@@ -122,7 +124,7 @@ abstract type AbstractGaussianLinearDecoder <: AbstractGaussianDecoder end
 # ==============================================================================
 
 @doc raw"""
-`struct Decoder`
+`struct Decoder{D<:Flux.Chain} <: AbstractDeterministicDecoder`
 
 Default decoder function for deterministic autoencoders. The `decoder` network
 is used to map the latent space representation directly back to the original
@@ -137,12 +139,21 @@ data space.
 dec = Decoder(Flux.Chain(Dense(20, 400, relu), Dense(400, 784)))
 ```
 """
-struct Decoder <: AbstractDeterministicDecoder
-    decoder::Flux.Chain
+@concrete struct Decoder <: AbstractDeterministicDecoder
+    decoder
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor Decoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{Decoder{D}}) where {D}
+    print(io, "Decoder{…}")
+end
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     Decoder(n_input, n_latent, decoder_neurons, decoder_activation, 
@@ -269,7 +280,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    SimpleGaussianDecoder <: AbstractGaussianDecoder
+    SimpleGaussianDecoder{D} <: AbstractGaussianDecoder
 
 A straightforward decoder structure for variational autoencoders (VAEs) that
 contains only a single decoder network.
@@ -285,16 +296,19 @@ It's commonly used when the VAE's latent space distribution is implicitly
 defined, and there's no need for separate paths or operations on the mean or log
 standard deviation.
 """
-struct SimpleGaussianDecoder <: AbstractGaussianDecoder
-    decoder::Flux.Chain
+@concrete struct SimpleGaussianDecoder <: AbstractGaussianDecoder
+    decoder
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor SimpleGaussianDecoder
 
 @doc raw"""
-    SimpleGaussianDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
-                output_activation; init=Flux.glorot_uniform)
+    SimpleGaussianDecoder(
+        n_input, n_latent, decoder_neurons, 
+        decoder_activation, output_activation; 
+        init=Flux.glorot_uniform
+    )
 
 Constructs and initializes a `SimpleGaussianDecoder` object designed for
 variational autoencoders (VAEs). This function sets up a straightforward decoder
@@ -430,7 +444,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    JointGaussianLogDecoder <: AbstractGaussianLogDecoder
+    JointGaussianLogDecoder{D<:Flux.Chain,L<:Flux.Dense} <: AbstractGaussianLogDecoder
 
 An extended decoder structure for VAEs that incorporates separate layers for
 mapping from the latent space to both its mean (`µ`) and log standard deviation
@@ -449,14 +463,23 @@ mapping from the latent space to both its mean (`µ`) and log standard deviation
 decoder network is used initially, and then splits into two separate paths for
 determining both the mean and log standard deviation of the latent space.
 """
-struct JointGaussianLogDecoder <: AbstractGaussianLogDecoder
-    decoder::Flux.Chain
-    µ::Flux.Dense
-    logσ::Flux.Dense
+@concrete struct JointGaussianLogDecoder <: AbstractGaussianLogDecoder
+    decoder
+    µ
+    logσ
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor JointGaussianLogDecoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{JointGaussianLogDecoder{D,M,L}}) where {D,M,L}
+    print(io, "JointGaussianLogDecoder{…}")
+end
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     JointGaussianLogDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
@@ -706,7 +729,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    JointGaussianDecoder <: AbstractGaussianLinearDecoder
+    JointGaussianDecoder{D<:Flux.Chain,L<:Flux.Dense} <: AbstractGaussianLinearDecoder
 
 An extended decoder structure for VAEs that incorporates separate layers for
 mapping from the latent space to both its mean (`µ`) and standard deviation
@@ -725,14 +748,24 @@ mapping from the latent space to both its mean (`µ`) and standard deviation
 network is used initially, and then splits into two separate paths for
 determining both the mean and standard deviation of the latent space.
 """
-struct JointGaussianDecoder <: AbstractGaussianLinearDecoder
-    decoder::Flux.Chain
-    µ::Flux.Dense
-    σ::Flux.Dense
+@concrete struct JointGaussianDecoder <: AbstractGaussianLinearDecoder
+    decoder
+    µ
+    σ
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor JointGaussianDecoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{JointGaussianDecoder{D,M,L}}) where {D,M,L}
+    print(io, "JointGaussianDecoder{…}")
+end
+
+# ------------------------------------------------------------------------------
+
 
 @doc raw"""
     JointGaussianDecoder(n_input, n_latent, decoder_neurons, decoder_activation, 
@@ -983,7 +1016,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    SplitGaussianLogDecoder <: AbstractGaussianLogDecoder
+    SplitGaussianLogDecoder{D<:Flux.Chain} <: AbstractGaussianLogDecoder
 
 A specialized decoder structure for VAEs that uses distinct neural networks for
 determining the mean (`µ`) and log standard deviation (`logσ`) of the latent
@@ -1001,13 +1034,22 @@ decoder networks are preferred for computing the mean and log standard
 deviation, ensuring that each has its own distinct set of parameters and
 transformation logic.
 """
-struct SplitGaussianLogDecoder <: AbstractGaussianLogDecoder
-    µ::Flux.Chain
-    logσ::Flux.Chain
+@concrete struct SplitGaussianLogDecoder <: AbstractGaussianLogDecoder
+    µ
+    logσ
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor SplitGaussianLogDecoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{SplitGaussianLogDecoder{M,L}}) where {M,L}
+    print(io, "SplitGaussianLogDecoder{…}")
+end
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     SplitGaussianLogDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
@@ -1183,7 +1225,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    SplitGaussianDecoder <: AbstractGaussianLinearDecoder
+    SplitGaussianDecoder{D<:Flux.Chain} <: AbstractGaussianLinearDecoder
 
 A specialized decoder structure for VAEs that uses distinct neural networks for
 determining the mean (`µ`) and standard deviation (`logσ`) of the latent space.
@@ -1200,13 +1242,22 @@ networks are preferred for computing the mean and log standard deviation,
 ensuring that each has its own distinct set of parameters and transformation
 logic.
 """
-struct SplitGaussianDecoder <: AbstractGaussianLinearDecoder
-    µ::Flux.Chain
-    σ::Flux.Chain
+@concrete struct SplitGaussianDecoder <: AbstractGaussianLinearDecoder
+    µ
+    σ
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor SplitGaussianDecoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{SplitGaussianDecoder{M,L}}) where {M,L}
+    print(io, "SplitGaussianDecoder{…}")
+end
+
+# ------------------------------------------------------------------------------
 
 @doc raw"""
     SplitGaussianDecoder(n_input, n_latent, µ_neurons, µ_activation, logσ_neurons, 
@@ -1387,7 +1438,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-        BernoulliDecoder <: AbstractVariationalDecoder
+        BernoulliDecoder{D<:Flux.Chain} <: AbstractVariationalDecoder
 
 A decoder structure for variational autoencoders (VAEs) that models the output
 data as a Bernoulli distribution. This is typically used when the outputs of the
@@ -1408,12 +1459,19 @@ operations on the mean or log standard deviation.
 Ensure the last layer of the decoder outputs a value between 0 and 1, as this is
 required for a Bernoulli distribution.
 """
-struct BernoulliDecoder <: AbstractVariationalDecoder
-    decoder::Flux.Chain
+@concrete struct BernoulliDecoder <: AbstractVariationalDecoder
+    decoder
 end # struct
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor BernoulliDecoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{BernoulliDecoder{D}}) where {D}
+    print(io, "BernoulliDecoder{…}")
+end
 
 # ------------------------------------------------------------------------------
 
@@ -1564,7 +1622,7 @@ end # function
 # ==============================================================================
 
 @doc raw"""
-    CategoricalDecoder <: AbstractVariationalDecoder
+    CategoricalDecoder{D<:Flux.Chain} <: AbstractVariationalDecoder
 
 A decoder structure for variational autoencoders (VAEs) that models the output
 data as a categorical distribution. This is typically used when the outputs of
@@ -1586,12 +1644,19 @@ Ensure the last layer of the decoder outputs a probability distribution over the
 categories, as this is required for a categorical distribution. This can be done
 using a softmax activation function, for example.
 """
-struct CategoricalDecoder <: AbstractVariationalDecoder
-    decoder::Flux.Chain
+@concrete struct CategoricalDecoder <: AbstractVariationalDecoder
+    decoder
 end
 
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor CategoricalDecoder
+
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{CategoricalDecoder{D}}) where {D}
+    print(io, "CategoricalDecoder{…}")
+end
 
 # ------------------------------------------------------------------------------
 
