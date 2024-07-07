@@ -87,7 +87,7 @@ end
 
 # Register Reshape as a Flux layer This allows Flux to recognize Reshape during
 # the backward pass (gradient computation) and when saving/loading the model
-@functor Reshape
+@layer Reshape
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Define custom Flatten layer
@@ -134,7 +134,7 @@ end
 
 # Register Reshape as a Flux layer This allows Flux to recognize Flatten during
 # the backward pass (gradient computation) and when saving/loading the model
-@functor Flatten
+@layer Flatten
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Define custom activation layer over dimensions
@@ -189,4 +189,4 @@ end
 
 # Register Reshape as a Flux layer This allows Flux to recognize Flatten during
 # the backward pass (gradient computation) and when saving/loading the model
-@functor ActivationOverDims
+@layer ActivationOverDims
