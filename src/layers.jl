@@ -1,4 +1,4 @@
-using Flux: flatten, @functor
+using Flux: flatten, @layer
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Define custom Reshape layer
