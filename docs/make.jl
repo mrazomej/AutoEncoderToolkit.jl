@@ -18,6 +18,7 @@ makedocs(
         "RHVAE" => "rhvae.md",
         "Differential Geometry" => "diffgeo.md",
         "Utilities" => "utils.md",
+        "Community Guidelines" => "guidelines.md",
     ],
     remotes=nothing
 )
