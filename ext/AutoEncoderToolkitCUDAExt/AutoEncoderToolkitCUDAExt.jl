@@ -14,6 +14,9 @@ include("adjoints.jl")
 # Include VAE extension
 include("vae.jl")
 
+# Include MMDVAE extension
+include("mmdvae.jl")
+
 # Include HVAE extension
 include("hvae.jl")
 
