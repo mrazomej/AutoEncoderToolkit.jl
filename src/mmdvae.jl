@@ -8,7 +8,7 @@ import Distributions
 import Distances
 
 # Import ChainRulesCore to ignore functions when computing gradients
-using ChainRulesCore: @ignore_derivatives
+using ChainRulesCore: ignore_derivatives
 
 ##
 
@@ -351,7 +351,9 @@ function loss(
     q_z_x = mmdvae_output.z
 
     # Sample latent variables from prior p(z) ~ Normal(0, 1)
-    p_z = Random.randn(eltype(x), size(q_z_x, 1), n_latent_samples)
+    p_z = ignore_derivatives() do
+        Random.randn(eltype(x), size(q_z_x, 1), n_latent_samples)
+    end # ignore_derivatives
 
     # Compute MMD divergence between prior dist samples p(z) and sampled latent
     # variables qᵩ(z|x) 
@@ -446,7 +448,9 @@ function loss(
     q_z_x = mmdvae_output.z
 
     # Sample latent variables from prior p(z) ~ Normal(0, 1)
-    p_z = Random.randn(eltype(x_in), size(q_z_x, 1), n_latent_samples)
+    p_z = ignore_derivatives() do
+        Random.randn(eltype(x_in), size(q_z_x, 1), n_latent_samples)
+    end # ignore_derivatives
 
     # Compute MMD divergence between prior dist samples p(z) and sampled latent
     # variables qᵩ(z|x) 
