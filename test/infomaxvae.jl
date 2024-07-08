@@ -7,6 +7,9 @@ import AutoEncoderToolkit
 # Import Flux library
 import Flux
 
+# Import CUDA
+import CUDA
+
 # Import basic math
 import Random
 import StatsBase
@@ -339,24 +342,58 @@ end # @testset "InfoMaxVAE training"
     # Initialize InfoMaxVAE
     infomaxvae = InfoMaxVAEs.InfoMaxVAE(vae, mi_chain)
 
-    # Define batch of data
-    x = randn(Float32, data_dim, 10)
+    @testset "CPU" begin
+        # Define batch of data
+        x = randn(Float32, data_dim, 10)
 
-    # Explicit setup of optimizers
-    opt_infomaxvae = Flux.Train.setup(Flux.Optimisers.Adam(), infomaxvae)
+        # Explicit setup of optimizers
+        opt_infomaxvae = Flux.Train.setup(Flux.Optimisers.Adam(), infomaxvae)
 
-    @testset "with same input and output" begin
-        L = InfoMaxVAEs.train!(infomaxvae, x, opt_infomaxvae; loss_return=true)
-        @test L isa Tuple{<:Number,<:Number}
-    end # @testset "with same input and output"
+        @testset "with same input and output" begin
+            L = InfoMaxVAEs.train!(
+                infomaxvae, x, opt_infomaxvae; loss_return=true
+            )
+            @test L isa Tuple{<:Number,<:Number}
+        end # @testset "with same input and output"
 
-    @testset "with different input and output" begin
-        x_out = randn(Float32, data_dim, 10)
-        L = InfoMaxVAEs.train!(
-            infomaxvae, x, x_out, opt_infomaxvae; loss_return=true
-        )
-        @test L isa Tuple{<:Number,<:Number}
-    end # @testset "with different input and output"
+        @testset "with different input and output" begin
+            x_out = randn(Float32, data_dim, 10)
+            L = InfoMaxVAEs.train!(
+                infomaxvae, x, x_out, opt_infomaxvae; loss_return=true
+            )
+            @test L isa Tuple{<:Number,<:Number}
+        end # @testset "with different input and output"
+    end # @testset "CPU"
+
+    if CUDA.functional()
+        @testset "GPU" begin
+            # Define batch of data
+            x = CUDA.randn(Float32, data_dim, 10)
+
+            # Upload model to GPU
+            infomaxvae_gpu = Flux.gpu(infomaxvae)
+
+            # Explicit setup of optimizers
+            opt_infomaxvae = Flux.Train.setup(
+                Flux.Optimisers.Adam(), infomaxvae_gpu
+            )
+
+            @testset "with same input and output" begin
+                L = InfoMaxVAEs.train!(
+                    infomaxvae_gpu, x, opt_infomaxvae; loss_return=true
+                )
+                @test L isa Tuple{<:Number,<:Number}
+            end # @testset "with same input and output"
+
+            @testset "with different input and output" begin
+                x_out = CUDA.randn(Float32, data_dim, 10)
+                L = InfoMaxVAEs.train!(
+                    infomaxvae_gpu, x, x_out, opt_infomaxvae; loss_return=true
+                )
+                @test L isa Tuple{<:Number,<:Number}
+            end # @testset "with different input and output"
+        end # @testset "GPU"
+    end # if CUDA.functional()
 end # @testset "InfoMaxVAE training"
 
 println("\nAll tests passed!\n")
