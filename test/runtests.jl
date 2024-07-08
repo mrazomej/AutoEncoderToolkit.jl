@@ -32,6 +32,6 @@ using Test
     # Test diffgeo module
     include("diffgeo.jl")
 
-    # # Test regularization module
-    # include("regularization.jl")
+    # Test AutoEncoderToolkitCUDAExt module
+    include("cuda_ext.jl")
 end
