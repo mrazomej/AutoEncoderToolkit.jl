@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Quick Start · AutoEncoderToolkit</title><meta name="title" content="Quick Start · AutoEncoderToolkit"/><meta property="og:title" content="Quick Start · AutoEncoderToolkit"/><meta property="twitter:title" content="Quick Start · AutoEncoderToolkit"/><meta name="description" content="Documentation for AutoEncoderToolkit."/><meta property="og:description" content="Documentation for AutoEncoderToolkit."/><meta property="twitter:description" content="Documentation for AutoEncoderToolkit."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img class="docs-light-only" src="../assets/logo.svg" alt="AutoEncoderToolkit logo"/><img class="docs-dark-only" src="../assets/logo-dark.svg" alt="AutoEncoderToolkit logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">AutoEncoderToolkit</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Quick Start</a><ul class="internal"><li><a class="tocitem" href="#Define-Encoder-and-Decoder"><span>Define Encoder and Decoder</span></a></li><li><a class="tocitem" href="#VAE-Model"><span>VAE Model</span></a></li><li><a class="tocitem" href="#InfoMaxVAE-Model"><span>InfoMaxVAE Model</span></a></li><li><a class="tocitem" href="#RHVAE-Model"><span>RHVAE Model</span></a></li><li class="toplevel"><a class="tocitem" href="#Differential-Geometry-of-RHVAE-model"><span>Differential Geometry of <code>RHVAE</code> model</span></a></li></ul></li><li><a class="tocitem" href="../encoders/">Encoders &amp; Decoders</a></li><li><a class="tocitem" href="../layers/">Custom Layers</a></li><li><a class="tocitem" href="../ae/">Deterministic Autoencoders</a></li><li><a class="tocitem" href="../vae/">VAE / β-VAE</a></li><li><a class="tocitem" href="../mmdvae/">MMD-VAE (InfoVAE)</a></li><li><a class="tocitem" href="../infomaxvae/">InfoMax-VAE</a></li><li><a class="tocitem" href="../hvae/">HVAE</a></li><li><a class="tocitem" href="../rhvae/">RHVAE</a></li><li><a class="tocitem" href="../diffgeo/">Differential Geometry</a></li><li><a class="tocitem" href="../utils/">Utilities</a></li><li><a class="tocitem" href="../guidelines/">Community Guidelines</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Quick Start</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Quick Start</a></li></ul></nav><div class="docs-right"><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h1><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>In this guide we will use external packages with functions not directly related to <code>AutoEncoderToolkit.jl</code>. such as <a href="https://github.com/FluxML/Flux.jl"><code>Flux.jl</code></a> and <a href="https://github.com/JuliaML/MLDatasets.jl"><code>MLDatasets.jl</code></a>. Make sure to install them before running the code if you want to follow along.</p></div></div><p>For this quick start guide, we will prepare different autoencoders to be trained on a fraction of the <code>MNIST</code> dataset. Let us begin by importing the necessary packages.</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>We prefer to load functions using the <code>import</code> keyword instead of <code>using</code>. This is a personal preference and you can use <code>using</code> if you prefer.</p></div></div><pre><code class="language-julia hljs"># Import project package
+import AutoEncoderToolkit as AET
+
+# Import ML libraries
+import Flux
+
+# Import library to load MNIST dataset
+using MLDatasets: MNIST
+
+# Import library to save models
+import JLD2</code></pre><p>Now that we have imported the necessary packages, we can load the <code>MNIST</code> dataset. For this specific example, we will only use digits <code>0</code>, <code>1</code>, and <code>2</code>, taking 10 batches of 64 samples each. We will also use 2 batches with the same number of samples for validation.</p><pre><code class="language-julia hljs"># Define number of samples in batch
+n_batch = 64
+# Define total number of data points
+n_data = n_batch * 10
+# Define number of validation data points
+n_val = n_batch * 2
+
+# Define lables to keep
+digit_label = [0, 1, 2]
+
+# Load data and labels
+data, labels = MNIST.traindata(
+    ; dir=&quot;your_own_custom_path/data/mnist&quot;
+)
+
+# Keep only data with labels in digit_label
+data_filt = dataset.features[:, :, dataset.targets.∈Ref(digit_label)]
+labels_filt = dataset.targets[dataset.targets.∈Ref(digit_label)]
+
+# Reduce size of training data and reshape to WHCN format
+train_data = Float32.(reshape(data_filt[:, :, 1:n_data], (28, 28, 1, n_data)))
+train_labels = labels_filt[1:n_data]
+
+# Reduce size of validation data and reshape to WHCN format
+val_data = Float32.(
+    reshape(data_filt[:, :, n_data+1:n_data+n_val], (28, 28, 1, n_val))
+)
+val_labels = labels_filt[n_data+1:n_data+n_val]</code></pre><p>Furthermore, for this particular example, we will use a binarized version of the <code>MNIST</code> dataset. This means that we will convert the pixel values to either <code>0</code> or <code>1</code>.</p><pre><code class="language-julia hljs"># Define threshold for binarization
+thresh = 0.5
+
+# Binarize training data
+train_data = Float32.(train_data .&gt; thresh)
+
+# Binarize validation data
+val_data = Float32.(val_data .&gt; thresh)</code></pre><p>Let&#39;s look at some of the binarized data.</p><p><img src="../figs/bin_mnist.svg" alt/></p><h2 id="Define-Encoder-and-Decoder"><a class="docs-heading-anchor" href="#Define-Encoder-and-Decoder">Define Encoder and Decoder</a><a id="Define-Encoder-and-Decoder-1"></a><a class="docs-heading-anchor-permalink" href="#Define-Encoder-and-Decoder" title="Permalink"></a></h2><div class="admonition is-success"><header class="admonition-header">Tip</header><div class="admonition-body"><p>For this walkthrough, we will define the layers of the encoder and decoder by hand. But, for other cases, make sure to check the default initializers in the <a href="../encoders/#encodersdecoders">Encoders and Decoders</a> section.</p></div></div><p>With the data in hand, let us define the encoder and decoder for the variational autoencoder. The encoder will be a simple convolutional network with two convolutional layers and a latent dimensionality of 2. Since we will use the <a href="../encoders/#JointGaussianLogEncoder"><code>JointGaussianLogEncoder</code></a> type that defines the encoder as a Gaussian distribution with diagonal covariance, returning the mean and log standard deviation, we also need to define two dense layers that map the output of the convolutional to the latent space.</p><p>In this definition we will use functions from the <code>Flux</code> package to define the the convolutional layers and the dense layers. We will also use the custom <a href="../layers/#flatten"><code>Flatten</code></a> layer from <code>AutoEncoderToolkit.jl</code> to flatten the output of the last convolutional layer before passing it to the dense layers.</p><pre><code class="language-julia hljs"># Define dimensionality of latent space
+n_latent = 2
+
+# Define number of initial channels
+n_channels_init = 32
+
+println(&quot;Defining encoder...&quot;)
+# Define convolutional layers
+conv_layers = Flux.Chain(
+    # First convolutional layer
+    Flux.Conv((4, 4), 1 =&gt; n_channels_init, Flux.relu; stride=2, pad=1),
+    # Second convolutional layer
+    Flux.Conv(
+        (4, 4), n_channels_init =&gt; n_channels_init * 2, Flux.relu;
+        stride=2, pad=1
+    ),
+    # Flatten the output
+    AET.Flatten(),
+    # Add extra dense layer 1
+    Flux.Dense(n_channels_init * 2 * 7 * 7 =&gt; 256, Flux.relu),
+    # Add extra dense layer 2
+    Flux.Dense(256 =&gt; 256, Flux.relu),
+)
+
+# Define layers for µ and log(σ)
+µ_layer = Flux.Dense(256, n_latent, Flux.identity)
+logσ_layer = Flux.Dense(256, n_latent, Flux.identity)
+
+# build encoder
+encoder = AET.JointGaussianLogEncoder(conv_layers, µ_layer, logσ_layer)</code></pre><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>The <a href="../layers/#flatten"><code>Flatten</code></a> layer is a custom layer defined in <code>AutoEncoderToolkit.jl</code> that flattens the output into a 1D vector. This flattening operation is necessary because the output of the convolutional layers is a 4D tensor, while the input to the <code>µ</code> and <code>log(σ)</code> layers is a 1D vector. The custom layer is needed to be able to save the model and load it later as <code>BSON</code> and <code>JLD2</code> do not play well with anonymous functions.</p></div></div><p>In the same way, the decoder will be a simple deconvolutional network with two deconvolutional layers. Given the binary nature of the <code>MNIST</code> dataset we are using, the probability distribution that makes sense to use in the decoder is a Bernoulli distribution. We will therfore define the decoder as a <a href="../encoders/#BernoulliDecoder"><code>BernoulliDecoder</code></a> type. This means that the output of the decoder must be a value between 0 and 1. </p><pre><code class="language-julia hljs"># Define deconvolutional layers
+deconv_layers = Flux.Chain(
+    # Define linear layer out of latent space
+    Flux.Dense(n_latent =&gt; 256, Flux.identity),
+    # Add extra dense layer
+    Flux.Dense(256 =&gt; 256, Flux.relu),
+    # Add extra dense layer to map to initial number of channels
+    Flux.Dense(256 =&gt; n_channels_init * 2 * 7 * 7, Flux.relu),
+    # Unflatten input using custom Reshape layer
+    AET.Reshape(7, 7, n_channels_init * 2, :),
+    # First transposed convolutional layer
+    Flux.ConvTranspose(
+        (4, 4), n_channels_init * 2 =&gt; n_channels_init, Flux.relu; 
+        stride=2, pad=1
+    ),
+    # Second transposed convolutional layer
+    Flux.ConvTranspose(
+        (4, 4), n_channels_init =&gt; 1, Flux.sigmoid_fast; stride=2, pad=1
+    ),
+)
+
+# Define decoder
+decoder = AET.BernoulliDecoder(deconv_layers)</code></pre><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>Similar to the <code>Flatten</code> custom layer, the <a href="../layers/#reshape"><code>Reshape</code></a> layer is used to reshape the output of the deconvolutional layers to the correct dimensions. This custom layer plays along with the <code>BSON</code> and <code>JLD2</code> libraries.</p></div></div><p>Alternatively, if we hadn&#39;t binarized the data, a Gaussian distribution would be a more appropriate choice for the decoder. In that case, we could define the decoder as a <a href="../encoders/#SimpleGaussianDecoder"><code>SimpleGaussianDecoder</code></a> using the same <code>deconv_layers</code> as above. This would change the probabilistic function associated with the decoder from the Bernoulli to a Gaussian distribution with constant diagonal covariance. But, everything else that follows would remain the same. That&#39;s the power of <code>Julia</code>s multiple dispatch and the <code>AutoEncoderToolkit.jl</code>&#39;s design!</p><h2 id="VAE-Model"><a class="docs-heading-anchor" href="#VAE-Model">VAE Model</a><a id="VAE-Model-1"></a><a class="docs-heading-anchor-permalink" href="#VAE-Model" title="Permalink"></a></h2><h3 id="Defining-VAE-Model"><a class="docs-heading-anchor" href="#Defining-VAE-Model">Defining VAE Model</a><a id="Defining-VAE-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Defining-VAE-Model" title="Permalink"></a></h3><p>With the encoder and decoder in hand, defining a variational autoencoder model is as simple as writing:</p><pre><code class="language-julia hljs"># Define VAE model
+vae = encoder * decoder</code></pre><p>If we wish so, at this point we can save the model architecture and the initial state to disk using the <code>JLD2</code> package.</p><pre><code class="language-julia hljs"># Save model object
+JLD2.save(
+    &quot;./output/model.jld2&quot;,
+    Dict(&quot;model&quot; =&gt; vae, &quot;model_state&quot; =&gt; Flux.state(vae))
+)</code></pre><div class="admonition is-success"><header class="admonition-header">Tip</header><div class="admonition-body"><p>To proceed the training on a <code>CUDA</code>-compatible device, all we need to do is to move the model and the data to the device. This can be done as</p><pre><code class="language-julia hljs">using CUDA
+# Move model to GPU
+vae = vae |&gt; Flux.gpu
+# Move data to GPU
+train_data = train_data |&gt; Flux.gpu
+val_data = val_data |&gt; Flux.gpu</code></pre><p>Everything else will remain the same, except for the partition of data into batches. This should be preferentially done by hand rather than using the <code>Flux.DataLoader</code> functionality. <strong>NOTE:</strong> <code>Flux.jl</code> offers support for other devices as well. But <code>AutoEncoderToolkit.jl</code> has not been tested with them. So, if you want to use other devices, make sure to test it first. <em>PRs to add support for other devices are welcome!</em></p></div></div><h3 id="Training-VAE-Model"><a class="docs-heading-anchor" href="#Training-VAE-Model">Training VAE Model</a><a id="Training-VAE-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Training-VAE-Model" title="Permalink"></a></h3><p>We are now ready to train the model. First, we partition the training data into batches</p><pre><code class="language-julia hljs"># Partition data into batches
+train_loader = Flux.DataLoader(train_data, batchsize=n_batch, shuffle=true)</code></pre><p>Next, we define the optimizer. For this example, we will use the <code>ADAM</code> optimizer with a learning rate of <code>1e-3</code>.</p><pre><code class="language-julia hljs"># Define learning rate
+η = 1e-3
+# Explicit setup of optimizer
+opt_vae = Flux.Train.setup(
+    Flux.Optimisers.Adam(η),
+    vae
+)</code></pre><p>Finally, we can train the model.</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>Most of the code below is used to compute and store diagnostics of the training process. The core of the training loop is very simple thanks to the custom training function provided by <code>AutoEncoderToolkit.jl</code>.</p></div></div><pre><code class="language-julia hljs"># Initialize arrays to save loss, entropy, and MSE
+train_loss = Array{Float32}(undef, n_epoch)
+val_loss = Array{Float32}(undef, n_epoch)
+train_entropy = Array{Float32}(undef, n_epoch)
+val_entropy = Array{Float32}(undef, n_epoch)
+train_mse = Array{Float32}(undef, n_epoch)
+val_mse = Array{Float32}(undef, n_epoch)
+
+# Loop through epochs
+for epoch in 1:n_epoch
+    println(&quot;Epoch: $(epoch)\n&quot;)
+    # Loop through batches
+    for (i, x) in enumerate(train_loader)
+        println(&quot;Epoch: $(epoch) | Batch: $(i) / $(length(train_loader))&quot;)
+        # Train VAE
+        AET.VAEs.train!(vae, x, opt_vae)
+    end # for train_loader
+
+    # Compute loss in training data
+    train_loss[epoch] = AET.VAEs.loss(vae, train_data)
+    # Compute loss in validation data
+    val_loss[epoch] = AET.VAEs.loss(vae, val_data)
+
+    # Forward pass training data
+    train_outputs = vae(train_data)
+    # Compute cross-entropy
+    train_entropy[epoch] = Flux.Losses.logitbinarycrossentropy(
+        train_outputs.p, train_data
+    )
+    # Compute MSE for training data
+    train_mse[epoch] = Flux.mse(train_outputs.p, train_data)
+
+    # Forward pass training data
+    val_outputs = vae(val_data)
+    # Compute cross-entropy
+    val_entropy[epoch] = Flux.Losses.logitbinarycrossentropy(
+        val_outputs.p, val_data
+    )
+    # Compute MSE for validation data
+    val_mse[epoch] = Flux.mse(val_outputs.p, val_data)
+
+    println(
+        &quot;Epoch: $(epoch) / $(n_epoch)\n &quot; *
+        &quot;- train_mse: $(train_mse[epoch])\n &quot; *
+        &quot;- val_mse: $(val_mse[epoch])\n &quot; *
+        &quot;- train_loss: $(train_loss[epoch])\n &quot; *
+        &quot;- val_loss: $(val_loss[epoch])\n &quot; *
+        &quot;- train_entropy: $(train_entropy[epoch])\n &quot; *
+        &quot;- val_entropy: $(val_entropy[epoch])\n&quot;
+    )
+end # for n_epoch</code></pre><div class="admonition is-success"><header class="admonition-header">Tip</header><div class="admonition-body"><p>To convert this vanilla <code>VAE</code> into a <code>β-VAE</code>, all we need to do is add an optional keyword argument <code>β</code> to the <code>loss</code> function. This would be then fed to the <code>train!</code> function as follows:</p><pre><code class="language-julia hljs"># Define loss keyword argument as dictionary
+loss_kwargs = Dict(&quot;β&quot; =&gt; 0.1)
+# Train model using β-VAE
+AET.VAEs.train!(vae, x, opt_vae; loss_kwargs=loss_kwargs)</code></pre><p>This argument defines the relative weight of the KL divergence term in the loss function.</p></div></div><p>That&#39;s it! We have trained a variational autoencoder on the <code>MNIST</code> dataset. We can store the model and the training diagnostics to disk using the <code>JLD2</code>.</p><pre><code class="language-julia hljs"># Store model and diagnostics
+JLD2.jldsave(
+    &quot;./output/vae_epoch$(lpad(n_epoch, 4, &quot;0&quot;)).jld2&quot;,
+    model_state=Flux.state(vae),
+    train_entropy=train_entropy,
+    train_loss=train_loss,
+    train_mse=train_mse,
+    val_entropy=val_entropy,
+    val_mse=val_mse,
+    val_loss=val_loss,
+)</code></pre><h3 id="Exploring-the-results"><a class="docs-heading-anchor" href="#Exploring-the-results">Exploring the results</a><a id="Exploring-the-results-1"></a><a class="docs-heading-anchor-permalink" href="#Exploring-the-results" title="Permalink"></a></h3><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>For the plots below, we do not provide the code to generate them. We assume the user is familiar with plotting in <code>Julia</code>. If you are not, we recommend checking the <a href="https://docs.makie.org/stable/"><code>Makie.jl</code></a> documentation.</p></div></div><p>Let&#39;s look at the training diagnostics to see how the training went.</p><p><img src="../figs/vae_train.svg" alt/></p><p>We can see that the training loss, the cross-entropy, and the mean squared error decreased as the training progressed on both the training and validation data.</p><p>Next, let&#39;s look at the resulting latent space. In particular, let&#39;s encode the training data and plot the coordinates in the latent space. To encode the data we have two options:</p><ol><li><p>Directly encode the data using the encoder. This returns a <code>NamedTuple</code>, where for our <code>JointGaussianLogEncoder</code> the fields are <code>μ</code> and <code>logσ</code>.</p><pre><code class="language-julia hljs"># Map training data to latent space
+train_latent = vae.encoder(train_data)</code></pre><p>We could take as the latent space coordinates the mean of the distribution.</p></li><li><p>Perform the forward pass of the VAE model with the optional keyword argument <code>latent=true</code>. This returns a <code>NamedTuple</code> with the fields <code>encoder</code>, <code>decoder</code>, and <code>z</code>. The <code>z</code> field contains the sampled latent space coordinates obtained when performing the reparameterization trick.</p><pre><code class="language-julia hljs">train_outputs = vae(train_data; latent=true)</code></pre></li></ol><p>Let&#39;s now look ath the resulting coordinates in latent space.</p><p><img src="../figs/vae_latent.svg" alt/></p><p>Finally, one of the most attractive features of variational autoencoders is their generative capabilities. To assess this, we can sample from the latent space prior and decode the samples to generate new data. Let&#39;s generate some samples and plot them.</p><pre><code class="language-julia hljs"># Define number of samples
+n_samples = 6
+
+# Sample from prior
+Random.seed!(42)
+prior_samples = Random.randn(n_latent, n_samples)
+
+# Decode samples
+decoder_output = vae.decoder(prior_samples).p</code></pre><p><img src="../figs/vae_samples.svg" alt/></p><h2 id="InfoMaxVAE-Model"><a class="docs-heading-anchor" href="#InfoMaxVAE-Model">InfoMaxVAE Model</a><a id="InfoMaxVAE-Model-1"></a><a class="docs-heading-anchor-permalink" href="#InfoMaxVAE-Model" title="Permalink"></a></h2><p>Let&#39;s now proceed to train an <a href="../infomaxvae/#InfoMaxVAEsmodule"><code>InfoMaxVAE</code></a> model. This model is a variational autoencoder that includes a term in the loss function to maximize a variational approximation of the mutual information between the latent space and the input data. This variational approximation of the mutual information is parametrized by a neural network that is trained jointly with the encoder and decoder. Thus, the <a href="../infomaxvae/#InfoMaxVAE"><code>InfoMaxVAE</code></a> object takes as input a <code>VAE</code> model as well as a <a href="../infomaxvae/#MutualInfoChain"><code>MutualInfoChain</code></a> object that defines the multi-layer perceptron used to compute the mutual information. Since we can use the exact same <code>VAE</code> model we defined earlier, all we need to do is define the <code>MutualInfoChain</code> object to build the <code>InfoMaxVAE</code> model.</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>Make sure to check the documentation for the <a href="../infomaxvae/#MutualInfoChain"><code>MutualInfoChain</code></a> to know the requirements for this object. The main thing for us in this example is that since the data input is a 4D tensor, we need a custom layer to flatten the output of the encoder before passing it to the multi-layer perceptron. Furthermore, the output of the multi-layer perceptron must be a scalar.</p></div></div><pre><code class="language-julia hljs"># Define MutualInfochain elements
+
+data_layer = Flux.Chain(
+    AET.Flatten(),
+    Flux.Dense(28 * 28 =&gt; 28 * 28, Flux.identity),
+)
+
+latent_layer = Flux.Dense(n_latent =&gt; n_latent, Flux.identity)
+
+mlp = Flux.Chain(
+    Flux.Dense(28 * 28 + n_latent =&gt; 256, Flux.relu),
+    Flux.Dense(256 =&gt; 256, Flux.relu),
+    Flux.Dense(256 =&gt; 256, Flux.relu),
+    Flux.Dense(256 =&gt; 1, Flux.identity),
+)
+
+# Define MutualInfochain
+mi = AET.InfoMaxVAEs.MutualInfoChain(data_layer, latent_layer, mlp)</code></pre><p>Next, we put together the <code>VAE</code> model and the <code>MutualInfoChain</code> to define the <code>InfoMaxVAE</code> model.</p><pre><code class="language-julia hljs"># Define InfoMaxVAE model
+infomaxvae = AET.InfoMaxVAEs.InfoMaxVAE(encoder * decoder, mi)</code></pre><p>The <code>InfoMaxVAE</code> model has two loss functions: one for the mutual information and one for the VAE. But this is internally handled by the <code>InfoMaxVAEs.train!</code> function. So, training the model is as simple as training the <code>VAE</code> model.</p><div class="admonition is-success"><header class="admonition-header">Tip</header><div class="admonition-body"><p>Notice that we can pass additional keyword arguments to the <code>train!</code> function as keyword arguments for either the <code>miloss</code> or the <code>infomaxloss</code>. In this case, we will pass the hyperparameters <code>α</code> and <code>β</code> to weigh the mutual information term significantly more than the KL divergence term.</p></div></div><pre><code class="language-julia hljs"># Explicit setup of optimizer
+opt_infomaxvae = Flux.Train.setup(
+    Flux.Optimisers.Adam(η),
+    infomaxvae
+)
+
+# Define infomaxloss function kwargs
+loss_kwargs = Dict(:α =&gt; 10.0f0, :β =&gt; 1.0f0,)
+
+# Loop through epochs
+for epoch in 1:n_epoch
+    println(&quot;Epoch: $(epoch)\n&quot;)
+    # Loop through batches
+    for (i, x) in enumerate(train_loader)
+        println(&quot;Epoch: $(epoch) | Batch: $(i) / $(length(train_loader))&quot;)
+        # Train RHVAE
+        AET.InfoMaxVAEs.train!(
+            infomaxvae, x, opt_infomaxvae; infomaxloss_kwargs=loss_kwargs
+        )
+    end # for train_loader
+end # for n_epoch</code></pre><p>Notice that we only needed to define the <code>MutualInfoChain</code> object and we were ready to train the <code>InfoMaxVAE</code> model. This is the power of the design of  <code>AutoEncoderToolkit.jl</code>!</p><h3 id="Exploring-the-results-2"><a class="docs-heading-anchor" href="#Exploring-the-results-2">Exploring the results</a><a class="docs-heading-anchor-permalink" href="#Exploring-the-results-2" title="Permalink"></a></h3><p>Let&#39;s now look ath the resulting coordinates in latent space after 100 epochs of training.</p><p><img src="../figs/infomaxvae_latent.svg" alt/></p><h2 id="RHVAE-Model"><a class="docs-heading-anchor" href="#RHVAE-Model">RHVAE Model</a><a id="RHVAE-Model-1"></a><a class="docs-heading-anchor-permalink" href="#RHVAE-Model" title="Permalink"></a></h2><p>Let&#39;s now train a <a href="../rhvae/#RHVAEsmodule"><code>RHVAE</code></a> model. The process is very similar to the <code>VAE</code> model with the main difference that the <a href="../rhvae/#RHVAE"><code>RHVAE</code></a> type has some extra requirements. Let&#39;s quickly look at the docstring for this type. In particular, let&#39;s look at the docstring for the default constructor.</p><pre><code class="nohighlight hljs">RHVAE(
+      vae::VAE, 
+      metric_chain::MetricChain, 
+      centroids_data::AbstractArray, 
+      T::Number, 
+      λ::Number
+  )
+
+  Construct a Riemannian Hamiltonian Variational Autoencoder (RHVAE) from a standard VAE and a metric chain.
+
+  Arguments
+  ≡≡≡≡≡≡≡≡≡
+
+    •  vae::VAE: A standard Variational Autoencoder (VAE) model.
+
+    •  metric_chain::MetricChain: A chain of metrics to be used for the Riemannian Hamiltonian Monte Carlo (RHMC) sampler.
+
+    •  centroids_data::AbstractArray: An array of data centroids. Each column represents a centroid. N is a subtype of Number.
+
+    •  T::N: The temperature parameter for the inverse metric tensor. N is a subtype of Number.
+
+    •  λ::N: The regularization parameter for the inverse metric tensor. N is a subtype of Number.
+
+  Returns
+  ≡≡≡≡≡≡≡
+
+    •  A new RHVAE object.
+
+  Description
+  ≡≡≡≡≡≡≡≡≡≡≡
+
+  The constructor initializes the latent centroids and the metric tensor M to their default values. The latent centroids are initialized to a zero matrix of
+  the same size as centroids_data, and M is initialized to a 3D array of identity matrices, one for each centroid.</code></pre><p>From this we can see that we need to provide a <code>VAE</code> model–we can use the same model we defined earlier–a <a href="../rhvae/#MetricChainstruct"><code>MetricChain</code></a> type, an array of centroids, and two hyperparameters <code>T</code> and <code>λ</code>. The <code>MetricChain</code> type is another multi-layer perceptron specifically used to compute a lower-triangular matrix used for the metric tensor for the Riemannian manifold fit to the latent space. More specifically, when training an <code>RHVAE</code> model, the inverse of the metric tensor is also learned. This inverse metric tensor <span>$\mathbf{G}^{-1}(z)$</span> is of the form</p><p class="math-container">\[\mathbf{G}^{-1}(z)=\sum_{i=1}^N L_{\psi_i} L_{\psi_i}^{\top} \exp \left(-\frac{\left\|z-c_i\right\|_2^2}{T^2}\right)+\lambda I_d
+\tag{1}\]</p><p>where <span>$L_{\psi_i} \equiv L_{\psi_i}(x)$</span> is the lower-triangular matrix computed by the <code>MetricChain</code> type given the corresponding data input <span>$x$</span> associated with the latent coordinate <span>$z$</span>. <span>$c_i$</span> is one of the <span>$N$</span> centroids in latent space used as anchoring points for the metric tensor. The hyperparameters <span>$T$</span> and <span>$\lambda$</span> are used to control the temperature of the inverse metric tensor and an additional regularization term, respectively.</p><p>Looking at the requirements for <a href="../rhvae/#MetricChainstruct"><code>MetricChain</code></a> we see three components:</p><ol><li>An <code>mlp</code> field that is a multi-layer perceptron.</li><li>A <code>diag</code> field that is a dense layers used to compute the diagonal of the lower triangular matrix returned by <code>MetricChain</code>.</li><li>a <code>lower</code> field that is a dense layer used to compute the elements below the diagonal of the lower triangular matrix.</li></ol><p>Let&#39;s define these elements and build the <code>MetricChain</code>.</p><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>For <code>MetricChain</code> to build a proper lower triangular matrix, the <code>diag</code> layer must return the same dimensionality as the latent space. The <code>lower</code> layer must return the number of elements in the lower triangular matrix below the diagonal. This is given by <code>n_latent * (n_latent - 1) ÷ 2</code>.</p></div></div><pre><code class="language-julia hljs"># Define convolutional layers
+mlp_conv_layers = Flux.Chain(
+    # Flatten the input using custom Flatten layer
+    AET.Flatten(),
+    # First layer
+    Flux.Dense(28 * 28 =&gt; 256, Flux.relu),
+    # Second layer
+    Flux.Dense(256 =&gt; 256, Flux.relu),
+    # Third layer
+    Flux.Dense(256 =&gt; 256, Flux.relu),
+)
+
+# Define layers for the diagonal and lower triangular part of the covariance
+# matrix
+diag = Flux.Dense(256 =&gt; n_latent, Flux.identity)
+lower = Flux.Dense(256 =&gt; n_latent * (n_latent - 1) ÷ 2, Flux.identity)
+
+# Build metric chain
+metric_chain = AET.RHVAEs.MetricChain(mlp_conv_layers, diag, lower)</code></pre><p>Next, we need to define the centroids. These are the <span>$c_i$</span> in equation (1) used as anchoring points for the metric tensor. Their latent space coordinates will be updated as the model trains, but the corresponding data points must be fixed. In a way, these centroids is a subset of the data used to define the <code>RHVAE</code> structure itself. One possibility is to use the entire training data as centroids. But this can get computationally very expensive. Instead, we can use either k-means or k-medoids to define a smaller set of centroids. For this, <code>AutoEncoderToolkit.jl</code> provides <a href="../utils/#centroidutils">functions to select these centroids.</a>. For this example, we will use k-medoids to define the centroids.</p><pre><code class="language-julia hljs"># Define number of centroids
+n_centroids = 64 
+
+# Select centroids via k-medoids
+centroids_data = AET.utils.centroids_kmedoids(train_data, n_centroids)</code></pre><p>Finally, we are just missing the hyperparameters <code>T</code> and <code>λ</code>, and we can then define the <code>RHVAE</code> model.</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>Here we are using the same <code>vae</code> model we defined earlier assuming it hasn&#39;t been previously trained. If it has been trained, we could load it from disk.</p></div></div><pre><code class="language-julia hljs"># Define RHVAE hyper-parameters
+T = 0.4f0 # Temperature
+λ = 1.0f-2 # Regularization parameter
+
+# Define RHVAE model
+rhvae = AET.RHVAEs.RHVAE(vae, metric_chain, centroids_data, T, λ)</code></pre><p>The <code>RHVAE</code> struct stores three elements for which no gradients are computed. Specifically, the elements</p><pre><code class="language-julia hljs">• centroids_latent::Matrix: A matrix where each column represents a centroid cᵢ in the inverse metric computation.
+• L::Array{&lt;:Number, 3}: A 3D array where each slice represents a L_ψᵢ matrix.
+• M::Array{&lt;:Number, 3}: A 3D array where each slice represents a Lψᵢ Lψᵢᵀ.</code></pre><p>used to compute the inverse metric tensor are not updated with gradients. Instead, they are updated using the <code>update_metric!</code> function. So, before training the model, we can update these elements.</p><pre><code class="language-julia hljs"># Update metric tensor elements
+AET.RHVAEs.update_metric!(rhvae)</code></pre><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>Every time you load an <code>RHVAE</code> model from disk, you need to update the metric as shown above such that all parameters in the model are properly initialized.</p></div></div><p>Now, we are ready to train the <code>RHVAE</code> model. Setting the training process is very similar to the <code>VAE</code> model. Make sure to look at the documentation for the <a href="../rhvae/#RHVAEsmodule"><code>RHVAE</code></a> type to understand the additional keyword arguments that can be passed to the <code>loss</code> function.</p><pre><code class="language-julia hljs"># Define loss function hyper-parameters
+ϵ = Float32(1E-4) # Leapfrog step size
+K = 5 # Number of leapfrog steps
+βₒ = 0.3f0 # Initial temperature for tempering
+
+# Define loss function hyper-parameters
+loss_kwargs = Dict(
+    :K =&gt; K,
+    :ϵ =&gt; ϵ,
+    :βₒ =&gt; βₒ,
+)
+
+# Explicit setup of optimizer
+opt_rhvae = Flux.Train.setup(
+    Flux.Optimisers.Adam(η),
+    rhvae
+)
+
+# Define number of epochs
+n_epoch = 20
+
+# Loop through epochs
+for epoch in 1:n_epoch
+    println(&quot;Epoch: $(epoch)\n&quot;)
+    # Loop through batches
+    for (i, x) in enumerate(train_loader)
+        println(&quot;Epoch: $(epoch) | Batch: $(i) / $(length(train_loader))&quot;)
+        # Train VAE
+        AET.RHVAEs.train!(rhvae, x, opt_rhvae; loss_kwargs=loss_kwargs)
+    end # for train_loader
+end # for n_epoch</code></pre><h3 id="Exploring-the-results-3"><a class="docs-heading-anchor" href="#Exploring-the-results-3">Exploring the results</a><a class="docs-heading-anchor-permalink" href="#Exploring-the-results-3" title="Permalink"></a></h3><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>For the example above, we only trained the <code>RHVAE</code> model for 20 epochs.</p></div></div><p>Let&#39;s look at the resulting latent space encoding the training data.</p><p><img src="../figs/rhvae_latent.svg" alt/></p><p>Even for 20 epochs the latent space is already showing a clear separation of the different classes. This is a clear indication that the <code>RHVAE</code> model is learning a good representation of the data.</p><p>One of the most attractive features of the <code>RHVAE</code> model is the ability to learn a Riemannian metric on the latent space. This means that we have a position-dependent measurement of how deformed the latent space is. We can visualize a proxy for this metric by computing the so-called volume measure <span>$\sqrt{\det(\mathbf{G}(z))}$</span> for each point in the latent space. Let&#39;s compute this for a grid of points in the latent space and plot it as a background for the latent space.</p><pre><code class="language-julia hljs"># Define number of points per axis
+n_points = 250
+
+# Define range of latent space
+latent_range_z1 = Float32.(range(-5, 4.5, length=n_points))
+latent_range_z2 = Float32.(range(-3.5, 6.5, length=n_points))
+
+# Define latent points to evaluate
+z_mat = reduce(hcat, [[x, y] for x in latent_range_z1, y in latent_range_z2])
+
+# Compute inverse metric tensor
+Ginv = AET.RHVAEs.G_inv(z_mat, rhvae)
+
+# Compute log determinant of metric tensor
+logdetG = reshape(-1 / 2 * AET.utils.slogdet(Ginv), n_points, n_points)</code></pre><p><img src="../figs/rhvae_latent_metric.svg" alt/></p><p>In the next section we will explore how to use this geometric information to compute the geodesic distance between points in the latent space.</p><h1 id="Differential-Geometry-of-RHVAE-model"><a class="docs-heading-anchor" href="#Differential-Geometry-of-RHVAE-model">Differential Geometry of <code>RHVAE</code> model</a><a id="Differential-Geometry-of-RHVAE-model-1"></a><a class="docs-heading-anchor-permalink" href="#Differential-Geometry-of-RHVAE-model" title="Permalink"></a></h1><p>The <code>RHVAE</code> model is a powerful tool to learn a <a href="https://en.wikipedia.org/wiki/Riemannian_manifold#Riemannian_metrics">Riemannian metric</a> on the latent space. Having this metric allows us to compute distances between points, and even to perform geodesic interpolation between points. What this means is that as the model trains, the notion of distance between points in the latent space might not be the same as the Euclidean distance. Instead, the model learns a function that tells us how to measure distances in the latent space. We can use this function to compute the shortest path between two points. This is what is called a <a href="https://en.wikipedia.org/wiki/Geodesic">geodesic</a>.</p><p><code>AutoEncoderToolkit.jl</code> provides a set of functions to compute the geodesic between points in latent space. In particular, a geodesic is a function that connects two points in the latent space such that the distance between them is minimized. Since we do not know the exact form of the geodesic, we can again make use of the power of neural networks to approximate it. The <a href="../diffgeo/#neuralgeodesic"><code>NeuralGeodesics</code></a> submodule from the <code>diffgeo</code> module provides this functionality. The first step consits of defining a neural network that will approximate the path between two points. The <code>NeuralGeodesic</code> type takes three arguments:</p><ul><li>A multi-layer perceptron that will approximate the path. This should have a single input–the time being a number between zero and 1–and the dimensionality of the output should be the same as the dimensionality of the latent space.</li><li>The initial point in the latent space for the path.</li><li>The final point in the latent space for the path.</li></ul><p>Let&#39;s define this <code>NeuralGeodesic</code> network.</p><pre><code class="language-julia hljs"># Import NeuralGeoedesics submodule
+import AutoEncoderToolkit.diffgeo.NeuralGeodesics as NG
+
+# Define initial and final point for geometric path
+z_init = [-3.0f0, 5.0f0]
+z_end = [2.0f0, -2.0f0]
+
+# Extract dimensionality of latent space
+ldim = size(rhvae.centroids_latent, 1)
+# Define number of neurons in hidden layers
+n_neuron = 16
+
+# Define mlp chain
+mlp_chain = Flux.Chain(
+    # First layer
+    Flux.Dense(1 =&gt; n_neuron, Flux.identity),
+    # Second layer
+    Flux.Dense(n_neuron =&gt; n_neuron, Flux.tanh_fast),
+    # Third layer
+    Flux.Dense(n_neuron =&gt; n_neuron, Flux.tanh_fast),
+    # Fourth layer
+    Flux.Dense(n_neuron =&gt; n_neuron, Flux.tanh_fast),
+    # Output layer
+    Flux.Dense(n_neuron =&gt; ldim, Flux.identity)
+)
+
+# Define NeuralGeodesic
+nng = NG.NeuralGeodesic(mlp_chain, z_init, z_end)</code></pre><div class="admonition is-success"><header class="admonition-header">Tip</header><div class="admonition-body"><p>Empirically, we have found that the activation functions in the hidden layers should not be unbounded. Thus, we recommend using <code>tanh</code> or <code>sigmoid</code>.</p></div></div><p>Next, we define the hyperparameters for the optimization of the neural network. In particular, we will sample <code>50</code> time points uniformly distributed between <code>0</code> and <code>1</code> to sample the path. We will train the network for <code>50,000</code> epochs using the <code>Adam</code> optimizer with a learning rate of <code>1e-5</code>.</p><pre><code class="language-julia hljs"># Define learning rate
+η = 10^-5
+# Define number of time points to sample
+n_time = 50
+# Define number of epochs
+n_epoch = 50_000
+# Define frequency with which to save model output
+n_save = 10_000
+
+# Define time points
+t_array = Float32.(collect(range(0, 1, length=n_time)))
+
+# Explicit setup of optimizer
+opt_nng = Flux.Train.setup(
+    Flux.Optimisers.Adam(η),
+    nng
+)</code></pre><p>With this in hand, we are ready to train the network. We will save several outputs of the network to visualize the path as it is being trained.</p><pre><code class="language-julia hljs"># Initialize empty array to save loss
+nng_loss = Vector{Float32}(undef, n_epoch)
+
+# Initialize array to save examples
+nng_ex = Array{Float32}(undef, ldim, length(t_array), n_epoch ÷ n_save + 1)
+
+# Save initial curve
+nng_ex[:, :, 1] = nng(t_array)
+# Loop through epochs
+for epoch in 1:n_epoch
+    # Train model and save loss
+    nng_loss[epoch] = NG.train!(nng, rhvae, t_array, opt_nng; loss_return=true)
+    # Check if model should be saved
+    if epoch % n_save == 0
+        # Save model output
+        nng_ex[:, :, (epoch÷n_save)+1] = nng(t_array)
+    end # if
+end # for</code></pre><p>Now that we have trained the network, we can visualize the path between the initial and final points in the latent space. The color code in the following plot matches the epoch at which the path was computed.</p><p><img src="../figs/rhvae_geodesic.svg" alt/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../encoders/">Encoders &amp; Decoders »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.5.0 on <span class="colophon-date" title="Monday 8 July 2024 20:05">Monday 8 July 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
