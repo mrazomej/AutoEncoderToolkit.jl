@@ -309,8 +309,8 @@ function utils._finite_difference_gradient(
     end # if
 
     if typeof(x) <: AbstractVector
-        return grad
+        return CUDA.cu(grad)
     elseif typeof(x) <: AbstractMatrix
-        return permutedims(reduce(hcat, grad), [2, 1])
+        return CUDA.cu(permutedims(reduce(hcat, grad), [2, 1]))
     end # if
 end # function
