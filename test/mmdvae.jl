@@ -6,6 +6,8 @@ import AutoEncoderToolkit.regularization
 
 # Import Flux library
 import Flux
+# Import CUDA
+using CUDA
 
 # Import basic math
 import Random
@@ -161,19 +163,42 @@ end # @testset "logP_mmd_ratio"
     # Initialize MMDVAE
     mmdvae = MMDVAEs.MMDVAE(vae)
 
-    # Define batch of data
-    x = randn(Float32, data_dim, 10)
+    @testset "CPU" begin
+        # Define batch of data
+        x = randn(Float32, data_dim, 10)
 
-    @testset "loss (same input and output)" begin
-        result = MMDVAEs.loss(mmdvae, x)
-        @test isa(result, Float32)
-    end # @testset "loss (same input and output)"
+        @testset "loss (same input and output)" begin
+            result = MMDVAEs.loss(mmdvae, x)
+            @test isa(result, Float32)
+        end # @testset "loss (same input and output)"
 
-    @testset "loss (different input and output)" begin
-        x_out = randn(Float32, data_dim, 10)
-        result = MMDVAEs.loss(mmdvae, x, x_out)
-        @test isa(result, Float32)
-    end # @testset "loss (different input and output)"
+        @testset "loss (different input and output)" begin
+            x_out = randn(Float32, data_dim, 10)
+            result = MMDVAEs.loss(mmdvae, x, x_out)
+            @test isa(result, Float32)
+        end # @testset "loss (different input and output)"
+    end # @testset "CPU"
+
+    if CUDA.functional()
+        @testset "GPU" begin
+            # Define batch of data
+            x = CUDA.randn(Float32, data_dim, 10)
+            # Upload to GPU
+            mmdvae_gpu = Flux.gpu(mmdvae)
+
+            @testset "loss (same input and output)" begin
+                result = MMDVAEs.loss(mmdvae_gpu, x)
+                @test isa(result, Float32)
+            end # @testset "loss (same input and output)"
+
+            @testset "loss (different input and output)" begin
+                x_out = CUDA.randn(Float32, data_dim, 10)
+                result = MMDVAEs.loss(mmdvae_gpu, x, x_out)
+                @test isa(result, Float32)
+            end # @testset "loss (different input and output)"
+        end # @testset "GPU"
+    end # if CUDA.functional()
+
 end # @testset "loss functions"
 
 ## =============================================================================
@@ -205,19 +230,46 @@ end # @testset "loss functions"
     # Initialize MMDVAE
     mmdvae = MMDVAEs.MMDVAE(vae)
 
-    # Define batch of data
-    x = randn(Float32, data_dim, 10)
+    @testset "CPU" begin
+        # Define batch of data
+        x = randn(Float32, data_dim, 10)
 
-    @testset "with same input and output" begin
-        grads = Flux.gradient(mmdvae -> MMDVAEs.loss(mmdvae, x), mmdvae)
-        @test isa(grads[1], NamedTuple)
-    end # @testset "with same input and output"
+        @testset "with same input and output" begin
+            grads = Flux.gradient(mmdvae -> MMDVAEs.loss(mmdvae, x), mmdvae)
+            @test isa(grads[1], NamedTuple)
+        end # @testset "with same input and output"
 
-    @testset "with different input and output" begin
-        x_out = randn(Float32, data_dim, 10)
-        grads = Flux.gradient(mmdvae -> MMDVAEs.loss(mmdvae, x, x_out), mmdvae)
-        @test isa(grads[1], NamedTuple)
-    end # @testset "with different input and output"
+        @testset "with different input and output" begin
+            x_out = randn(Float32, data_dim, 10)
+            grads = Flux.gradient(mmdvae -> MMDVAEs.loss(mmdvae, x, x_out), mmdvae)
+            @test isa(grads[1], NamedTuple)
+        end # @testset "with different input and output"
+    end # @testset "CPU"
+
+    if CUDA.functional()
+        @testset "GPU" begin
+            # Define batch of data
+            x = CUDA.randn(Float32, data_dim, 10)
+
+            # Upload to GPU
+            mmdvae_gpu = Flux.gpu(mmdvae)
+
+            @testset "with same input and output" begin
+                grads = Flux.gradient(
+                    mmdvae -> MMDVAEs.loss(mmdvae, x), mmdvae_gpu
+                )
+                @test isa(grads[1], NamedTuple)
+            end # @testset "with same input and output"
+
+            @testset "with different input and output" begin
+                x_out = CUDA.randn(Float32, data_dim, 10)
+                grads = Flux.gradient(
+                    mmdvae -> MMDVAEs.loss(mmdvae, x, x_out), mmdvae_gpu
+                )
+                @test isa(grads[1], NamedTuple)
+            end # @testset "with different input and output"
+        end # @testset "GPU"
+    end # if CUDA.functional()
 end # @testset "MMDVAE gradient"
 
 ## =============================================================================
@@ -254,22 +306,47 @@ end # @testset "MMDVAE gradient"
     # Initialize MMDVAE
     mmdvae = MMDVAEs.MMDVAE(vae)
 
-    # Define batch of data
-    x = randn(Float32, data_dim, 10)
+    @testset "CPU | without regularization" begin
+        # Define batch of data
+        x = randn(Float32, data_dim, 10)
 
-    # Explicit setup of optimizer
-    opt = Flux.Train.setup(Flux.Optimisers.Adam(), mmdvae)
+        # Explicit setup of optimizer
+        opt = Flux.Train.setup(Flux.Optimisers.Adam(), mmdvae)
 
-    @testset "with same input and output" begin
-        L = MMDVAEs.train!(mmdvae, x, opt; loss_return=true)
-        @test isa(L, Float32)
-    end # @testset "with same input and output"
+        @testset "with same input and output" begin
+            L = MMDVAEs.train!(mmdvae, x, opt; loss_return=true)
+            @test isa(L, Float32)
+        end # @testset "with same input and output"
 
-    @testset "with different input and output" begin
-        x_out = randn(Float32, data_dim, 10)
-        L = MMDVAEs.train!(mmdvae, x, x_out, opt; loss_return=true)
-        @test isa(L, Float32)
-    end # @testset "with different input and output"
+        @testset "with different input and output" begin
+            x_out = randn(Float32, data_dim, 10)
+            L = MMDVAEs.train!(mmdvae, x, x_out, opt; loss_return=true)
+            @test isa(L, Float32)
+        end # @testset "with different input and output"
+    end # @testset "CPU | without regularization"
+
+    if CUDA.functional()
+        @testset "GPU | without regularization" begin
+            # Define batch of data
+            x = CUDA.randn(Float32, data_dim, 10)
+
+            # Upload to GPU
+            mmdvae_gpu = Flux.gpu(mmdvae)
+            # Explicit setup of optimizer
+            opt = Flux.Train.setup(Flux.Optimisers.Adam(), mmdvae_gpu)
+
+            @testset "with same input and output" begin
+                L = MMDVAEs.train!(mmdvae_gpu, x, opt; loss_return=true)
+                @test isa(L, Float32)
+            end # @testset "with same input and output"
+
+            @testset "with different input and output" begin
+                x_out = CUDA.randn(Float32, data_dim, 10)
+                L = MMDVAEs.train!(mmdvae_gpu, x, x_out, opt; loss_return=true)
+                @test isa(L, Float32)
+            end # @testset "with different input and output"
+        end # @testset "GPU | without regularization"
+    end # if CUDA.functional()
 end # @testset "MMDVAE training"
 
 println("\nAll tests passed!\n")
