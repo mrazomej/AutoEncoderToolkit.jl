@@ -8,6 +8,8 @@ import AutoEncoderToolkit.VAEs
 import AutoEncoderToolkit.utils
 # Import Flux library
 import Flux
+# Import CUDA
+using CUDA
 
 # Import basic math
 import LinearAlgebra
@@ -778,7 +780,7 @@ end # @testset "HVAE grad"
 # BoundsError: attempt to access 16-element Vector{UInt8} at index [0]
 
 @testset "HVAE training" begin
-    @testset "without regularization" begin
+    @testset "CPU | without regularization" begin
         # Loop through decoders
         for decoder in decoders
             # Build temporary HVAE
@@ -796,7 +798,31 @@ end # @testset "HVAE grad"
             L = HVAEs.train!(hvae, data, opt_state; loss_return=true)
             @test isa(L, Float32)
         end # for decoder in decoders
-    end # @testset "without regularization"
+    end # @testset "CPU | without regularization"
+
+    if CUDA.functional()
+        @testset "GPU | without regularization" begin
+            # Loop through decoders
+            for decoder in decoders
+                # Build temporary HVAE
+                hvae = HVAEs.HVAE(
+                    joint_log_encoder * decoder,
+                ) |> Flux.gpu
+
+                # Explicit setup of optimizer
+                opt_state = Flux.Train.setup(
+                    Flux.Optimisers.Adam(1E-2),
+                    hvae
+                )
+
+                # Test training function
+                L = HVAEs.train!(
+                    hvae, CUDA.cu(data), opt_state; loss_return=true
+                )
+                @test isa(L, Float32)
+            end # for decoder in decoders
+        end # @testset "CPU | without regularization"
+    end # if CUDA.functional()
 end # @testset "HVAE training"
 
 println("\nAll tests passed!\n")
