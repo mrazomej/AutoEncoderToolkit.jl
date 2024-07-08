@@ -303,6 +303,15 @@ end # struct
 # Mark function as Flux.Functors.@functor so that Flux.jl allows for training
 Flux.@functor SimpleGaussianDecoder
 
+# ------------------------------------------------------------------------------
+
+# Custom display method for the type
+function Base.show(io::IO, ::Type{SimpleGaussianDecoder{D}}) where {D}
+    print(io, "SimpleGaussianDecoder{…}")
+end
+
+# ------------------------------------------------------------------------------
+
 @doc raw"""
     SimpleGaussianDecoder(
         n_input, n_latent, decoder_neurons, 
