@@ -1,4 +1,4 @@
-println("\nTesting AutoEncoderToolkit.jl module...\n")
+println("\nTesting AEs module...\n")
 # Import AutoEncoderToolkit.jl module to be tested
 import AutoEncoderToolkit.AEs
 import AutoEncoderToolkit: Encoder, Decoder
