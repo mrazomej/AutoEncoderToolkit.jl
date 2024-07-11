@@ -2,7 +2,6 @@ println("\nTesting MMDVAEs.jl module...\n")
 # Import AutoEncoderToolkit.jl module to be tested
 import AutoEncoderToolkit.MMDVAEs
 import AutoEncoderToolkit.VAEs
-import AutoEncoderToolkit.regularization
 
 # Import Flux library
 import Flux

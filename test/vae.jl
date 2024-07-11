@@ -4,7 +4,6 @@ println("\nTesting VAEs module...\n")
 
 # Import AutoEncoderToolkit.jl module to be tested
 import AutoEncoderToolkit.VAEs
-import AutoEncoderToolkit.regularization
 # Import Flux library
 import Flux
 # Import CUDA
