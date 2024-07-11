@@ -15,9 +15,9 @@ import Random
 import StatsBase
 import Distributions
 
-using Pkg: project
+import Pkg
 # Check if CUDA is available
-cuda_functional = haskey(project().dependencies, "CUDA")
+cuda_functional = haskey(Pkg.project().dependencies, "CUDA")
 
 if cuda_functional
     println("CUDA available - running tests with CUDA.")

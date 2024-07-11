@@ -1,9 +1,9 @@
 using AutoEncoderToolkit
 using Test
 
-using Pkg: project
+import Pkg
 # Check if CUDA is available
-cuda_functional = haskey(project().dependencies, "CUDA")
+cuda_functional = haskey(Pkg.project().dependencies, "CUDA")
 
 println("Testing AutoEncoderToolkit.jl")
 
