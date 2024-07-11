@@ -1,9 +1,15 @@
-using CUDA
 using AutoEncoderToolkit
 using Test
 using Flux
 
-if CUDA.functional()
+using Pkg: project
+# Check if CUDA is available
+cuda_functional = haskey(project().dependencies, "CUDA")
+
+if cuda_functional
+    println("CUDA available - running tests with CUDA.")
+    # Import CUDA
+    using CUDA
 
     @testset "AutoEncoderToolkitCUDAExt" begin
         @testset "utils.jl" begin
@@ -142,4 +148,4 @@ if CUDA.functional()
             end
         end
     end
-end # if CUDA.functional()
+end # if cuda_functional

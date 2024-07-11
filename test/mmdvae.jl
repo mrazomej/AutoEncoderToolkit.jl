@@ -5,14 +5,22 @@ import AutoEncoderToolkit.VAEs
 
 # Import Flux library
 import Flux
-# Import CUDA
-using CUDA
 
 # Import basic math
 import Random
 import StatsBase
 import Distributions
 import Distances
+
+using Pkg: project
+# Check if CUDA is available
+cuda_functional = haskey(project().dependencies, "CUDA")
+
+if cuda_functional
+    println("CUDA available - running tests with CUDA.")
+    # Import CUDA
+    using CUDA
+end
 
 Random.seed!(42)
 
@@ -178,7 +186,7 @@ end # @testset "logP_mmd_ratio"
         end # @testset "loss (different input and output)"
     end # @testset "CPU"
 
-    if CUDA.functional()
+    if cuda_functional
         @testset "GPU" begin
             # Define batch of data
             x = CUDA.randn(Float32, data_dim, 10)
@@ -196,7 +204,7 @@ end # @testset "logP_mmd_ratio"
                 @test isa(result, Float32)
             end # @testset "loss (different input and output)"
         end # @testset "GPU"
-    end # if CUDA.functional()
+    end # if cuda_functional
 
 end # @testset "loss functions"
 
@@ -245,7 +253,7 @@ end # @testset "loss functions"
         end # @testset "with different input and output"
     end # @testset "CPU"
 
-    if CUDA.functional()
+    if cuda_functional
         @testset "GPU" begin
             # Define batch of data
             x = CUDA.randn(Float32, data_dim, 10)
@@ -268,7 +276,7 @@ end # @testset "loss functions"
                 @test isa(grads[1], NamedTuple)
             end # @testset "with different input and output"
         end # @testset "GPU"
-    end # if CUDA.functional()
+    end # if cuda_functional
 end # @testset "MMDVAE gradient"
 
 ## =============================================================================
@@ -324,7 +332,7 @@ end # @testset "MMDVAE gradient"
         end # @testset "with different input and output"
     end # @testset "CPU | without regularization"
 
-    if CUDA.functional()
+    if cuda_functional
         @testset "GPU | without regularization" begin
             # Define batch of data
             x = CUDA.randn(Float32, data_dim, 10)
@@ -345,7 +353,7 @@ end # @testset "MMDVAE gradient"
                 @test isa(L, Float32)
             end # @testset "with different input and output"
         end # @testset "GPU | without regularization"
-    end # if CUDA.functional()
+    end # if cuda_functional
 end # @testset "MMDVAE training"
 
 println("\nAll tests passed!\n")

@@ -8,14 +8,22 @@ import AutoEncoderToolkit.VAEs
 import AutoEncoderToolkit.utils
 # Import Flux library
 import Flux
-# Import GPU library
-using CUDA
 
 # Import basic math
 import LinearAlgebra
 import Random
 import StatsBase
 import Distributions
+
+using Pkg: project
+# Check if CUDA is available
+cuda_functional = haskey(project().dependencies, "CUDA")
+
+if cuda_functional
+    println("CUDA available - running tests with CUDA.")
+    # Import CUDA
+    using CUDA
+end
 
 Random.seed!(42)
 
@@ -1589,7 +1597,7 @@ end # @testset "HVAE grad"
         end # for decoder in decoders
     end # @testset "without regularization"
 
-    if CUDA.functional()
+    if cuda_functional
         @testset "GPU | without regularization" begin
             # Loop through decoders
             for decoder in decoders
@@ -1615,7 +1623,7 @@ end # @testset "HVAE grad"
                 @test isa(L, Float32)
             end # for decoder in decoders
         end # @testset "without regularization"
-    end # if CUDA.functional()
+    end # if cuda_functional
 end # @testset "RHVAE training"
 
 println("\nAll tests passed!\n")

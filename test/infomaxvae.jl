@@ -7,13 +7,20 @@ import AutoEncoderToolkit
 # Import Flux library
 import Flux
 
-# Import CUDA
-import CUDA
-
 # Import basic math
 import Random
 import StatsBase
 import Distributions
+
+using Pkg: project
+# Check if CUDA is available
+cuda_functional = haskey(project().dependencies, "CUDA")
+
+if cuda_functional
+    println("CUDA available - running tests with CUDA.")
+    # Import CUDA
+    using CUDA
+end
 
 Random.seed!(42)
 
@@ -365,7 +372,7 @@ end # @testset "InfoMaxVAE training"
         end # @testset "with different input and output"
     end # @testset "CPU"
 
-    if CUDA.functional()
+    if cuda_functional
         @testset "GPU" begin
             # Define batch of data
             x = CUDA.randn(Float32, data_dim, 10)
@@ -393,7 +400,7 @@ end # @testset "InfoMaxVAE training"
                 @test L isa Tuple{<:Number,<:Number}
             end # @testset "with different input and output"
         end # @testset "GPU"
-    end # if CUDA.functional()
+    end # if cuda_functional
 end # @testset "InfoMaxVAE training"
 
 println("\nAll tests passed!\n")

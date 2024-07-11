@@ -1,6 +1,18 @@
 using AutoEncoderToolkit
 using Test
 
+using Pkg: project
+# Check if CUDA is available
+cuda_functional = haskey(project().dependencies, "CUDA")
+
+println("Testing AutoEncoderToolkit.jl")
+
+if cuda_functional
+    println("\nCUDA available - running tests with CUDA.\n")
+else
+    println("\nCUDA is not available - skipping CUDA tests.\n")
+end
+
 @testset "AutoEncoderToolkit.jl" begin
     # Test utils
     include("utils.jl")

@@ -6,13 +6,21 @@ println("\nTesting VAEs module...\n")
 import AutoEncoderToolkit.VAEs
 # Import Flux library
 import Flux
-# Import CUDA
-using CUDA
 
 # Import basic math
 import Random
 import StatsBase
 import Distributions
+
+using Pkg: project
+# Check if CUDA is available
+cuda_functional = haskey(project().dependencies, "CUDA")
+
+if cuda_functional
+    println("CUDA available - running tests with CUDA.")
+    # Import CUDA
+    using CUDA
+end
 
 Random.seed!(42)
 
@@ -385,7 +393,7 @@ end # @testset "VAE gradient"
         end # for decoder in decoders
     end # @testset "CPU | without regularization"
 
-    if CUDA.functional()
+    if cuda_functional
         @testset "GPU | without regularization" begin
             # Loop through decoders
             for decoder in decoders
@@ -419,7 +427,7 @@ end # @testset "VAE gradient"
                 # params_end = deepcopy(Flux.params(vae))
             end # for decoder in decoders
         end # @testset "GPU | without regularization"
-    end # if CUDA.functional()
+    end # if cuda_functional
 
 end # @testset "VAE training"
 
