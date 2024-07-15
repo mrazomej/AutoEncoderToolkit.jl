@@ -265,7 +265,7 @@ end # function
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         kl_divergence::Function=encoder_kl,
         reg_function::Union{Function,Nothing}=nothing,
-        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_kwargs::NamedTuple=NamedTuple(),
         reg_strength::Number=1.0f0
     ) 
 
@@ -298,7 +298,7 @@ Where:
   regularization term based on the VAE outputs. Should return a Float32. This
   function must take as input the VAE outputs and the keyword arguments provided
   in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
     regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
 
@@ -317,7 +317,7 @@ function loss(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Number=1.0f0
 )
     # Forward Pass (run input through reconstruct function)
@@ -355,7 +355,7 @@ end # function
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         kl_divergence::Function=encoder_kl,
         reg_function::Union{Function,Nothing}=nothing,
-        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_kwargs::NamedTuple=NamedTuple(),
         reg_strength::Number=1.0f0
     ) 
 
@@ -391,7 +391,7 @@ approximated encoder: qᵩ(z|x_in) = N(g(x_in), h(x_in))
   regularization term based on the VAE outputs. Should return a Float32. This
   function must take as input the VAE outputs and the keyword arguments provided
   in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
 
@@ -411,7 +411,7 @@ function loss(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Number=1.0f0
 )
     # Forward Pass (run input through reconstruct function)
@@ -458,7 +458,7 @@ given a specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the VAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss
   function. These might include parameters like `σ`, or `β`, depending on the
   specific loss function in use.
 - `verbose::Bool=false`: If true, the loss value will be printed during
@@ -470,21 +470,13 @@ given a specified loss function.
 Trains the VAE by:
 1. Computing the gradient of the loss w.r.t the VAE parameters.
 2. Updating the VAE parameters using the optimizer.
-
-# Examples
-```julia
-opt = Flux.setup(Optax.adam(1e-3), vae)
-for x in dataloader
-    train!(vae, x, opt; loss_fn, loss_kwargs=Dict(:β => 1.0f0,), verbose=true)
-end
-```
 """
 function train!(
     vae::VAE,
     x::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false
 )
@@ -533,7 +525,7 @@ given a loss function.
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the VAE model, data `x_in`, `x_out`, and keyword arguments in that
   order.  
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss
   function. These might include parameters like `σ`, or `β`, depending on the
   specific loss function in use.
 - `verbose::Bool=false`: Whether to print the loss value after each training
@@ -560,7 +552,7 @@ function train!(
     x_out::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false
 )

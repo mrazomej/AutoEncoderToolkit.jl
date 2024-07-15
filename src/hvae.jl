@@ -508,7 +508,7 @@ const ∇energyhvae = (
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         latent_logprior::Function=spherical_logprior,
         adtype::Union{Symbol,Nothing}=nothing,
-        adkwargs::Union{NamedTuple,Dict}=Dict(),
+        adkwargs::NamedTuple=NamedTuple(),
     )
 
 Compute the gradient of the potential energy of a Hamiltonian Variational
@@ -538,7 +538,7 @@ potential energy computed for given data `x` and latent variable `z`.
   is `spherical_logprior`.  
 - `adtype::Symbol`=:finite`: The type of automatic differentiation method to
   use. Must be `:finite` or `:TaylorDiff`. Default is `:finite`.
-- `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
+- `adkwargs::NamedTuple=NamedTuple()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
 # Returns
@@ -553,7 +553,7 @@ function ∇potential_energy(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     latent_logprior::Function=spherical_logprior,
     adtype::Symbol=:finite,
-    adkwargs::Union{NamedTuple,Dict}=Dict(),
+    adkwargs::NamedTuple=NamedTuple(),
 )
     # Check that the provided adtype is valid
     if adtype ∉ keys(∇energyhvae)
@@ -580,7 +580,7 @@ end # function
         reconstruction_loglikelihood::Function=decoder_loglikelihood,
         latent_logprior::Function=spherical_logprior,
         adtype::Union{Symbol,Nothing}=nothing,
-        adkwargs::Union{NamedTuple,Dict}=Dict(),
+        adkwargs::NamedTuple=NamedTuple(),
     )
 
 Compute the gradient of the potential energy of a Hamiltonian Variational
@@ -608,7 +608,7 @@ potential energy computed for given data `x` and latent variable `z`.
   is `spherical_logprior`.  
   - `adtype::Symbol`=:finite`: The type of automatic differentiation method to
   use. Must be `:finite` or `:TaylorDiff`. Default is `:finite`.
-- `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
+- `adkwargs::NamedTuple=NamedTuple()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
 # Returns
@@ -622,7 +622,7 @@ function ∇potential_energy(
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     latent_logprior::Function=spherical_logprior,
     adtype::Symbol=:finite,
-    adkwargs::Union{NamedTuple,Dict}=Dict(),
+    adkwargs::NamedTuple=NamedTuple(),
 )
     # Check that the provided adtype is valid
     if adtype ∉ keys(∇energyhvae)
@@ -651,7 +651,7 @@ end # function
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=reconstruction_loglikelihood,
             latent_logprior=spherical_logprior,
         )
@@ -690,7 +690,7 @@ This function performs these three steps in sequence.
 # Optional Keyword Arguments
 - `ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4)`: The step size. Default is
   0.0001.
-- `∇U_kwargs::Union{Dict,NamedTuple}`: The keyword arguments for
+- `∇U_kwargs::NamedTuple`: The keyword arguments for
   `∇potential_energy`.  Default is a tuple with `reconstruction_loglikelihood`
   and `latent_logprior`.
 
@@ -706,7 +706,7 @@ function leapfrog_step(
     decoder::AbstractVariationalDecoder,
     decoder_output::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     )
@@ -741,7 +741,7 @@ end # function
         ρ::AbstractVecOrMat,
         hvae::HVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=reconstruction_loglikelihood,
             latent_logprior=spherical_logprior,
         )
@@ -779,7 +779,7 @@ This function performs these three steps in sequence.
 # Optional Keyword Arguments
 - `ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4)`: The step size. Default is
   0.0001.
-- `∇U_kwargs::Union{Dict,NamedTuple}`: The keyword arguments for
+- `∇U_kwargs::NamedTuple`: The keyword arguments for
   `∇potential_energy`.  Default is a tuple with `reconstruction_loglikelihood`
   and `latent_logprior`.
 
@@ -794,7 +794,7 @@ function leapfrog_step(
     ρ::AbstractVecOrMat,
     hvae::HVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     )
@@ -920,7 +920,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         K::Int=3,
         βₒ::Number=0.3f0,
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=reconstruction_loglikelihood,
             latent_logprior=spherical_logprior,
         ),
@@ -944,7 +944,7 @@ Hamiltonian Variational Autoencoder (HVAE).
   Carlo (HMC) algorithm. Default is 3.
 - `βₒ::Number`: The initial inverse temperature for the tempering schedule.
   Default is 0.3f0.
-- `∇U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+- `∇U_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇potential_energy` function. Default is a NamedTuple with
   `reconstruction_loglikelihood` and `latent_logprior`.
 - `tempering_schedule::Function`: The function to compute the inverse
@@ -981,7 +981,7 @@ function leapfrog_tempering_step(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     K::Int=3,
     βₒ::Number=0.3f0,
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     ),
@@ -1043,7 +1043,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         K::Int=3,
         βₒ::Number=0.3f0,
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=reconstruction_loglikelihood,
             latent_logprior=spherical_logprior,
         ),
@@ -1066,7 +1066,7 @@ Hamiltonian Variational Autoencoder (HVAE).
   Carlo (HMC) algorithm. Default is 3.
 - `βₒ::Number`: The initial inverse temperature for the tempering schedule.
   Default is 0.3f0.
-- `∇U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+- `∇U_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇potential_energy` function. Default is a NamedTuple with
   `reconstruction_loglikelihood` and `latent_logprior`.
 - `tempering_schedule::Function`: The function to compute the inverse
@@ -1102,7 +1102,7 @@ function leapfrog_tempering_step(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     K::Int=3,
     βₒ::Number=0.3f0,
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     ),
@@ -1167,7 +1167,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         K::Int=3,
         βₒ::Number=0.3f0,
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=reconstruction_loglikelihood,
                 latent_logprior=spherical_logprior,
         ),
@@ -1191,7 +1191,7 @@ Run the Hamiltonian Variational Autoencoder (HVAE) on the given input.
   Carlo (HMC) part of the HVAE.
 - `βₒ::Number=0.3f0`: The initial inverse temperature for the tempering
   schedule.
-- `∇U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+- `∇U_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇potential_energy` function. Default is a NamedTuple with
   `reconstruction_loglikelihood` and `latent_logprior`.
 - `tempering_schedule::Function=quadratic_tempering`: The function to compute
@@ -1227,7 +1227,7 @@ function (hvae::HVAE{VAE{E,D}})(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     K::Int=3,
     βₒ::Number=0.3f0,
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     ),
@@ -1428,7 +1428,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         K::Int=3,
         βₒ::Number=0.3f0,
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             latent_logprior=spherical_logprior,
         ),
@@ -1459,7 +1459,7 @@ elbo = mean(log p̄ - log q̄),
   integrator (default is 0.01).
 - `K::Int`: The number of HMC steps (default is 3).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
-- `∇U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+- `∇U_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇potential_energy` function. Defaults to a NamedTuple with
   `:reconstruction_loglikelihood` set to `decoder_loglikelihood` and
   `:latent_logprior` set to `spherical_logprior`.
@@ -1485,7 +1485,7 @@ function hamiltonian_elbo(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     K::Int=3,
     βₒ::Number=0.3f0,
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     ),
@@ -1538,7 +1538,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         K::Int=3,
         βₒ::Number=0.3f0,
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             latent_logprior=spherical_logprior,
         ),
@@ -1571,7 +1571,7 @@ elbo = mean(log p̄ - log q̄),
   integrator (default is 0.01).
 - `K::Int`: The number of HMC steps (default is 3).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
-- `∇U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+- `∇U_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇potential_energy` function. Defaults to a NamedTuple with
   `:reconstruction_loglikelihood` set to `decoder_loglikelihood` and
   `:latent_logprior` set to `spherical_logprior`.
@@ -1598,7 +1598,7 @@ function hamiltonian_elbo(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     K::Int=3,
     βₒ::Number=0.3f0,
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     ),
@@ -1652,13 +1652,13 @@ end # function
         K::Int=3,
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=reconstruction_loglikelihood,
             latent_logprior=spherical_logprior,
         ),
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
-        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_kwargs::NamedTuple=NamedTuple(),
         reg_strength::Float32=1.0f0,
         logp_prefactor::AbstractArray=ones(Float32, 3),
         logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -1677,14 +1677,14 @@ Compute the loss for a Hamiltonian Variational Autoencoder (HVAE).
 - `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
   integrator (default is 0.001).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
-- `∇U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+- `∇U_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇potential_energy` function.
 - `tempering_schedule::Function`: The tempering schedule function used in the
   HMC (default is `quadratic_tempering`).
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. This function must take as input
   the VAE outputs and the keyword arguments provided in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 - `logp_prefactor::AbstractArray`: A 3-element array to scale the log
@@ -1703,13 +1703,13 @@ function loss(
     K::Int=3,
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Float32=1.0f0,
     logp_prefactor::AbstractArray=ones(Float32, 3),
     logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -1754,13 +1754,13 @@ end # function
         K::Int=3,
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
-        ∇U_kwargs::Union{Dict,NamedTuple}=(
+        ∇U_kwargs::NamedTuple=(
             reconstruction_loglikelihood=reconstruction_loglikelihood,
             latent_logprior=spherical_logprior,
         ),
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
-        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_kwargs::NamedTuple=NamedTuple(),
         reg_strength::Float32=1.0f0,
         logp_prefactor::AbstractArray=ones(Float32, 3),
         logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -1781,14 +1781,14 @@ Compute the loss for a Hamiltonian Variational Autoencoder (HVAE).
 - `ϵ::Union{<:Number,<:AbstractVector}`: The step size for the leapfrog
   integrator (default is 0.001).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
-- `∇U_kwargs::Union{Dict,NamedTuple}`: Additional keyword arguments to be passed
+- `∇U_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇potential_energy` function.
 - `tempering_schedule::Function`: The tempering schedule function used in the
   HMC (default is `quadratic_tempering`).
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. This function must take as input
   the VAE outputs and the keyword arguments provided in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Float32=1.0f0`: The strength of the regularization term.
 - `logp_prefactor::AbstractArray`: A 3-element array to scale the log
@@ -1808,13 +1808,13 @@ function loss(
     K::Int=3,
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
-    ∇U_kwargs::Union{Dict,NamedTuple}=(
+    ∇U_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         latent_logprior=spherical_logprior,
     ),
     tempering_schedule::Function=quadratic_tempering,
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Float32=1.0f0,
     logp_prefactor::AbstractArray=ones(Float32, 3),
     logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -1859,7 +1859,7 @@ end # function
         x::AbstractArray, 
         opt::NamedTuple; 
         loss_function::Function=loss, 
-        loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+        loss_kwargs::NamedTuple=NamedTuple(),
         verbose::Bool=false,
         loss_return::Bool=false,
     )
@@ -1878,8 +1878,8 @@ Autoencoder given a specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the HVAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might
-  include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss function. These
+  might include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
   `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
   on the specific loss function in use.
 - `verbose::Bool=false`: Whether to print the loss at each iteration.
@@ -1896,7 +1896,7 @@ function train!(
     x::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false,
 )
@@ -1929,7 +1929,7 @@ end # function
         x_out::AbstractArray,
         opt::NamedTuple; 
         loss_function::Function=loss, 
-        loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+        loss_kwargs::NamedTuple=NamedTuple(),
         verbose::Bool=false,
         loss_return::Bool=false,
     )
@@ -1950,7 +1950,7 @@ Autoencoder given a specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the HVAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss function. These might
   include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
   `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
   on the specific loss function in use.
@@ -1969,7 +1969,7 @@ function train!(
     x_out::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false,
 )

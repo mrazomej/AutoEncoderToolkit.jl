@@ -165,7 +165,7 @@ end # function
     mmd_div(
         x::AbstractArray, y::AbstractArray; 
         kernel::Function=gaussian_kernel, 
-        kernel_kwargs::Union{NamedTuple,Dict}=Dict()
+        kernel_kwargs::NamedTuple=NamedTuple()
     )
 
 Compute the Maximum Mean Discrepancy (MMD) divergence between two arrays `x` and
@@ -178,7 +178,7 @@ Compute the Maximum Mean Discrepancy (MMD) divergence between two arrays `x` and
 # Keyword Arguments
 - `kernel::Function=gaussian_kernel`: Kernel function to use. Default is the
   Gaussian kernel.
-- `kernel_kwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments
+- `kernel_kwargs::NamedTuple=NamedTuple()`: Additional keyword arguments
   to be passed to the kernel function.
 
 # Returns
@@ -198,7 +198,7 @@ function mmd_div(
     x::AbstractArray,
     y::AbstractArray;
     kernel::Function=gaussian_kernel,
-    kernel_kwargs::Union{NamedTuple,Dict}=Dict()
+    kernel_kwargs::NamedTuple=NamedTuple()
 )
     # Compute and return MMD divergence
     return StatsBase.mean(kernel(x, x; kernel_kwargs...)) +
@@ -213,7 +213,7 @@ end # function
     logP_mmd_ratio(
         mmdvae::MMDVAE, x::AbstractArray; 
         n_latent_samples::Int=100, kernel=gaussian_kernel, 
-        kernel_kwargs::Union{NamedTuple,Dict}=NamedTuple(), 
+        kernel_kwargs::NamedTuple=NamedTuple(), 
         reconstruction_loglikelihood::Function=decoder_loglikelihood
     )
 
@@ -229,7 +229,7 @@ and the MMD divergence MMD-D(qᵩ(z|x)||p(z)).
   prior p(z) when computing the MMD divergence.
 - `kernel=gaussian_kernel`: Kernel used to compute the divergence.  Default is
   the Gaussian Kernel.
-- `kernel_kwargs::Union{NamedTuple,Dict}=NamedTuple()`: Tuple containing
+- `kernel_kwargs::NamedTuple=NamedTuple()`: Tuple containing
   arguments for the Kernel function.
 - `reconstruction_loglikelihood::Function=decoder_loglikelihood`: Function that
   computes the log likelihood of the reconstructed input.
@@ -255,7 +255,7 @@ function logP_mmd_ratio(
     x::AbstractArray;
     n_latent_samples::Int=100,
     kernel=gaussian_kernel,
-    kernel_kwargs::Union{NamedTuple,Dict}=NamedTuple(),
+    kernel_kwargs::NamedTuple=NamedTuple(),
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
 )
     # Run input through reconstruct function
@@ -286,7 +286,7 @@ end # function
 # ------------------------------------------------------------------------------
 
 @doc raw"""
-    loss(mmdvae::MMDVAE, x::AbstractArray; σ::Number=1.0f0, λ::Number=1.0f0, α::Number=0.0f0, n_latent_samples::Int=50, kernel::Function=gaussian_kernel, kernel_kwargs::Union{NamedTuple,Dict}=Dict(), reconstruction_loglikelihood::Function=decoder_loglikelihood, kl_divergence::Function=encoder_kl)
+    loss(mmdvae::MMDVAE, x::AbstractArray; σ::Number=1.0f0, λ::Number=1.0f0, α::Number=0.0f0, n_latent_samples::Int=50, kernel::Function=gaussian_kernel, kernel_kwargs::NamedTuple=NamedTuple(), reconstruction_loglikelihood::Function=decoder_loglikelihood, kl_divergence::Function=encoder_kl)
 
 Loss function for the Maximum-Mean Discrepancy variational autoencoder
 (MMD-VAE). The loss function is defined as:
@@ -307,7 +307,7 @@ MMD-D(qᵩ(z) || p(z)),
   prior π(z) when computing the MMD divergence.
 - `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
   Default is the Gaussian Kernel.
-- `kernel_kwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments
+- `kernel_kwargs::NamedTuple=NamedTuple()`: Additional keyword arguments
   to be passed to the kernel function.
 - `reconstruction_loglikelihood::Function=decoder_loglikelihood`: Function that
   computes the log likelihood of the reconstructed input.
@@ -332,7 +332,7 @@ function loss(
     α::Number=0.0f0,
     n_latent_samples::Int=50,
     kernel::Function=gaussian_kernel,
-    kernel_kwargs::Union{NamedTuple,Dict}=Dict(),
+    kernel_kwargs::NamedTuple=NamedTuple(),
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
 )
@@ -377,7 +377,7 @@ end # function
         λ::Number=1.0f0, α::Number=0.0f0, 
         n_latent_samples::Int=50, 
         kernel::Function=gaussian_kernel, 
-        kernel_kwargs::Union{NamedTuple,Dict}=Dict(), 
+        kernel_kwargs::NamedTuple=NamedTuple(), 
         reconstruction_loglikelihood::Function=decoder_loglikelihood, 
         kl_divergence::Function=encoder_kl
     )
@@ -403,7 +403,7 @@ MMD-D(qᵩ(z) || p(z)),
   prior π(z) when computing the MMD divergence.
 - `kernel::Function=gaussian_kernel`: Kernel used to compute the divergence.
   Default is the Gaussian Kernel.
-- `kernel_kwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments
+- `kernel_kwargs::NamedTuple=NamedTuple()`: Additional keyword arguments
   to be passed to the kernel function.
 - `reconstruction_loglikelihood::Function=decoder_loglikelihood`: Function that
   computes the log likelihood of the reconstructed input.
@@ -429,7 +429,7 @@ function loss(
     α::Number=0.0f0,
     n_latent_samples::Int=50,
     kernel::Function=gaussian_kernel,
-    kernel_kwargs::Union{NamedTuple,Dict}=Dict(),
+    kernel_kwargs::NamedTuple=NamedTuple(),
     reconstruction_loglikelihood::Function=decoder_loglikelihood,
     kl_divergence::Function=encoder_kl,
 )
@@ -487,7 +487,7 @@ given a specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the MMDVAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss
   function. These might include parameters like `α`, or `β`, depending on the
   specific loss function in use.
 - `verbose::Bool=false`: If true, the loss value will be printed during
@@ -505,7 +505,7 @@ function train!(
     x::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false
 )
@@ -549,7 +549,7 @@ given a specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the MMDVAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Arguments for the loss
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss
   function. These might include parameters like `α`, or `β`, depending on the
   specific loss function in use.
 - `verbose::Bool=false`: If true, the loss value will be printed during
@@ -568,7 +568,7 @@ function train!(
     x_out::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false
 )

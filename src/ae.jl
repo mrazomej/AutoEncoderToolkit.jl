@@ -115,7 +115,7 @@ Where:
   regularization term based on the ae outputs. Should return a Float32. This
   function must take as input the ae outputs and the keyword arguments provided
   in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
 
@@ -131,7 +131,7 @@ function mse_loss(
     ae::AE,
     x::AbstractArray;
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Number=1.0f0
 )
     # Run input through the AE to obtain the reconstruction
@@ -178,7 +178,7 @@ Where:
   regularization term based on the ae outputs. Should return a Float32. This
   function must take as input the ae outputs and the keyword arguments provided
   in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
 
@@ -195,7 +195,7 @@ function mse_loss(
     x_in::AbstractArray,
     x_out::AbstractArray;
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Number=1.0f0
 )
     # Run input through the AE to obtain the reconstruction
@@ -229,7 +229,7 @@ specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function`: The loss function used for training. It should
   accept the autoencoder model and input data `x`, and return a loss value.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Additional arguments for the
+- `loss_kwargs::NamedTuple=NamedTuple()`: Additional arguments for the
   loss function.
 - `verbose::Bool=false`: If true, the loss value will be printed during
   training.
@@ -247,7 +247,7 @@ function train!(
     x::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=mse_loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false
 )
@@ -288,7 +288,7 @@ specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function`: The loss function used for training. It should
   accept the autoencoder model and input data `x`, and return a loss value.
-- `loss_kwargs::Union{NamedTuple,Dict} = Dict()`: Additional arguments for the
+- `loss_kwargs::NamedTuple=NamedTuple()`: Additional arguments for the
   loss function.
 - `verbose::Bool=false`: If true, the loss value will be printed during
   training.
@@ -307,7 +307,7 @@ function train!(
     x_out::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=mse_loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false
 )

@@ -511,7 +511,7 @@ end
         t::AbstractVector,
         opt::NamedTuple;
         loss::Function=loss,
-        loss_kwargs::Dict=Dict(),
+        loss_kwargs::NamedTuple=NamedTuple(),
         verbose::Bool=false,
         loss_return::Bool=false,
     )
@@ -531,7 +531,7 @@ gradient of the loss function and updating the model parameters accordingly.
 ## Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function to be minimized during
   training. Default is `loss`.
-- `loss_kwargs::Dict=Dict()`: Additional keyword arguments to be passed to the
+- `loss_kwargs::NamedTuple=NamedTuple()`: Additional keyword arguments to be passed to the
   loss function.
 - `verbose::Bool=false`: If `true`, the loss value is printed at each iteration.
 - `loss_return::Bool=false`: If `true`, the function returns the loss value.
@@ -553,7 +553,7 @@ function train!(
     t::AbstractVector,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Dict=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false,
 )

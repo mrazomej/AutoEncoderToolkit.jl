@@ -890,11 +890,11 @@ between input and latent variables.
 # Optional Keyword arguments
 - `infomaxloss_function::Function`: The loss function to be used during training
   for the VAE, defaulting to `infomaxloss`.
-- `infomaxloss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to
+- `infomaxloss_kwargs::NamedTuple`: Additional keyword arguments to
   be passed to the VAE loss function.
 - `miloss_function::Function`: The loss function to be used during training for
   the MLP computing the variational free energy, defaulting to `miloss`.
-- `miloss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be
+- `miloss_kwargs::NamedTuple`: Additional keyword arguments to be
   passed to the MutualInfoChain loss function.
 - `loss_return::Bool`: If `true`, the function returns the loss values for the
   VAE and MutualInfoChain. Defaults to `false`.
@@ -920,9 +920,9 @@ function train!(
     x::AbstractArray,
     opt::NamedTuple;
     infomaxloss_function::Function=infomaxloss,
-    infomaxloss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    infomaxloss_kwargs::NamedTuple=NamedTuple(),
     miloss_function::Function=miloss,
-    miloss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    miloss_kwargs::NamedTuple=NamedTuple(),
     loss_return::Bool=false,
     verbose::Bool=false
 )
@@ -999,12 +999,12 @@ between input and latent variables.
 # Optional Keyword arguments
 - `infomaxloss_function::Function`: The loss function to be used during training
   for the VAE, defaulting to `infomaxloss`.
-- `infomaxloss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to
+- `infomaxloss_kwargs::NamedTuple`: Additional keyword arguments to
   be passed to the VAE loss function.
 - `miloss_function::Function`: The loss function to be used during training for
   the MutualInfoChain computing the variational free energy, defaulting to
   `miloss`.
-- `miloss_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be
+- `miloss_kwargs::NamedTuple`: Additional keyword arguments to be
   passed to the MutualInfoChain loss function.
 - `loss_return::Bool`: If `true`, the function returns the loss values for the
   VAE and MLP. Defaults to `false`.
@@ -1029,9 +1029,9 @@ function train!(
     x_out::AbstractArray,
     opt::NamedTuple;
     infomaxloss_function::Function=infomaxloss,
-    infomaxloss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    infomaxloss_kwargs::NamedTuple=NamedTuple(),
     miloss_function::Function=miloss,
-    miloss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    miloss_kwargs::NamedTuple=NamedTuple(),
     loss_return::Bool=false,
     verbose::Bool=false
 )

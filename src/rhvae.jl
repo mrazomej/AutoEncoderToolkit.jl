@@ -1978,7 +1978,7 @@ const ∇Hrhvae = (
         position_logprior::Function=spherical_logprior,
         momentum_logprior::Function=riemannian_logprior,
         adtype::Symbol=:TaylorDiff,
-        adkwargs::Union{NamedTuple,Dict}=Dict(),
+        adkwargs::NamedTuple=NamedTuple(),
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
@@ -2042,7 +2042,7 @@ the point `z`.
 - `adtype::Symbol`=:finite`: The type of automatic differentiation method to
   use. Must be `:finite`, `:ForwardDiff`, or `:TaylorDiff`. Default is
   `:finite`.
-- `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
+- `adkwargs::NamedTuple=NamedTuple()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
 # Returns
@@ -2062,7 +2062,7 @@ function ∇hamiltonian(
     position_logprior::Function=spherical_logprior,
     momentum_logprior::Function=riemannian_logprior,
     adtype::Symbol=:finite,
-    adkwargs::Union{NamedTuple,Dict}=Dict(),
+    adkwargs::NamedTuple=NamedTuple(),
 )
     # Check that the provided adtype is valid
     if adtype ∉ keys(∇Hrhvae)
@@ -2094,7 +2094,7 @@ end # function
         momentum_logprior::Function=riemannian_logprior,
         G_inv::Function=G_inv,
         adtype::Symbol=:TaylorDiff,
-        adkwargs::Union{NamedTuple,Dict}=Dict(),
+        adkwargs::NamedTuple=NamedTuple(),
     )
 
 Compute the gradient of the Hamiltonian with respect to a given variable using a
@@ -2134,7 +2134,7 @@ log-likelihood of the decoder, the log-prior of the latent space, and `G_inv`.
 - `adtype::Symbol`=:finite`: The type of automatic differentiation method to
   use. Must be `:finite`, `:ForwardDiff`, or `:TaylorDiff`. Default is
   `:finite`.
-- `adkwargs::Union{NamedTuple,Dict}=Dict()`: Additional keyword arguments to
+- `adkwargs::NamedTuple=NamedTuple()`: Additional keyword arguments to
   pass to the automatic differentiation method.
 
 # Returns
@@ -2152,7 +2152,7 @@ function ∇hamiltonian(
     momentum_logprior::Function=riemannian_logprior,
     G_inv::Function=G_inv,
     adtype::Symbol=:finite,
-    adkwargs::Union{NamedTuple,Dict}=Dict(),
+    adkwargs::NamedTuple=NamedTuple(),
 )
     # Check that the provided adtype is valid
     if adtype ∉ keys(∇Hrhvae)
@@ -2186,7 +2186,7 @@ end # function
         decoder_output::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -2239,7 +2239,7 @@ variables `z`. The result is returned as ρ̃.
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default
   is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`, and `G_inv`.
 
@@ -2257,7 +2257,7 @@ function _leapfrog_first_step(
     decoder_output::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -2289,7 +2289,7 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -2334,7 +2334,7 @@ variables `z`. The result is returned as ρ̃.
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The leapfrog step size. Default
   is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   and `momentum_logprior`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
@@ -2351,7 +2351,7 @@ function _leapfrog_first_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -2389,7 +2389,7 @@ end # function
         decoder_output::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
@@ -2443,7 +2443,7 @@ variables `ρ`. The result is returned as z̄.
 # Optional Keyword Arguments
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is 0.01.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`.
 
@@ -2461,7 +2461,7 @@ function _leapfrog_second_step(
     decoder_output::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -2503,7 +2503,7 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
@@ -2550,7 +2550,7 @@ variables `ρ`. The result is returned as z̄.
   is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   and `momentum_logprior`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
@@ -2567,7 +2567,7 @@ function _leapfrog_second_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -2604,7 +2604,7 @@ end # function
         decoder::AbstractVariationalDecoder,
         decoder_output::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
@@ -2655,7 +2655,7 @@ variables `z`. The result is returned as ρ̃.
 # Optional Keyword Arguments
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is
   0.01f0.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   `momentum_logprior`.
 
@@ -2673,7 +2673,7 @@ function _leapfrog_third_step(
     decoder_output::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     ∇H::Function=∇hamiltonian_TaylorDiff,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -2696,7 +2696,7 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
@@ -2741,7 +2741,7 @@ variables `z`. The result is returned as ρ̃.
 - `ϵ::Union{<:Number,<:AbstractVector}`: The leapfrog step size. Default is
   0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `reconstruction_loglikelihood`, `position_logprior`,
   and `momentum_logprior`.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
@@ -2758,7 +2758,7 @@ function _leapfrog_third_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -2796,7 +2796,7 @@ end # function
         metric_param::NamedTuple;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
@@ -2848,7 +2848,7 @@ helper functions.
 - `ϵ::Union{<:Number,<:AbstractVector}=0.01f0`: The step size. Default is 0.01.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `decoder_loglikelihood`, `position_logprior`,
   `momentum_logprior`, and `G_inv`.
 - `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
@@ -2871,7 +2871,7 @@ function general_leapfrog_step(
     metric_param::NamedTuple;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -2920,7 +2920,7 @@ end # function
         rhvae::RHVAE;
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
@@ -2961,7 +2961,7 @@ This function performs these three steps in sequence, using the
   is 0.01f0.
 - `steps::Int=3`: The number of fixed-point iterations to perform. Default is 3.
   Typically, 3 iterations are sufficient.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: The keyword arguments for `∇hamiltonian`.
+- `∇H_kwargs::NamedTuple`: The keyword arguments for `∇hamiltonian`.
   Default is a tuple with `decoder_loglikelihood`, `position_logprior`, and
   `momentum_logprior`
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
@@ -2979,7 +2979,7 @@ function general_leapfrog_step(
     rhvae::RHVAE;
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -3044,7 +3044,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -3076,7 +3076,7 @@ Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `βₒ::Number`: The initial inverse temperature for the tempering schedule.
   Default is 0.3f0.
 - `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Default is a NamedTuple with
   `reconstruction_loglikelihood`, `position_logprior`, and `momentum_logprior`.
 - `tempering_schedule::Function`: The function to compute the inverse
@@ -3124,7 +3124,7 @@ function general_leapfrog_tempering_step(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -3198,7 +3198,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -3223,7 +3223,7 @@ Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `βₒ::Number`: The initial inverse temperature for the tempering schedule.
   Default is 0.3f0.
 - `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Default is a NamedTuple with
   `reconstruction_loglikelihood`, `position_logprior`, and `momentum_logprior`.
 - `tempering_schedule::Function`: The function to compute the inverse
@@ -3263,7 +3263,7 @@ function general_leapfrog_tempering_step(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -3346,7 +3346,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                         reconstruction_loglikelihood=decoder_loglikelihood,
                         position_logprior=spherical_logprior,
                         momentum_logprior=riemannian_logprior,
@@ -3378,7 +3378,7 @@ separate input in the form of a NamedTuple.
 - `steps::Int=3`: The number of fixed-point iterations to perform.  
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian in the HMC part of the RHVAE.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Default is a NamedTuple with
   `reconstruction_loglikelihood`, `position_logprior`, and `momentum_logprior`.  
 - `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
@@ -3418,7 +3418,7 @@ function (rhvae::RHVAE{VAE{E,D}})(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -3471,7 +3471,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         ∇H::Function=∇hamiltonian_TaylorDiff,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
                 reconstruction_loglikelihood=decoder_loglikelihood,
                 position_logprior=spherical_logprior,
                 momentum_logprior=riemannian_logprior,
@@ -3501,7 +3501,7 @@ input.
 - `steps::Int`: The number of fixed-point iterations to perform. Default is 3.
 - `∇H::Function=∇hamiltonian_finite`: The function to compute the gradient of
   the Hamiltonian in the HMC part of the RHVAE.
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Default is a NamedTuple with
   `reconstruction_loglikelihood`, `position_logprior`, and `momentum_logprior`.  
 - `G_inv::Function=G_inv`: The function to compute the inverse of the Riemannian
@@ -3540,7 +3540,7 @@ function (rhvae::RHVAE{VAE{E,D}})(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -3765,7 +3765,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -3800,7 +3800,7 @@ elbo = mean(log p̄ - log q̄),
 - `K::Int`: The number of RHMC steps (default is 3).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of leapfrog steps (default is 3).
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Defaults to a NamedTuple with
   `:decoder_loglikelihood` set to `decoder_loglikelihood`, `:position_logprior`
   set to `spherical_logprior`, and `:momentum_logprior` set to
@@ -3831,7 +3831,7 @@ function riemannian_hamiltonian_elbo(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -3887,7 +3887,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -3915,7 +3915,7 @@ elbo = mean(log p̄ - log q̄)
 - `x::AbstractVector`: The input data.
 
 ## Optional Keyword Arguments
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Defaults to a NamedTuple with
   `:decoder_loglikelihood` set to `decoder_loglikelihood`, `:position_logprior`
   set to `spherical_logprior`, `:momentum_logprior` set to
@@ -3950,7 +3950,7 @@ function riemannian_hamiltonian_elbo(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -4013,7 +4013,7 @@ end # function
         K::Int=3,
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -4050,7 +4050,7 @@ elbo = mean(log p̄ - log q̄),
 - `K::Int`: The number of RHMC steps (default is 3).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of leapfrog steps (default is 3).
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Defaults to a NamedTuple with
   `:decoder_loglikelihood` set to `decoder_loglikelihood`, `:position_logprior`
   set to `spherical_logprior`, and `:momentum_logprior` set to
@@ -4082,7 +4082,7 @@ function riemannian_hamiltonian_elbo(
     K::Int=3,
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -4139,7 +4139,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -4170,7 +4170,7 @@ elbo = mean(log p̄ - log q̄).
   last dimension is taken as having each of the samples in a batch.
 
 ## Optional Keyword Arguments
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function. Defaults to a NamedTuple with
   `:decoder_loglikelihood` set to `decoder_loglikelihood`, `:position_logprior`
   set to `spherical_logprior`, `:momentum_logprior` set to
@@ -4206,7 +4206,7 @@ function riemannian_hamiltonian_elbo(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -4268,7 +4268,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -4276,7 +4276,7 @@ end # function
         G_inv::Function=G_inv,
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
-        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_kwargs::NamedTuple=NamedTuple(),
         reg_strength::Number=1.0f0,
         logp_prefactor::AbstractArray=ones(Float32, 3),
         logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -4296,7 +4296,7 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
   integrator (default is 0.001).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of steps in the leapfrog integrator (default is 3).
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor (default is `G_inv`).
@@ -4306,7 +4306,7 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
   regularization term based on the VAE outputs. This
   function must take as input the VAE outputs and the keyword arguments provided
   in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
 - `logp_prefactor::AbstractArray`: A 3-element array to scale the log
@@ -4326,7 +4326,7 @@ function loss(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -4334,7 +4334,7 @@ function loss(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Number=1.0f0,
     logp_prefactor::AbstractArray=ones(Float32, 3),
     logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -4385,7 +4385,7 @@ end # function
         ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
         βₒ::Number=0.3f0,
         steps::Int=3,
-        ∇H_kwargs::Union{NamedTuple,Dict}=(
+        ∇H_kwargs::NamedTuple=(
             reconstruction_loglikelihood=decoder_loglikelihood,
             position_logprior=spherical_logprior,
             momentum_logprior=riemannian_logprior,
@@ -4393,7 +4393,7 @@ end # function
         G_inv::Function=G_inv,
         tempering_schedule::Function=quadratic_tempering,
         reg_function::Union{Function,Nothing}=nothing,
-        reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+        reg_kwargs::NamedTuple=NamedTuple(),
         reg_strength::Number=1.0f0,
         logp_prefactor::AbstractArray=ones(Float32, 3),
         logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -4415,7 +4415,7 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
   integrator (default is 0.001).
 - `βₒ::Number`: The initial inverse temperature (default is 0.3).
 - `steps::Int`: The number of steps in the leapfrog integrator (default is 3).
-- `∇H_kwargs::Union{NamedTuple,Dict}`: Additional keyword arguments to be passed
+- `∇H_kwargs::NamedTuple`: Additional keyword arguments to be passed
   to the `∇hamiltonian` function.
 - `G_inv::Function`: The function to compute the inverse of the Riemannian
   metric tensor (default is `G_inv`).
@@ -4424,7 +4424,7 @@ Compute the loss for a Riemannian Hamiltonian Variational Autoencoder (RHVAE).
 - `reg_function::Union{Function, Nothing}=nothing`: A function that computes the
   regularization term based on the VAE outputs. This function must take as input
   the VAE outputs and the keyword arguments provided in `reg_kwargs`.
-- `reg_kwargs::Union{NamedTuple,Dict}=Dict()`: Keyword arguments to pass to the
+- `reg_kwargs::NamedTuple=NamedTuple()`: Keyword arguments to pass to the
   regularization function.
 - `reg_strength::Number=1.0f0`: The strength of the regularization term.
 - `logp_prefactor::AbstractArray`: A 3-element array to scale the log
@@ -4445,7 +4445,7 @@ function loss(
     ϵ::Union{<:Number,<:AbstractVector}=Float32(1E-4),
     βₒ::Number=0.3f0,
     steps::Int=3,
-    ∇H_kwargs::Union{NamedTuple,Dict}=(
+    ∇H_kwargs::NamedTuple=(
         reconstruction_loglikelihood=decoder_loglikelihood,
         position_logprior=spherical_logprior,
         momentum_logprior=riemannian_logprior,
@@ -4453,7 +4453,7 @@ function loss(
     G_inv::Function=G_inv,
     tempering_schedule::Function=quadratic_tempering,
     reg_function::Union{Function,Nothing}=nothing,
-    reg_kwargs::Union{NamedTuple,Dict}=Dict(),
+    reg_kwargs::NamedTuple=NamedTuple(),
     reg_strength::Number=1.0f0,
     logp_prefactor::AbstractArray=ones(Float32, 3),
     logq_prefactor::AbstractArray=ones(Float32, 3),
@@ -4503,7 +4503,7 @@ end # function
         x::AbstractArray, 
         opt::NamedTuple; 
         loss_function::Function=loss, 
-        loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+        loss_kwargs::NamedTuple=NamedTuple(),
         verbose::Bool=false,
         loss_return::Bool=false,
     )
@@ -4522,7 +4522,7 @@ Variational Autoencoder given a specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the RHVAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss function. These might
   include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
   `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
   on the specific loss function in use.
@@ -4540,7 +4540,7 @@ function train!(
     x::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false,
 )
@@ -4576,7 +4576,7 @@ end # function
         x_out::AbstractArray,
         opt::NamedTuple; 
         loss_function::Function=loss, 
-        loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+        loss_kwargs::NamedTuple=NamedTuple(),
         verbose::Bool=false,
         loss_return::Bool=false,
     )
@@ -4597,7 +4597,7 @@ Variational Autoencoder given a specified loss function.
 # Optional Keyword Arguments
 - `loss_function::Function=loss`: The loss function used for training. It should
   accept the RHVAE model, data `x`, and keyword arguments in that order.
-- `loss_kwargs::Dict=Dict()`: Arguments for the loss function. These might
+- `loss_kwargs::NamedTuple=NamedTuple()`: Arguments for the loss function. These might
   include parameters like `K`, `ϵ`, `βₒ`, `steps`, `∇H`, `∇H_kwargs`,
   `tempering_schedule`, `reg_function`, `reg_kwargs`, `reg_strength`, depending
   on the specific loss function in use.
@@ -4616,7 +4616,7 @@ function train!(
     x_out::AbstractArray,
     opt::NamedTuple;
     loss_function::Function=loss,
-    loss_kwargs::Union{NamedTuple,Dict}=Dict(),
+    loss_kwargs::NamedTuple=NamedTuple(),
     verbose::Bool=false,
     loss_return::Bool=false,
 )
