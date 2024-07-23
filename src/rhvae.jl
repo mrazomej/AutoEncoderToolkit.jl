@@ -3,6 +3,8 @@ import Flux
 
 # Import ChainRulesCore to ignore functions when computing gradients
 using ChainRulesCore: ignore_derivatives
+# Import ConcreteStructs module
+using ConcreteStructs: @concrete
 
 # Import AutoDiff backends
 import TaylorDiff
@@ -91,7 +93,7 @@ lower = Flux.Dense(10, 15)
 metric_chain = MetricChain(mlp, diag, lower)
 ```
 """
-struct MetricChain
+@concrete struct MetricChain
     mlp::Flux.Chain
     diag::Flux.Dense
     lower::Flux.Dense
