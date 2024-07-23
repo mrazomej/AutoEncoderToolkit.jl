@@ -28,6 +28,7 @@ AutoEncoderToolkitCUDAExt = "CUDA"
 
 [compat]
 CUDA = "5.3.3"
+ConcreteStructs = "0.2.3"
 ChainRulesCore = "1.23.0"
 Clustering = "0.15.7"
 Distances = "0.10.11"
