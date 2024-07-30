@@ -9,13 +9,12 @@ tags:
 authors:
   - name: Manuel Razo-Mejia
     orcid: 0000-0002-9510-0527
-    affiliation: "1, 2"
+    affiliation: 1
+    corresponding: true
 affiliations:
  - name: Department of Biology, Stanford University, CA, United States of America
    index: 1
- - name: For correspondence, contact mrazo@stanford.edu
-   index: 2
-date: "01 May 2024"
+date: "30 July 2024"
 bibliography: paper.bib
 ---
 
